@@ -2,6 +2,8 @@ import { relations } from "drizzle-orm";
 import {
   boolean,
   index,
+  integer,
+  pgEnum,
   pgTable,
   pgTableCreator,
   text,
@@ -31,6 +33,8 @@ export const posts = createTable(
   ],
 );
 
+export const userRole = pgEnum("user_role", ["STAFF", "OWNER"]);
+
 export const user = pgTable("user", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
@@ -39,6 +43,9 @@ export const user = pgTable("user", {
     .$defaultFn(() => false)
     .notNull(),
   image: text("image"),
+  role: userRole("role").notNull().default("STAFF"),
+  currentCompany: integer("current_company").notNull().default(59325),
+  nik: text("nik"),
   createdAt: timestamp("created_at")
     .$defaultFn(() => /* @__PURE__ */ new Date())
     .notNull(),
