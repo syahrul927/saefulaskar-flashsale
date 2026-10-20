@@ -43,4 +43,6 @@ yarn-error.log*
 *.tsbuildinfo
 
 # idea files
-.idea.superpowers
+.idea
+.superpowers/
+.worktrees/
