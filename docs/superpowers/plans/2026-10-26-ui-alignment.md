@@ -1,0 +1,298 @@
+# FlashStudio UI Alignment Implementation Plan
+
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+
+**Goal:** Transplant `docs/design.html`'s visual language (Urbanist + JetBrains Mono, brand yellow/orange tokens, tinted pulse badges, gradient-bar panels, boxed countdown) and two data features (checkout recipient snapshot, product `type`) onto existing admin + customer routes, keeping all current flows.
+
+**Architecture:** One shared foundation task set (tokens → UI primitives → schema → pure server helpers) consumed by five admin tasks and six customer tasks. Pure logic (KPI aggregation, status→tone maps, recipient resolution, countdown math) is unit-tested with vitest + db mock (pattern: `tests/session-rules.test.ts`); markup tasks verify with `yarn typecheck && yarn lint` plus visual check against `docs/design.html` sections.
+
+**Tech Stack:** Next.js 15 App Router, Tailwind v4 (`@theme` in `src/styles/globals.css`), shadcn v4 on `@base-ui/react` (`src/components/ui/`, `cn` from `"cn"` package), Drizzle/postgres, tRPC + REST route handlers, vitest 5, Phosphor icons (`@phosphor-icons/react`).
+
+**Spec:** `docs/superpowers/specs/2026-10-26-ui-alignment-design.md` — read it with this plan; every task cites its decisions (D#) and §.
+
+## Global Constraints
+
+- Copy is **Bahasa Indonesia**; section headings/badges may use uppercase + `tracking-wider`; body stays sentence-case (D3).
+- Fonts: **Urbanist** (400/600/700/800, sans) + **JetBrains Mono** (400/500/700, `font-mono`) via `next/font/google`; drop Geist/Outfit/Inter (D5 §5).
+- Brand tokens: `#FFCC05` (primary), `#EBB800` (hover), `#FF7E33` (secondary/orange) — Tailwind neutral/amber/emerald palettes for tints (D §5).
+- No payment countdown anywhere (D7). `CountdownTimer` boxed variant is for the **session urgency banner only**.
+- Keep flows: per-row **Simpan**, guarded status transitions, only SCHEDULED roster editable, one-click ordering untouched except new recipient step (D1).
+- Excluded: VA/courier/tracking, real product images (letter-tile placeholders in styled frames), role switcher (D6).
+- Every API-triggered button uses `isLoading` (spinner + disabled) once Task 2 adds it; every action outcome fires a **sonner** toast; pending data renders **Skeleton**; never block navigation (spec §3).
+- Commands: **yarn only** (`yarn typecheck`, `yarn lint`, `yarn vitest run …`). DB: **`yarn db:generate` only** — never `db:push`/`db:migrate` (human applies SQL manually; note this in the task commit body).
+- Reuse shadcn in `src/components/ui/`; extend cva variants instead of forking. New dashboard pages keep `flex-1 space-y-6 p-4 md:p-6`.
+- Work on a feature branch created via superpowers:using-git-worktrees (CLAUDE.md: no commits on `main` without human confirmation).
+- Label constants (use verbatim across tasks): "Keranjang Flash", "Amankan Pesanan", "Instruksi Pembayaran", "Struk Pesanan", "KUOTA HABIS", "BELUM BAYAR", "SUDAH TERKONFIRMASI", "SALE RESMI", "JUBELIO SYNC", "PILIH PRODUK DARI JUBELIO ERP", "Selesai Konfigurasi", "Umum".
+
+## Review Focus
+
+Failure modes the spec implies but generic restyle tasks won't test — each gets a pinning test in the owning task:
+
+1. **Zero or multiple ACTIVE sessions** — admin pill/KPI tiles bind to the earliest-created ACTIVE session (same rule as storefront `src/app/page.tsx:21-23`); with zero, pill and tiles hide, never render `—`-only junk. → Task 4 tests.
+2. **Legacy/unlisted product categories** (`sessionProducts.category` free-text, nullable) — storefront pills must still contain every product's category; null groups as "Umum". → Task 11 tests pill derivation.
+3. **Old orders without recipient snapshot** — payment panel and receipt fall back to the linked `contacts` record; no crash on null columns. → Task 4 tests `resolveRecipient` fallback.
+4. **Roster read-only after activation** — inline-edit cells render as static values when session ≠ SCHEDULED (config frozen, prior spec §5.9); editing UI must not appear. → Task 7 asserts editable flag wiring.
+5. **Quota guard intact through new checkout step** — recipient fields are additive; `evaluateCheckout` + transaction `claimed` logic unchanged, double-submit still blocked by disabled button + same server guard. → Task 12 tests POST with recipient fields still guards quota.
+
+---
+
+### Task 1: Fonts, brand tokens, radius, metadata
+
+**Files:**
+- Modify: `src/app/layout.tsx`
+- Modify: `src/styles/globals.css:7-10,23-24,40,87-89`
+- Modify: `src/app/admin/layout.tsx:29` only if `font-heading` class breaks (keep token working)
+
+**Interfaces:**
+- Produces: CSS vars `--color-brand-primary` `#FFCC05`, `--color-brand-primary-hover` `#EBB800`, `--color-brand-secondary` `#FF7E33`; utilities `bg-brand-primary`, `text-brand-secondary`, `border-brand-primary` auto-generated by Tailwind v4; `--font-sans`=Urbanist variable, `--font-mono`=JetBrains Mono variable wired through `@theme`; `--radius: 0.5rem`.
+- Consumes: nothing.
+
+- [ ] **Step 1: Swap font imports in `src/app/layout.tsx`** — replace `Geist, Outfit, Inter` with `Urbanist` (`weights:["400","600","700","800"], variable:"--font-urbanist"`) and `JetBrains_Mono` (`weights:["400","500","700"], variable:"--font-jetbrains-mono"`). html className: `cn(urbanist.variable, jetbrains.variable, "font-sans")`. Also fix metadata title to `"FlashStudio — Saeful Askar"` (current "Create T3 App").
+- [ ] **Step 2: Rewire `@theme` in `src/styles/globals.css`** — `@theme { --font-sans: var(--font-urbanist); --font-mono: var(--font-jetbrains-mono); }` and add brand colors to the `@theme inline` block: `--color-brand-primary: #FFCC05; --color-brand-primary-hover: #EBB800; --color-brand-secondary: #FF7E33;`. Set `--radius: 0.5rem` (line ~40). Keep all existing shadcn tokens; leave `--font-heading` mapping pointed at `--font-urbanist` so `font-heading` usages survive.
+- [ ] **Step 3: Verify** — `yarn typecheck && yarn lint && yarn build` all pass; dev check: body renders Urbanist, any `font-mono` element renders JetBrains Mono (not Courier).
+- [ ] **Step 4: Commit** — `git commit -m "feat(ui): switch to Urbanist + JetBrains Mono and add brand color tokens"`
+
+### Task 2: UI primitives — Button isLoading + ink, Badge tints, StatusBadge, Panel, boxed CountdownTimer
+
+**Files:**
+- Modify: `src/components/ui/button.tsx` (cva variants + new props)
+- Modify: `src/components/ui/badge.tsx` (cva variants)
+- Create: `src/app/_components/panel.tsx`
+- Create: `src/app/_components/status-badge.tsx`
+- Modify: `src/app/_components/countdown-timer.tsx`
+- Test: `tests/status-badge.test.ts`, `tests/countdown.test.ts`
+
+**Interfaces:**
+- Produces:
+  - `Button` gains props `isLoading?: boolean` (renders `<CircleNotchIcon className="animate-spin" />` before children, sets `disabled`, keeps `aria-busy`) and cva variant `ink` (`bg-neutral-900 text-white hover:bg-neutral-950 dark:bg-neutral-50 dark:text-neutral-900 dark:hover:bg-white`). `brand` variant: `bg-brand-primary text-neutral-950 hover:bg-brand-primary-hover border-brand-primary/40`.
+  - `badgeVariants` gains: `amber` (`bg-amber-50 text-amber-900 border-amber-200`), `emerald` (`bg-emerald-50 text-emerald-800 border-emerald-200`), `blue` (`bg-blue-50 text-blue-800 border-blue-200`), `neutral` (`bg-neutral-100 text-neutral-700 border-neutral-200`) — all `rounded-full font-mono text-[10px] font-bold`.
+  - `StatusBadge({ tone, pulse, children }: { tone: "amber"|"emerald"|"blue"|"neutral"|"red"; pulse?: boolean; children: ReactNode })` plus pure exports `sessionStatusTone(s: "SCHEDULED"|"ACTIVE"|"PAUSED"|"ENDED") => tone` (SCHEDULED→blue, ACTIVE→emerald, PAUSED→amber, ENDED→neutral) and `orderStatusTone(s: "UNPAID"|"CONFIRMED"|"SHIPPED"|"COMPLETED") => tone` (UNPAID→amber, CONFIRMED→emerald, SHIPPED→blue, COMPLETED→neutral); pulse=true for ACTIVE/UNPAID.
+  - `Panel({ title, count, dot, children, className })`: white card `rounded-2xl border border-neutral-200 bg-white shadow-sm dark:bg-card dark:border-border`, 2px top bar `bg-gradient-to-r from-brand-primary via-brand-secondary to-brand-secondary`, header band `bg-neutral-50/70 border-b border-neutral-100 px-4 py-3` with optional `w-2 h-2 rounded-full bg-brand-secondary` dot, title `text-xs font-bold uppercase tracking-wider text-neutral-950`, `count` right-aligned mono `text-[10px] text-neutral-500`.
+  - `CountdownTimer({ endTime, variant = "inline", className })` — existing props kept; `variant="boxed"` renders three `cd-cell` boxes (JAM/MENIT/DETIK labels uppercase 8px, mono 18px values, seconds cell `bg-amber-50 border-amber-200 text-amber-900`) with `:` separators. Export pure `formatRemainingParts(totalMs: number): { h: number; m: number; s: number }` (clamps negatives to 0) and refactor `formatRemaining` to use it.
+- Consumes: Task 1 tokens (`brand-*` utilities).
+
+- [ ] **Step 1: Failing tests** — `tests/status-badge.test.ts`: assert all eight `sessionStatusTone/orderStatusTone` mappings and that `isPulseStatus = (s) => s==="ACTIVE"||s==="UNPAID"` (export it too). `tests/countdown.test.ts`: `formatRemainingParts(0)=== {h:0,m:0,s:0}`, `formatRemainingParts(-5000)=== {h:0,m:0,s:0}`, `formatRemainingParts(9_638_000)=== {h:2,m:40,s:38}` (the 02:40:38 preview value).
+- [ ] **Step 2: Run** `yarn vitest run tests/status-badge.test.ts tests/countdown.test.ts` → FAIL (exports missing).
+- [ ] **Step 3: Implement** all five components + Button/Badge variant additions per Interfaces. Skeleton-while-null behavior of CountdownTimer unchanged (`--:--:--` boxed = three placeholder cells).
+- [ ] **Step 4: Run** tests → PASS; `yarn typecheck && yarn lint` clean.
+- [ ] **Step 5: Commit** `feat(ui): add ink/brand button variants, isLoading, tinted StatusBadge, Panel, boxed countdown`
+
+### Task 3: Schema — order recipient snapshot + product type; migration SQL
+
+**Files:**
+- Modify: `src/server/db/schema.ts` (orders ~line 135, sessionProducts ~line 110)
+- Create: `drizzle/<generated>.sql` (via db:generate only)
+
+**Interfaces:**
+- Produces: `orders.recipientName / recipientPhone / recipientAddress` (nullable `text`); `sessionProducts.type` (`text`, notNull, `$default("single")`) with `export const PRODUCT_TYPES = ["single","variable","bundle"] as const; export type ProductType = (typeof PRODUCT_TYPES)[number];` and label map `export const PRODUCT_TYPE_LABELS: Record<ProductType,string> = { single: "Single SKU", variable: "Varian", bundle: "Bundle Pack" }` (put the map in `src/server/db/schema.ts` too so client can import type-only… it's plain const — fine, no server-only guard needed).
+- Consumes: nothing.
+
+- [ ] **Step 1: Add columns** exactly as above; `type: t.text("type").notNull().default("single").$type<ProductType>()`.
+- [ ] **Step 2: Generate** — `yarn db:generate`; confirm new SQL file appears under `drizzle/` containing the 4 ALTERs. **Never run db:push/db:migrate** — note in commit body that the human partner applies SQL.
+- [ ] **Step 3: Verify** — `yarn typecheck && yarn lint` pass.
+- [ ] **Step 4: Commit** `feat(db): order recipient snapshot + session product type (migration pending human apply)`
+
+### Task 4: Pure server helpers — active session, KPI aggregation, recipient resolution
+
+**Files:**
+- Create: `src/server/session-query.ts`
+- Create: `src/server/recipient.ts`
+- Test: `tests/session-query.test.ts`, `tests/recipient.test.ts`
+
+**Interfaces:**
+- Consumes: schema tables (Tasks 1/3), db-mock pattern from `tests/session-rules.test.ts`.
+- Produces:
+  - `getPrimaryActiveSession(db: SessionDbLike): Promise<typeof flashSessions.$inferSelect | null>` — `status="ACTIVE"` ordered by `createdAt` asc, first row. Same rule the storefront uses (Review Focus 1).
+  - `getSessionKpis(db): Promise<SessionKpis | null>` where `SessionKpis = { productCount: number; totalQuota: number; totalClaimed: number; estimatedGmv: number }` — single aggregate over `sessionProducts` for the primary session's id; `null` when no active session (tiles hide). `estimatedGmv = Σ flashPrice × claimed`.
+  - `resolveRecipient(input: { order: { recipientName: string|null; recipientPhone: string|null; recipientAddress: string|null }; contact: { contactName: string|null; phone: string|null; sAddress: string|null } | null }): { name: string|null; phone: string|null; address: string|null }` — per-field: snapshot ?? contact ?? null (Review Focus 3).
+  - `recipientSchema = z.object({ recipientName: z.string().trim().min(2).max(120).optional(), recipientPhone: z.string().trim().min(6).max(20).optional(), recipientAddress: z.string().trim().min(10).max(400).optional() })`.
+
+- [ ] **Step 1: Failing tests** — `session-query.test.ts` with `makeDbMock` (copy pattern): rows `[ACTIVE older, ACTIVE newer, SCHEDULED]` → `getPrimaryActiveSession` returns older; no ACTIVE → `null`. `getSessionKpis` mock products `[{flashPrice:85000,claimed:3,sessionQuota:50},{flashPrice:159000,claimed:1,sessionQuota:25}]` → `{productCount:2,totalQuota:75,totalClaimed:4,estimatedGmv: 85000*3+159000 }` (414_000). `recipient.test.ts`: full snapshot wins; partial snapshot falls back per field to contact; contact null → null fields. `recipientSchema.parse({})` ok; `recipientSchema.safeParse({recipientName:"a"}).success === false`.
+- [ ] **Step 2: Run** → FAIL.
+- [ ] **Step 3: Implement** both modules.
+- [ ] **Step 4: Run** → PASS.
+- [ ] **Step 5: Commit** `feat(server): primary-active-session lookup, KPI aggregation, recipient resolution`
+
+### Task 5: Admin header chrome
+
+**Files:**
+- Modify: `src/app/admin/layout.tsx`
+- Create: `src/app/_components/admin-logo.tsx` (bolt tile, shared)
+
+**Interfaces:**
+- Consumes: Task 1 fonts/tokens, Task 2 StatusBadge/ink, Task 4 `getPrimaryActiveSession` + `getSessionKpis` (imported by pages, not layout — layout only needs session for pill; `flashSessions.name` suffices).
+- Produces: `AdminLogo({ size?: "sm"|"md" })` — `rounded-xl bg-brand-primary` tile + `LightningIcon` (Phosphor `Fill`), used by Tasks 5+10.
+
+- [ ] **Step 1: Rebuild header** per preview/mockup design.html:50-142: `sticky top-0 z-40 border-b border-neutral-200/90 bg-white/95 backdrop-blur` (dark: `bg-card/95`), inner `max-w-7xl mx-auto px-3 sm:px-6 h-14 sm:h-16`. Left: `AdminLogo` + "FLASHSTUDIO" (uppercase extrabold tracking-tight) + `StatusBadge tone="amber" pulse` "JUBELIO SYNC" (mono). Center-right: segmented nav `bg-neutral-100 p-1 rounded-xl border` links Konsol (`/admin`) / Pesanan (`/admin/orders`), active `bg-neutral-900 text-white rounded-lg font-bold` (Phosphor `GearIcon`/`ClipboardIcon` inline). Right: `AKTIF: <session name>` pill — mono 10px `bg-brand-primary text-neutral-950 rounded-full px-2.5 py-1`, rendered only when `getPrimaryActiveSession` non-null; keep `SignOutButton`.
+- [ ] **Step 2: Contain pages** — layout wraps `{children}` in `<div className="mx-auto w-full max-w-7xl flex-1">` (pages keep their own `p-4 md:p-6`).
+- [ ] **Step 3: Verify** — `yarn typecheck && yarn lint`; dev: pill matches storefront's earliest-ACTIVE rule.
+- [ ] **Step 4: Commit** `feat(admin): mockup header chrome with Jubelio badge and active-session pill`
+
+### Task 6: Admin sessions page — KPI tiles + panels
+
+**Files:**
+- Modify: `src/app/admin/page.tsx`
+
+**Interfaces:**
+- Consumes: Task 2 `Panel`, `StatusBadge`, `Button ink`; Task 4 `getSessionKpis`.
+
+- [ ] **Step 1: KPI row** — above the session list, 4 tiles (`grid grid-cols-2 lg:grid-cols-4 gap-2 sm:gap-3`), tile = `bg-neutral-50 rounded-xl border border-neutral-100 p-3` (dark `bg-muted`), 8px uppercase labels ("PRODUK DIDAFTARKAN", "TOTAL KUOTA SALE", "RESERVED / TERJUAL", "ESTIMASI GMV"), mono 18px values, sub-line `claimed/quota (pct%)` + "Rp…,×jt" formatted GMV; reserved value `text-brand-secondary`, GMV `text-emerald-600`. Render `Skeleton` tiles while awaiting (page is RSC — just await). Hide row when `getSessionKpis` returns null.
+- [ ] **Step 2: Restyle** — session cards → `Panel` treatment (`rounded-2xl border-neutral-200 bg-white`, gradient top bar on the list Panel only), status via `StatusBadge tone={sessionStatusTone(s)} pulse={s==="ACTIVE"}`, "Sesi Baru" → `<Button ink>`, section heading uppercase tracking-wider. Rupiah via mono `tabular-nums`.
+- [ ] **Step 3: Verify** typecheck/lint + visual check vs preview-admin §2.
+- [ ] **Step 4: Commit** `feat(admin): KPI tile row + panel/status-badge restyle`
+
+### Task 7: Roster — desktop inline-edit table + mobile cards, stock fix, type/category
+
+**Files:**
+- Modify: `src/app/admin/sessions/[id]/products/page.tsx` (mapping bug ~line 50; pass labels)
+- Modify: `src/app/_components/product-picker.tsx` (rewrite `SessionProduct` rows section)
+- Modify: `src/app/api/sessions/[id]/products/[itemId]/route.ts` (accept `type`)
+
+**Interfaces:**
+- Consumes: Task 2 primitives; Task 3 `ProductType`/`PRODUCT_TYPE_LABELS`.
+- Produces: `SessionProduct` gains `type: ProductType`; PATCH body `z.object({ type: z.enum(PRODUCT_TYPES).optional(), ... existing })`; `CATEGORY_OPTIONS` — union constant + derivation: `export function categoryOptions(existing: (string|null)[]): string[]` in `src/app/_components/category-options.ts` = `["Minuman","Fashion","Elektronik","Rumah Tangga", ...distinct existing non-null values not already listed]` (builder's call list; D: union rule).
+
+- [ ] **Step 1: Failing test** `tests/category-options.test.ts`: `categoryOptions(["Minuman","Aksesoris", null, "Minuman"])` returns default list with "Aksesoris" appended once, nulls ignored (Review Focus 2).
+- [ ] **Step 2: Fix stock mapping** — in `products/page.tsx` rows map: `availableStock: row.jubelioStock` (was hardcoded `null`); add `type: row.type`.
+- [ ] **Step 3: Table (md+)** — `hidden md:block` inside the roster Panel: 10-col `table` per preview-admin §3; cells: thumb frame (`w-10 h-10 rounded-lg bg-gradient-to-br from-amber-50 to-amber-200` + letter, `object-cover` `<img>` if a URL ever exists on the row — `image` optional field left null for now), name + mono SKU, category `Select` (options from `categoryOptions(rows)`), type `Select` (PRODUCT_TYPE_LABELS), stock cell `<span className="font-mono text-emerald-600">{row.availableStock ?? "—"}</span>`, numeric inputs `bg-neutral-50 border-neutral-200 rounded-lg font-mono`, minOrder input amber (`bg-amber-50 border-amber-200 text-amber-950 font-black`), Save = `<Button ink size="xs" isLoading>Simpan</Button>`, remove = ghost icon `TrashIcon` hover:text-red-600. **When `!editable`** render plain text cells (mono), no inputs/buttons (Review Focus 4).
+- [ ] **Step 4: Mobile cards (< md)** — distinct variant: 2-col labeled field grid per mockup design.html:351-416, same data + same editable rule (`md:hidden`).
+- [ ] **Step 5: Header band + empty state** — Panel `count={`${rows.length} item siap`}`; empty roster: centered `BoxIcon w-12 h-12 text-neutral-300` + "Belum ada produk" + `Button brand` "Import dari Jubelio" scrolling to picker.
+- [ ] **Step 6: API** — PATCH `[itemId]/route.ts` accepts optional `type`; zod error → 400 Indonesian message.
+- [ ] **Step 7: Verify** — `yarn vitest run tests/category-options.test.ts` PASS; typecheck/lint; dev check both breakpoints.
+- [ ] **Step 8: Commit** `fix(admin): real Jubelio stock in roster + table/cards variants + product type`
+
+### Task 8: Jubelio picker modal
+
+**Files:**
+- Modify: `src/app/_components/product-picker.tsx` (search section)
+- Modify: `src/app/api/jubelio/products/route.ts` (surface stock if master API returns it)
+
+**Interfaces:**
+- Consumes: Task 2 `Button`, ui `Dialog` (`src/components/ui/dialog.tsx`), Phosphor `MagnifyingGlassIcon`, `CheckCircleIcon`/`PlusCircleIcon`; Task 7 `SessionProduct`.
+- Produces: `SearchResult` gains `stock: number | null; normalPrice: number` (route maps `num(p.stock) ?? null`; price already present).
+
+- [ ] **Step 1: Extend route** — parse `stock` (and keep `price`) from Jubelio master response into rows; missing → null.
+- [ ] **Step 2: Dialog picker** — trigger `<Button ink>` "+ Pilih Produk Jubelio" replaces inline box. Dialog `max-w-3xl rounded-2xl`: header (uppercase title + ✕), search row (`MagnifyingGlassIcon` + mono placeholder "cari nama / SKU…" + live `N SKU` mono counter right), result rows: thumb frame + name + `StatusBadge`-style SKU chip + right-meta `stok <b class="font-mono text-emerald-600">` / `Rp` normal price struck-neutral, toggle chip `+ Tambah` ↔ `✓ Ditambah` (amber→emerald tint), footer band `bg-neutral-50`: `<b>N dipilih</b>` + `Button ink` "Selesai Konfigurasi" (closes; keeps adds live per row — multi-add without losing state across queries: merge results into a map keyed by itemId).
+- [ ] **Step 3: Loading/errors** — skeleton rows while searching; sonner toast on add success/fail (existing POST behavior preserved); add chip disabled while in-flight (perceived-performance rule).
+- [ ] **Step 4: Verify** typecheck/lint + visual vs preview-admin §4.
+- [ ] **Step 5: Commit** `feat(admin): Jubelio picker modal with stock, multi-add toggle, counters`
+
+### Task 9: Session form pages + admin orders restyle
+
+**Files:**
+- Modify: `src/app/_components/session-form.tsx`, `src/app/admin/sessions/new/page.tsx`, `src/app/admin/sessions/[id]/edit/page.tsx`, `src/app/admin/orders/page.tsx`
+
+**Interfaces:**
+- Consumes: Task 2 `Panel`, `StatusBadge`, `Button` variants.
+
+- [ ] **Step 1: Wrap forms** in `Panel title="Parameter Sesi Live"`; labels uppercase 9px `text-neutral-500`; inputs mono for numeric/temporal; submit `Button ink isLoading`; keep all validation/redirect behavior.
+- [ ] **Step 2: Admin orders** — Panel + uppercase heading "TRANSAKSI MASUKAN" + `orderStatusTone` StatusBadge (UNPAID pulse), bookingId/total in mono tabular-nums, `Skeleton` rows pattern already present → restyle only; keep existing confirm/upload actions.
+- [ ] **Step 3: Verify + commit** `feat(admin): mockup panel/badge treatment on session forms and orders`
+
+### Task 10: Storefront route group, header, tabs, cart drawer control
+
+**Files:**
+- Create: `src/app/(storefront)/layout.tsx`, `src/app/(storefront)/page.tsx` (moved from `src/app/page.tsx`), `src/app/(storefront)/orders/page.tsx` (moved from `src/app/orders/page.tsx`), `src/app/_components/storefront-header.tsx`
+- Modify: `src/app/_components/cart-context.tsx` (UI state), `src/app/_components/storefront-view.tsx` (drop its own drawer mount + hero header dupes), `src/app/_components/cart-drawer.tsx`
+
+**Interfaces:**
+- Consumes: Tasks 1/2/5 `AdminLogo` (reused), `StatusBadge`, cart context.
+- Produces: `CartContextValue` gains `drawerOpen: boolean; openDrawer(): void; closeDrawer(): void`. `StorefrontHeader` (client) shows `usePathname()`-driven tab active state: `/` → "Toko", `/orders` → "Transaksi".
+
+- [ ] **Step 1: Move routes** into `(storefront)/` group (URLs unchanged) and delete old files; `git mv` preserves history. Root layout untouched.
+- [ ] **Step 2: Extend CartProvider** with drawer boolean state (default closed).
+- [ ] **Step 3: StorefrontHeader** — sticky like Task 5 but customer variant: logo + "FLASHSTUDIO" + `StatusBadge tone="emerald"` "SALE RESMI" (green dot, no Jubelio mention per design.html:71-76); right cluster: clipboard `icon-button` → `router.push("/orders")`, cart `Button brand` with `count` mono chip (orange dot when >0) + `Rp` subtotal → `openDrawer()`. Mount inside `(storefront)/layout.tsx` (client components for buttons; layout stays server — split header into exported client piece).
+- [ ] **Step 4: Layout mounts `<CartDrawer />` once** (reads `drawerOpen` from context; `StorefrontView` no longer owns it — remove its local open state; `MobileCartBar` CTA calls `openDrawer()` and stops being the only entry point). Also restyle `mobile-cart-bar.tsx`: ink pill bar, mono subtotal per mockup design.html:779-793 (structure/visibility unchanged).
+- [ ] **Step 5: Verify** — desktop + mobile: cart opens on `/` **and** `/orders` (regression this task exists for); tab links switch instantly, data non-blocking. `yarn typecheck && yarn lint`.
+- [ ] **Step 6: Commit** `feat(storefront): customer header + tabs + cart drawer reachable on all breakpoints`
+
+### Task 11: Urgency banner, category pills, grid, product card
+
+**Files:**
+- Modify: `src/app/_components/storefront-view.tsx`, `src/app/_components/category-pills.tsx`, `src/app/_components/product-card.tsx`
+- Test: `tests/category-pills.test.ts`
+
+**Interfaces:**
+- Consumes: Task 2 (boxed `CountdownTimer`, `Button ink/brand`), Task 7 `PRODUCT_TYPE_LABELS`.
+- Produces: pure `derivePills(products: {category: string|null}[]): { id: string; label: string }[]` exported from `category-pills.tsx` — "Semua" first, then distinct categories **in order of first appearance**, nulls bucketed under "Umum".
+
+- [ ] **Step 1: Failing test** — `derivePills([{category:"Minuman"},{category:null},{category:"Minuman"},{category:"Aksesoris"}])` → `[Semua, Minuman, Umum, Aksesoris]` — proves no product is unreachable (Review Focus 2).
+- [ ] **Step 2: Urgency banner** — `Panel`-style card `border-neutral-200` + gradient top bar; line 1 `LightningIcon text-brand-secondary` + session name bold; boxed `CountdownTimer variant="boxed"` (only countdown in app — D7) with "SESI BERAKHIR DALAM" micro-label.
+- [ ] **Step 3: Pills** — `flex overflow-x-auto no-scrollbar snap-x gap-2` (keep `no-scrollbar` utility — add to globals if missing), pill `rounded-full border px-3 py-1.5 text-xs font-semibold`, active `bg-neutral-900 text-white font-bold`.
+- [ ] **Step 4: Grid** — `grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4` (replace 2/3/4/5 density).
+- [ ] **Step 5: Product card** — `rounded-2xl border-neutral-200 hover:border-neutral-300 hover:shadow-md transition` + `aspect-square` frame (letter tile restyled to amber gradient like Task 7 thumb, sized up); overlays: category pill top-left (`bg-white/95 backdrop-blur`), `StatusBadge amber` "MIN: n" top-right (mono); body: name 13px semibold 2-line clamp, mono SKU + type chip when ≠single, price `font-mono font-bold` + `originalPrice` struck mono 10px, remaining = `sessionQuota - claimed` shown as `text-brand-secondary font-mono text-[10px] font-bold` "sisa N" when `remaining <= Math.max(10, ceil(sessionQuota*0.15))`; sold-out (`remaining<=0 || availableStock<=0`): overlay `bg-white/90` + `StatusBadge neutral` "KUOTA HABIS" + `Button` disabled; add CTA `Button ink w-full` — stepper behavior unchanged.
+- [ ] **Step 6: Verify** `yarn vitest run tests/category-pills.test.ts` PASS; typecheck/lint; visual vs preview-customer §1-2.
+- [ ] **Step 7: Commit** `feat(storefront): urgency banner, mockup pills/grid, product card transplant`
+
+### Task 12: Checkout recipient step + API snapshot
+
+**Files:**
+- Modify: `src/app/api/orders/route.ts` (body + insert), `src/app/_components/cart-drawer.tsx`, `src/app/_components/checkout-dialog.tsx` (create)
+- Modify: `src/app/(storefront)/page.tsx` (fetch contact defaults) → pass through `StorefrontView`
+- Modify: `src/server/checkout.ts` **read-only** (guard must stay untouched)
+- Test: extend `tests/checkout-guard.test.ts`
+
+**Interfaces:**
+- Consumes: Task 4 `recipientSchema`/`resolveRecipient`, Task 2 `Button isLoading`, ui `Dialog`, sonner.
+- Produces: `POST /api/orders` body `CheckoutBody.merge(recipientSchema)`; inserts `recipientName/Phone/Address` into `orders` (undefined → null); response unchanged. `RecipientDefaults = { name: string|null; phone: string|null; address: string|null }` prop chain: `HomePage → StorefrontView → CartDrawer → CheckoutDialog`.
+
+- [ ] **Step 1: Failing test** (extend checkout-guard style, route-level logic extracted as pure function `buildOrderValues(body, customerId, sessionId, grandTotal)` into `src/server/checkout.ts`): result carries the three recipient fields verbatim; missing → null. Also assert `evaluateCheckout` behavior untouched for quota cases (existing tests must still pass: `yarn vitest run tests/checkout-guard.test.ts`).
+- [ ] **Step 2: Implement API** changes; keep booking sequence retry guard; response shape stable.
+- [ ] **Step 3: Fetch defaults** — `page.tsx`: when `getSession()` present, select that user's latest `contacts` row → `resolveRecipient({ order: {}, contact })`-style mapping → `recipientDefaults` prop (SSR value, client may edit).
+- [ ] **Step 4: CheckoutDialog** — "AMANKAN PESANAN ANDA" Panel/dialog per preview-customer §4: gradient bar; fields Nama Penerima / No. Telepon / Alamat Pengiriman pre-filled (mono phone/address), each editable, green mono hint "← dari akun Anda" per defaulted field; item summary lines + `Rp` total (mono, `grandTotal` from cart context); CTA `Button ink isLoading` "Klaim Sekarang →" → POST (same fetch logic moved out of CartDrawer) → success: close dialog, `cart.clear()`, show PaymentPanel (Task 13) with booking result; failure: sonner error, dialog stays open.
+- [ ] **Step 5: Wire + transplant drawer** — CTA becomes `Button ink` "Lanjut ke Checkout" opening CheckoutDialog (mockup flow); drawer never mutates into bank info again. Body restyle per design.html:883-980: right slide-over `max-w-md` at `md:`, bottom sheet kept on mobile; header "KERANJANG FLASH" + item count mono; rows = thumb frame + name + mono qty × price + line subtotal; summary adds **savings line** `Σ(originalPrice−flashPrice)×qty` as "Hemat Rp…" in `text-brand-secondary` mono before total.
+- [ ] **Step 6: Verify** tests PASS, typecheck/lint, end-to-end manual: prefill visible, edit lands on order (check via Task 14 receipt).
+- [ ] **Step 7: Commit** `feat(storefront): checkout recipient form with prefill + order snapshot`
+
+### Task 13: Payment instructions panel
+
+**Files:**
+- Create: `src/app/_components/payment-panel.tsx`
+- Modify: `src/app/_components/cart-drawer.tsx` (render panel after checkout), `src/app/_components/proof-upload-button.tsx` (restyle only)
+
+**Interfaces:**
+- Consumes: Task 12 POST response (`bookingId`, `grandTotal`, `bankAccounts[]`), env bank list, existing WA link.
+- Produces: `PaymentPanel({ bookingId, grandTotal, bankAccounts, waLink, onDone })`.
+
+- [ ] **Step 1: Build panel** — "INSTRUKSI PEMBAYARAN" dialog/inline sheet (gradient bar, dot header per Panel): bookingId row with copy icon-button (`navigator.clipboard`, sonner "Disalin"), total mono right-aligned, one row per `bankAccounts`: bank name semibold + mono account number + copy button; `Button brand` WA CTA `Kirim Bukti via WhatsApp` (existing `waLink`); existing proof upload inside; **no countdown** (D7); helper copy: "Selesaikan pembayaran sebelum sesi berakhir — pesanan belum terkonfirmasi dapat dibatalkan admin."
+- [ ] **Step 2: States** — proof uploaded → `StatusBadge emerald` "BUKTI TERUNGGAH"; skeleton while polling status.
+- [ ] **Step 3: Verify + commit** `feat(storefront): mockup payment instructions panel (no timer)`
+
+### Task 14: Receipt view on transactions
+
+**Files:**
+- Create: `src/app/_components/receipt-dialog.tsx`
+- Modify: `src/app/(storefront)/orders/page.tsx` (pass order JSON into client list)
+
+**Interfaces:**
+- Consumes: `GET /api/orders` rows (recipient fields now present), Task 4 `resolveRecipient` (server-side enrichment: page maps each order + its contact → `recipient`), Task 2 `Panel`, `StatusBadge`.
+
+- [ ] **Step 1: ReceiptDialog** — "STRUK PESANAN RESMI" per design.html:1155-1270: status band with `orderStatusTone` badge; rows: Booking ID (mono + copy), Tanggal, Pembayar (name/phone/address from resolved recipient), item table (name, mono `Rp price × qty = subtotal`), fee lines "Ongkir Reguler — **Gratis (Promo)**" + grand total mono bold; CTA row: proof upload when UNPAID, "Tutup".
+- [ ] **Step 2: Verify** old-order fallback: an order without snapshot + deleted contact renders nulls as "—" (no crash) (Review Focus 3).
+- [ ] **Step 3: Commit** `feat(storefront): official receipt dialog`
+
+### Task 15: Transactions upgrade
+
+**Files:**
+- Modify: `src/app/(storefront)/orders/page.tsx` or its client list component
+- Test: `tests/order-filters.test.ts`
+
+**Interfaces:**
+- Consumes: Tasks 12-14 (recipient → Pembayar, PaymentPanel reuse via "Lihat Instruksi" for UNPAID, ReceiptDialog), Task 2.
+- Produces: pure `filterOrders(orders, tab)` exported: tabs `"all"|"UNPAID"|"CONFIRMED"|"SHIPPED"`; counts helper `statusCounts(orders)`.
+
+- [ ] **Step 1: Failing test** — `filterOrders` per status + `statusCounts` shape `{all, UNPAID, CONFIRMED, SHIPPED}`.
+- [ ] **Step 2: Filter pills row** — "SEMUA N", "BELUM BAYAR N" (amber tint + `animate-ping` dot when count>0), per design.html:612-628; uppercase mono; client state, instant filter no refetch (data already loaded).
+- [ ] **Step 3: Card treatment** — UNPAID cards: `border-amber-300 ring-1 ring-amber-200 bg-amber-50/20` (design.html:648-652); status badge pulse; items: thumb frame + name + mono `Rp`, per-line subtotal right; bookingId mono; `✅` emoji → `CheckCircleIcon`; CTAs: UNPAID → "Instruksi Pembayaran" (PaymentPanel) / "Unggah Bukti", any → "Struk" (ReceiptDialog).
+- [ ] **Step 4: Empty state** — `ShoppingBagIcon w-12 h-12 text-neutral-300` + "Belum ada transaksi" + `Button ink` "Lihat Produk Flash" → `/`; rich filter-empty message ("Tidak ada pesanan <status>").
+- [ ] **Step 5: Verify** tests + typecheck + visual vs preview-customer §1 tabs; mobile (bottom nav not needed — header tabs suffice).
+- [ ] **Step 6: Commit** `feat(storefront): transactions filters, unpaid highlighting, receipt/instruction entry points`
+
+---
+
+## Final Checks (after all tasks)
+
+- [ ] `yarn typecheck && yarn lint && yarn build` green; `yarn vitest run` all pass.
+- [ ] Full-path manual test (spec §8): login → onboarding → storefront → cart → checkout prefill/edit → payment panel → proof → admin sees order → roster edit + type/category → picker modal → session activate.
+- [ ] Dark mode sweep: header, panels, tiles, badges legible (brand yellow stays yellow, no raw white-on-white).
+- [ ] Reminder to human partner before merge: apply `drizzle/` migration SQL manually (`db:generate` only was run here).
