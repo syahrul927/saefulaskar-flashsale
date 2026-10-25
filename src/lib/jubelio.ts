@@ -89,6 +89,55 @@ export function toAvailableStock(raw: unknown): number | undefined {
   return undefined;
 }
 
+/** Reshaped master row consumed by the picker modal (`SearchResult`). */
+export type PickerRow = {
+  itemId: number;
+  skuCode: string;
+  itemGroupName: string;
+  price: number;
+  minOrder: number;
+  /** Real-time stock — the Jubelio master API may omit it → `null`. */
+  stock: number | null;
+};
+
+type RawMaster = {
+  item_id?: unknown;
+  sku_code?: unknown;
+  item_group_name?: unknown;
+  price?: unknown;
+  min?: unknown;
+  stock?: unknown;
+};
+
+function num(v: unknown): number | undefined {
+  return typeof v === "number" ? v : undefined;
+}
+
+function str(v: unknown): string | undefined {
+  return typeof v === "string" ? v : undefined;
+}
+
+/**
+ * Pure reshaper used by `GET /api/jubelio/products`: raw master items →
+ * camelCase picker rows. Non-array input yields `[]`; a missing or
+ * non-numeric `stock` stays `null` so the UI shows an em dash, never a
+ * fake `0`. Exported for unit tests.
+ */
+export function toPickerRows(rows: unknown): PickerRow[] {
+  if (!Array.isArray(rows)) return [];
+  return rows.map((item) => {
+    const p = (item ?? {}) as RawMaster;
+    return {
+      itemId: num(p.item_id) ?? 0,
+      skuCode: str(p.sku_code) ?? "",
+      itemGroupName: str(p.item_group_name) ?? "",
+      price: num(p.price) ?? 0,
+      minOrder: num(p.min) ?? 1,
+      stock: num(p.stock) ?? null,
+    };
+  });
+}
+
 /** `saveContactRequest` — spec §4.1 (customer onboarding). */
 export type ContactPayload = {
   contact_id: 0;

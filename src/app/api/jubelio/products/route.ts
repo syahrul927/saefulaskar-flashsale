@@ -1,28 +1,16 @@
 import { getSession } from "@/server/better-auth/server";
 
-import { createJubelioClient, isJubelioAuthError } from "@/lib/jubelio";
+import {
+  createJubelioClient,
+  isJubelioAuthError,
+  toPickerRows,
+} from "@/lib/jubelio";
 
 export const runtime = "nodejs";
 
 function jsonError(status: number, error: string) {
   return Response.json({ error }, { status });
 }
-
-function num(v: unknown): number | undefined {
-  return typeof v === "number" ? v : undefined;
-}
-
-function str(v: unknown): string | undefined {
-  return typeof v === "string" ? v : undefined;
-}
-
-type RawMaster = {
-  item_id?: unknown;
-  sku_code?: unknown;
-  item_group_name?: unknown;
-  price?: unknown;
-  min?: unknown;
-};
 
 /**
  * GET /api/jubelio/products?search=…
@@ -45,18 +33,5 @@ export async function GET(request: Request) {
     if (isJubelioAuthError(e)) return jsonError(401, "SESSION_EXPIRED");
     return jsonError(502, "Gagal memuat produk, coba lagi");
   }
-  const rows = Array.isArray(raw) ? raw : [];
-
-  return Response.json(
-    rows.map((item) => {
-      const p = (item ?? {}) as RawMaster;
-      return {
-        itemId: num(p.item_id) ?? 0,
-        skuCode: str(p.sku_code) ?? "",
-        itemGroupName: str(p.item_group_name) ?? "",
-        price: num(p.price) ?? 0,
-        minOrder: num(p.min) ?? 1,
-      };
-    }),
-  );
+  return Response.json(toPickerRows(raw));
 }

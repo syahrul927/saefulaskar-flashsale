@@ -1,16 +1,24 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
-import { PackageIcon, TrashIcon } from "@phosphor-icons/react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { MagnifyingGlassIcon, PackageIcon, TrashIcon } from "@phosphor-icons/react";
 import { cn } from "cn";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { FieldLabel } from "@/components/ui/field";
+import {
+  Dialog,
+  DialogClose,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
+import { Skeleton } from "@/components/ui/skeleton";
 import { Panel } from "@/app/_components/panel";
 import { categoryOptions } from "@/app/_components/category-options";
+import { StatusBadge } from "@/app/_components/status-badge";
 import { useSessionExpiry } from "@/app/_components/use-session-expiry";
 import {
   PRODUCT_TYPES,
@@ -35,12 +43,16 @@ export type SessionProduct = {
   availableStock: number | null;
 };
 
+/** Mirrors `PickerRow` from `/api/jubelio/products` (route `toPickerRows`). */
 type SearchResult = {
   itemId: number;
   skuCode: string;
   itemGroupName: string;
+  /** Normal (catalog) price — rendered struck in the picker rows. */
   price: number;
   minOrder: number;
+  /** Real-time stock; `null` when the master API omits it. */
+  stock: number | null;
 };
 
 type RowPatch = {
@@ -150,6 +162,35 @@ function canSaveRow(drafts: {
     flashPrice !== null &&
     flashPrice >= 0
   );
+}
+
+/**
+ * Which Jubelio item ids already sit in the roster. The picker modal keys its
+ * `+ Tambah` ↔ `✓ Ditambah` toggle and its `N dipilih` counter off this set —
+ * selection lives on the roster (by `itemId`), so it survives any re-query.
+ */
+function selectedItemIds(
+  products: readonly { itemId: number }[],
+): Set<number> {
+  return new Set(products.map((p) => p.itemId));
+}
+
+/**
+ * Merge freshly added/updated products into the roster keyed by `itemId`:
+ * existing rows are replaced in place, new rows append. Re-POSTing the same
+ * item never duplicates a roster row.
+ */
+function mergeProductsById(
+  prev: readonly SessionProduct[],
+  incoming: readonly SessionProduct[],
+): SessionProduct[] {
+  const next = [...prev];
+  for (const p of incoming) {
+    const idx = next.findIndex((x) => x.itemId === p.itemId);
+    if (idx === -1) next.push(p);
+    else next[idx] = p;
+  }
+  return next;
 }
 
 /**
@@ -605,9 +646,11 @@ function EmptyRoster({
 }
 
 /**
- * Product picker for a session (spec §4.3) + the roster panel. Live-searches
- * the Jubelio catalog, upserts picks via `POST /api/sessions/[id]/products`,
- * and edits/removes rows via `PUT`/`DELETE` on `[id]/products/[itemId]`.
+ * Product picker for a session (spec §4.3) + the roster panel. Catalog search
+ * lives in a Dialog modal (design.html Modal 1) that live-queries
+ * `/api/jubelio/products` and toggles rows between `+ Tambah` and
+ * `✓ Ditambah`; adds POST to `/api/sessions/[id]/products`, un-adds reuse the
+ * roster `DELETE`. Rows edit via `PUT` on `[id]/products/[itemId]`.
  * Read-only when the session has left SCHEDULED (config frozen, spec §5.9) —
  * roster cells then render as plain mono text with no controls at all.
  */
@@ -623,29 +666,41 @@ function ProductPicker({
   const canEdit = sessionStatus === "SCHEDULED";
 
   const [products, setProducts] = useState<SessionProduct[]>(initialProducts);
+  const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
-  const [adding, setAdding] = useState<number | null>(null);
-  const searchSectionRef = useRef<HTMLDivElement | null>(null);
+  /** Item currently in-flight on an add/remove POST-DELETE (single-flight). */
+  const [busyItem, setBusyItem] = useState<number | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const signOutOnExpiry = useSessionExpiry();
 
   const categories = categoryOptions(products.map((p) => p.category));
+  const selected = useMemo(() => selectedItemIds(products), [products]);
+
+  // Focus the search field each time the modal opens (base-ui restores focus
+  // to the popup; the catalog is meaningless without a query).
+  useEffect(() => {
+    if (pickerOpen) searchInputRef.current?.focus({ preventScroll: true });
+  }, [pickerOpen]);
 
   useEffect(() => {
+    if (!pickerOpen) return;
     const query = search.trim();
     if (query === "") {
       setResults([]);
+      setSearching(false);
       return;
     }
     setSearching(true);
+    let cancelled = false;
     const handle = setTimeout(() => {
       void (async () => {
         try {
           const res = await fetch(
             `/api/jubelio/products?search=${encodeURIComponent(query)}`,
           );
+          if (cancelled) return;
           if (res.status === 401) {
             await signOutOnExpiry();
             return;
@@ -653,17 +708,20 @@ function ProductPicker({
           const data = (await res.json().catch(() => [])) as SearchResult[];
           setResults(Array.isArray(data) ? data : []);
         } catch {
-          setResults([]);
+          if (!cancelled) setResults([]);
         } finally {
-          setSearching(false);
+          if (!cancelled) setSearching(false);
         }
       })();
     }, 300);
-    return () => clearTimeout(handle);
-  }, [search, signOutOnExpiry]);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [search, signOutOnExpiry, pickerOpen]);
 
   async function add(product: SearchResult) {
-    setAdding(product.itemId);
+    setBusyItem(product.itemId);
     try {
       const res = await fetch(`/api/sessions/${sessionId}/products`, {
         method: "POST",
@@ -689,20 +747,22 @@ function ProductPicker({
         return;
       }
       const added = data.products ?? [];
-      setProducts((prev) => {
-        const next = [...prev];
-        for (const p of added) {
-          const idx = next.findIndex((x) => x.itemId === p.itemId);
-          if (idx === -1) next.push(p);
-          else next[idx] = p;
-        }
-        return next;
-      });
+      setProducts((prev) => mergeProductsById(prev, added));
       toast.success("Produk ditambahkan.");
     } catch {
       toast.error("Terjadi kesalahan, coba lagi.");
     } finally {
-      setAdding(null);
+      setBusyItem(null);
+    }
+  }
+
+  /** The picker's `✓ Ditambah` side of the toggle: reuses the roster DELETE. */
+  async function unadd(product: SearchResult) {
+    setBusyItem(product.itemId);
+    try {
+      await remove(product.itemId);
+    } finally {
+      setBusyItem(null);
     }
   }
 
@@ -750,62 +810,140 @@ function ProductPicker({
     }
   }
 
-  function scrollToPicker() {
-    searchSectionRef.current?.scrollIntoView({
-      behavior: "smooth",
-      block: "start",
-    });
-    searchInputRef.current?.focus({ preventScroll: true });
+  function openPicker() {
+    setPickerOpen(true);
   }
 
   return (
     <div className="space-y-6">
       {canEdit && (
-        <div ref={searchSectionRef}>
-          <FieldLabel htmlFor="product-search">Tambah produk (cari Jubelio)</FieldLabel>
-          <div className="relative mt-1.5">
-            <Input
-              id="product-search"
-              ref={searchInputRef}
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Cari nama produk atau SKU..."
-              className="h-11 pr-10"
-            />
-            {searching && (
-              <span className="absolute right-3 top-1/2 -translate-y-1/2">
-                <Spinner />
-              </span>
-            )}
-          </div>
+        <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+          <DialogTrigger render={<Button variant="ink" />}>
+            + Pilih Produk Jubelio
+          </DialogTrigger>
+          <DialogContent className="flex max-h-[85vh] w-full max-w-3xl flex-col gap-0 overflow-hidden rounded-2xl border border-neutral-200 bg-white p-0 dark:border-border dark:bg-card sm:max-w-3xl">
+            <DialogHeader className="border-b border-neutral-200 bg-neutral-50 p-4 pr-14 dark:border-border dark:bg-input/30 sm:p-5 sm:pr-14">
+              <div className="flex items-center gap-2">
+                <span
+                  aria-hidden="true"
+                  className="h-2.5 w-2.5 shrink-0 rounded-full border border-neutral-950 bg-brand-primary dark:border-neutral-50"
+                />
+                <DialogTitle className="text-sm font-bold uppercase tracking-wider text-neutral-950 dark:text-neutral-50 sm:text-base">
+                  Pilih Produk dari Jubelio ERP
+                </DialogTitle>
+              </div>
+              <p className="text-xs text-neutral-500 dark:text-neutral-400">
+                Cek stok real-time dari seluruh gudang yang terhubung.
+              </p>
+            </DialogHeader>
 
-          {results.length > 0 && (
-            <ul className="mt-2 divide-y divide-border rounded-2xl border border-border">
-              {results.map((r) => (
-                <li
-                  key={r.itemId}
-                  className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
-                >
-                  <div className="min-w-0">
-                    <p className="truncate text-foreground">
-                      {r.itemGroupName || r.skuCode}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      SKU {r.skuCode} · {formatRupiah(r.price)}
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    disabled={adding !== null}
-                    onClick={() => add(r)}
-                  >
-                    {adding === r.itemId ? <Spinner /> : "Tambah"}
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-        </div>
+            <div className="flex items-center gap-3 border-b border-neutral-200 bg-white p-3 dark:border-border dark:bg-card sm:p-4">
+              <div className="relative flex-1">
+                <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+                <Input
+                  ref={searchInputRef}
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  placeholder="cari nama / SKU…"
+                  aria-label="Cari produk di katalog Jubelio"
+                  className="h-9 bg-neutral-50 pl-8 font-mono text-xs dark:bg-input/30"
+                />
+              </div>
+              <span className="shrink-0 whitespace-nowrap font-mono text-xs text-neutral-500 dark:text-neutral-400">
+                {results.length} SKU
+              </span>
+            </div>
+
+            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-neutral-50/50 p-3 dark:bg-input/20 sm:p-4">
+              {searching &&
+                [0, 1, 2, 3].map((i) => (
+                  <Skeleton key={i} className="h-16 rounded-xl" />
+                ))}
+
+              {!searching && search.trim() === "" && (
+                <p className="py-8 text-center text-xs text-neutral-500 dark:text-neutral-400">
+                  Ketik untuk mencari katalog Jubelio.
+                </p>
+              )}
+
+              {!searching && search.trim() !== "" && results.length === 0 && (
+                <p className="py-8 text-center text-xs text-neutral-500 dark:text-neutral-400">
+                  Produk tidak ditemukan. Coba kata kunci lain.
+                </p>
+              )}
+
+              {!searching &&
+                results.map((r) => {
+                  const label = r.itemGroupName || r.skuCode;
+                  const isAdded = selected.has(r.itemId);
+                  return (
+                    <div
+                      key={r.itemId}
+                      className="flex items-center justify-between gap-2 rounded-xl border border-neutral-200 bg-white p-2.5 transition hover:border-neutral-300 dark:border-border dark:bg-card sm:gap-3 sm:p-3"
+                    >
+                      <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
+                        <span
+                          aria-hidden="true"
+                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-50 to-amber-200 dark:from-amber-950/40 dark:to-amber-900/30"
+                        >
+                          <span className="text-base font-black text-amber-700 dark:text-amber-400">
+                            {label.charAt(0).toUpperCase()}
+                          </span>
+                        </span>
+                        <div className="min-w-0">
+                          <div className="truncate text-xs font-bold text-neutral-950 dark:text-neutral-50">
+                            {label}
+                          </div>
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] font-mono text-neutral-500 sm:gap-2">
+                            <StatusBadge tone="neutral">
+                              {r.skuCode || "—"}
+                            </StatusBadge>
+                            <span>
+                              stok{" "}
+                              <b className="font-mono font-bold text-emerald-600 dark:text-emerald-500">
+                                {r.stock ?? "—"}
+                              </b>
+                            </span>
+                            <span className="text-neutral-400 line-through dark:text-neutral-500">
+                              {formatRupiah(r.price)}
+                            </span>
+                          </div>
+                        </div>
+                      </div>
+                      <Button
+                        size="xs"
+                        variant="ghost"
+                        aria-pressed={isAdded}
+                        aria-label={`${isAdded ? "Hapus " : "Tambah "}${label} ${isAdded ? "dari" : "ke"} roster`}
+                        isLoading={busyItem === r.itemId}
+                        disabled={busyItem !== null}
+                        onClick={() => (isAdded ? unadd(r) : add(r))}
+                        className={cn(
+                          "shrink-0 rounded-lg font-bold",
+                          isAdded
+                            ? "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-950/60"
+                            : "border border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-950/60",
+                        )}
+                      >
+                        {isAdded ? "✓ Ditambah" : "+ Tambah"}
+                      </Button>
+                    </div>
+                  );
+                })}
+            </div>
+
+            <div className="flex items-center justify-between gap-3 border-t border-neutral-200 bg-neutral-50 p-3 dark:border-border dark:bg-input/30 sm:p-4">
+              <span className="font-mono text-xs text-neutral-500 dark:text-neutral-400">
+                <b className="text-neutral-950 dark:text-neutral-50">
+                  {selected.size} dipilih
+                </b>
+              </span>
+              <DialogClose render={<Button variant="ink" />}>
+                Selesai Konfigurasi
+              </DialogClose>
+            </div>
+          </DialogContent>
+        </Dialog>
       )}
 
       <Panel title="Roster Produk" count={`${products.length} item siap`}>
@@ -816,7 +954,7 @@ function ProductPicker({
         )}
 
         {products.length === 0 ? (
-          <EmptyRoster canEdit={canEdit} onImport={scrollToPicker} />
+          <EmptyRoster canEdit={canEdit} onImport={openPicker} />
         ) : (
           <>
             {/* Desktop inline-edit table (design.html:268-348) */}
@@ -892,5 +1030,12 @@ function ProductPicker({
 }
 
 // Exported for unit tests — the roster's save guard + read-only category
-// display rule (pure, no React).
-export { ProductPicker, canSaveRow, categoryText };
+// display rule + the picker modal's itemId-keyed selection/merge helpers
+// (pure, no React).
+export {
+  ProductPicker,
+  canSaveRow,
+  categoryText,
+  selectedItemIds,
+  mergeProductsById,
+};

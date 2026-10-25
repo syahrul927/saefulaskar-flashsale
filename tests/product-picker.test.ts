@@ -1,8 +1,32 @@
 import { describe, expect, it } from "vitest";
 
-import { canSaveRow, categoryText } from "@/app/_components/product-picker";
+import {
+  canSaveRow,
+  categoryText,
+  mergeProductsById,
+  selectedItemIds,
+  type SessionProduct,
+} from "@/app/_components/product-picker";
 
 const valid = { quota: "50", minOrder: "2", flashPrice: "150000" };
+
+function rosterRow(itemId: number, overrides: Partial<SessionProduct> = {}) {
+  return {
+    id: `row-${itemId}`,
+    itemId,
+    skuCode: `SKU-${itemId}`,
+    itemGroupName: `Produk ${itemId}`,
+    originalPrice: 100000,
+    sessionQuota: 50,
+    claimed: 0,
+    minOrder: 1,
+    flashPrice: 99000,
+    category: null,
+    type: "single" as SessionProduct["type"],
+    availableStock: null,
+    ...overrides,
+  } satisfies SessionProduct;
+}
 
 describe("canSaveRow", () => {
   it("accepts a fully valid numeric draft", () => {
@@ -44,5 +68,44 @@ describe("categoryText", () => {
 
   it("passes real categories through", () => {
     expect(categoryText("Aksesoris")).toBe("Aksesoris");
+  });
+});
+
+describe("selectedItemIds", () => {
+  it("indexes the roster by itemId for the picker toggle lookup", () => {
+    const ids = selectedItemIds([rosterRow(11), rosterRow(12)]);
+    expect([...ids].sort()).toEqual([11, 12]);
+    expect(ids.has(11)).toBe(true);
+    expect(ids.has(13)).toBe(false);
+  });
+
+  it("counts every roster row once for the `N dipilih` footer", () => {
+    expect(selectedItemIds([rosterRow(1), rosterRow(2), rosterRow(3)]).size).toBe(3);
+    expect(selectedItemIds([]).size).toBe(0);
+  });
+});
+
+describe("mergeProductsById", () => {
+  it("appends freshly added items keyed by itemId", () => {
+    const merged = mergeProductsById([rosterRow(1)], [rosterRow(2)]);
+    expect(merged.map((p) => p.itemId)).toEqual([1, 2]);
+  });
+
+  it("replaces an existing row in place instead of duplicating it", () => {
+    const stale = rosterRow(1, { sessionQuota: 10 });
+    const fresh = rosterRow(1, { sessionQuota: 77 });
+    const merged = mergeProductsById([rosterRow(9), stale], [fresh]);
+    expect(merged.map((p) => p.itemId)).toEqual([9, 1]);
+    expect(merged[1]?.sessionQuota).toBe(77);
+  });
+
+  it("merges a multi-item POST response in one pass", () => {
+    const merged = mergeProductsById([], [rosterRow(5), rosterRow(6)]);
+    expect(selectedItemIds(merged).size).toBe(2);
+  });
+
+  it("leaves the roster untouched for an empty incoming list", () => {
+    const prev = [rosterRow(1)];
+    expect(mergeProductsById(prev, [])).toEqual(prev);
   });
 });
