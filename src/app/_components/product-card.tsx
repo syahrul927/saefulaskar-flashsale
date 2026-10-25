@@ -4,12 +4,9 @@ import { PlusIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardFooter,
-} from "@/components/ui/card";
-import { Progress, ProgressIndicator, ProgressTrack } from "@/components/ui/progress";
+import { PRODUCT_TYPE_LABELS, type ProductType } from "@/server/db/schema";
+import { pillIdFor } from "./category-pills";
+import { StatusBadge } from "./status-badge";
 import { useCartContext } from "./cart-context";
 
 export type StorefrontProduct = {
@@ -24,6 +21,7 @@ export type StorefrontProduct = {
   flashPrice: number;
   category: string | null;
   availableStock: number | null;
+  type: ProductType;
 };
 
 type ProductCardProps = {
@@ -39,26 +37,21 @@ function formatRupiah(value: number) {
 }
 
 /**
- * Customer product card (spec §4.4, §5.13).
- * - flashPrice + struck-through originalPrice
- * - quota bar claimed / sessionQuota
- * - sold-out overlay when claimed >= sessionQuota (or zero live stock)
- * - "+" quick-add at minOrder; disabled while sold out (Review Focus #6)
+ * Customer product card — mockup transplant (design.html:519-598).
+ * aspect-square amber letter-tile frame (Task 7 `RosterThumb` treatment sized
+ * up) with floating category pill + MOQ badge, mono price block, a low-stock
+ * "sisa N" callout and a whiteout sold-out overlay. Quick-add at minOrder;
+ * cart logic unchanged, CTA disabled while sold out.
  */
 function ProductCard({ product }: ProductCardProps) {
   const { add } = useCartContext();
 
-  const claimed = product.claimed;
-  const sessionQuota = product.sessionQuota;
-  const quotaSoldOut = sessionQuota > 0 && claimed >= sessionQuota;
-  const stockSoldOut =
-    product.availableStock !== null && product.availableStock <= 0;
-  const soldOut = quotaSoldOut || stockSoldOut;
-  const soldOutReason = quotaSoldOut ? "Sold Out" : "Habis";
-
-  const quotaPercent = sessionQuota > 0
-    ? Math.min(100, Math.round((claimed / sessionQuota) * 100))
-    : 0;
+  const remaining = product.sessionQuota - product.claimed;
+  const soldOut =
+    remaining <= 0 ||
+    (product.availableStock !== null && product.availableStock <= 0);
+  // Urgency threshold — show the "sisa N" callout once stock is genuinely low.
+  const lowStock = remaining <= Math.max(10, Math.ceil(product.sessionQuota * 0.15));
 
   const handleAdd = () => {
     add(
@@ -78,75 +71,84 @@ function ProductCard({ product }: ProductCardProps) {
   };
 
   return (
-    <Card size="sm" className="relative flex h-full flex-col">
-      {soldOut && (
-        <div className="pointer-events-none absolute inset-0 z-10 flex items-center justify-center rounded-4xl bg-background/70 backdrop-blur-[2px]">
-          <span className="rounded-3xl border border-destructive/30 bg-destructive/10 px-3 py-1 text-xs font-semibold text-destructive">
-            {soldOutReason}
+    <div className="flex h-full flex-col rounded-2xl border border-neutral-200 bg-white p-3.5 transition hover:border-neutral-300 hover:shadow-md dark:border-border dark:bg-card">
+      {/* Thumb frame — letter tile until real images land (mockup D6). */}
+      <div className="relative mb-3 flex aspect-square items-center justify-center overflow-hidden rounded-xl border border-neutral-200/80 bg-neutral-100">
+        <span
+          aria-hidden="true"
+          className="flex size-full items-center justify-center bg-gradient-to-br from-amber-50 to-amber-200"
+        >
+          <span className="text-5xl font-black text-amber-700">
+            {product.itemGroupName?.slice(0, 1).toUpperCase() ?? "?"}
           </span>
-        </div>
-      )}
-
-      {/* Image area — Jubelio thumbnail not available in the joined GET shape,
-          so render a neutral placeholder tile. */}
-      <div className="relative flex h-32 items-center justify-center overflow-hidden rounded-t-4xl bg-muted">
-        <span className="text-2xl font-semibold tracking-tight text-muted-foreground/40">
-          {product.itemGroupName?.slice(0, 1).toUpperCase() ?? "?"}
         </span>
+
+        {/* Category pill overlay — top-left, floats over the tile. */}
+        <span className="absolute left-2 top-2 rounded-md border border-neutral-200 bg-white/95 px-2 py-0.5 font-mono text-[10px] font-bold text-neutral-800 backdrop-blur">
+          {pillIdFor(product.category)}
+        </span>
+
+        {/* MOQ badge — top-right. */}
+        <span className="absolute right-2 top-2">
+          <StatusBadge tone="amber">MIN: {product.minOrder}</StatusBadge>
+        </span>
+
+        {soldOut && (
+          <div className="absolute inset-0 z-10 flex items-center justify-center bg-white/90 backdrop-blur-[2px]">
+            <StatusBadge tone="neutral">KUOTA HABIS</StatusBadge>
+          </div>
+        )}
       </div>
 
-      <CardContent className="flex flex-1 flex-col gap-2 pt-4">
-        <p className="line-clamp-2 min-h-10 font-medium leading-tight text-card-foreground">
-          {product.itemGroupName ?? `SKU ${product.skuCode ?? product.itemId}`}
-        </p>
-        {product.skuCode ? (
-          <p className="text-xs text-muted-foreground">{product.skuCode}</p>
-        ) : null}
+      <p className="line-clamp-2 min-h-10 text-[13px] font-semibold leading-tight text-neutral-950 dark:text-neutral-50">
+        {product.itemGroupName ?? `SKU ${product.skuCode ?? product.itemId}`}
+      </p>
 
-        <div className="flex items-baseline gap-2">
-          <span className="text-lg font-bold text-foreground">
-            {formatRupiah(product.flashPrice)}
+      <div className="mt-1 flex items-center gap-1.5">
+        <span className="font-mono text-[10px] text-neutral-400">
+          SKU:{" "}
+          <span className="font-bold text-neutral-600 dark:text-neutral-300">
+            {product.skuCode ?? "—"}
           </span>
-          {product.originalPrice > product.flashPrice && (
-            <span className="text-sm text-muted-foreground line-through">
-              {formatRupiah(product.originalPrice)}
-            </span>
-          )}
-        </div>
+        </span>
+        {product.type !== "single" && (
+          <span className="rounded-md border border-neutral-200 bg-neutral-100 px-1.5 font-mono text-[9px] font-bold uppercase text-neutral-600 dark:border-border dark:bg-neutral-900 dark:text-neutral-300">
+            {PRODUCT_TYPE_LABELS[product.type]}
+          </span>
+        )}
+      </div>
 
-        {/* Quota bar — claimed / sessionQuota (spec §4.4). */}
-        <div className="mt-auto space-y-1">
-          <div className="flex items-center justify-between text-xs text-muted-foreground">
-            <span>
-              Terjual {claimed}
-              {sessionQuota > 0 ? ` / ${sessionQuota}` : ""}
-            </span>
-            {quotaSoldOut && <span className="text-destructive">Habis</span>}
-          </div>
-          <Progress value={quotaPercent} aria-label={`Quota ${quotaPercent}% terjual`}>
-            <ProgressTrack className="h-1.5">
-              <ProgressIndicator
-                className={quotaSoldOut ? "bg-destructive" : "bg-primary"}
-                style={{ width: `${quotaPercent}%` }}
-              />
-            </ProgressTrack>
-          </Progress>
-        </div>
-      </CardContent>
+      <div className="mt-2 flex items-baseline gap-2">
+        <span className="font-mono text-base font-bold text-neutral-950 dark:text-neutral-50">
+          {formatRupiah(product.flashPrice)}
+        </span>
+        {product.originalPrice > product.flashPrice && (
+          <span className="font-mono text-[10px] text-neutral-400 line-through">
+            {formatRupiah(product.originalPrice)}
+          </span>
+        )}
+      </div>
 
-      <CardFooter className="pt-2">
+      {lowStock && (
+        <p className="mt-1 font-mono text-[10px] font-bold text-brand-secondary">
+          sisa {remaining}
+        </p>
+      )}
+
+      <div className="mt-auto pt-3">
         <Button
           type="button"
+          variant="ink"
           size="sm"
           className="w-full"
           disabled={soldOut}
           onClick={handleAdd}
         >
           <PlusIcon weight="bold" />
-          {soldOut ? soldOutReason : `Tambah ${product.minOrder}`}
+          {soldOut ? "KUOTA HABIS" : `Tambah ${product.minOrder}`}
         </Button>
-      </CardFooter>
-    </Card>
+      </div>
+    </div>
   );
 }
 

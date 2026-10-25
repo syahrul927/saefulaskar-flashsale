@@ -53,6 +53,7 @@ export default async function HomePage() {
     flashPrice: row.flashPrice,
     category: row.category,
     availableStock: row.jubelioStock,
+    type: row.type,
   }));
 
   return (

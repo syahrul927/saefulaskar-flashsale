@@ -129,6 +129,16 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/* Horizontal filter rows (storefront category pills) scroll without showing
+   a scrollbar — mockup design.html `.no-scrollbar`. */
+@utility no-scrollbar {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+  &::-webkit-scrollbar {
+    display: none;
+  }
+}
+
 @layer base {
   * {
     @apply border-border outline-ring/50;
