@@ -40,7 +40,7 @@ export async function GET(
 ) {
   const auth = await getSession();
   if (!auth) return jsonError(401, "Unauthorized");
-  if ((auth.user.role as string) !== "OWNER")
+  if (auth.user.role !== "OWNER")
     return jsonError(403, "Forbidden");
 
   const { id } = await params;
@@ -90,7 +90,7 @@ export async function POST(
 ) {
   const auth = await getSession();
   if (!auth) return jsonError(401, "Unauthorized");
-  if ((auth.user.role as string) !== "OWNER")
+  if (auth.user.role !== "OWNER")
     return jsonError(403, "Forbidden");
 
   const { id } = await params;

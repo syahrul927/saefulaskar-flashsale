@@ -40,8 +40,7 @@ export async function GET(
 ) {
   const auth = await getSession();
   if (!auth) return jsonError(401, "Unauthorized");
-  if ((auth.user.role as string) !== "OWNER")
-    return jsonError(403, "Forbidden");
+  if (auth.user.role !== "OWNER") return jsonError(403, "Forbidden");
 
   const { id, itemId: itemIdParam } = await params;
   const itemId = Number(itemIdParam);
@@ -85,8 +84,7 @@ export async function PUT(
 ) {
   const auth = await getSession();
   if (!auth) return jsonError(401, "Unauthorized");
-  if ((auth.user.role as string) !== "OWNER")
-    return jsonError(403, "Forbidden");
+  if (auth.user.role !== "OWNER") return jsonError(403, "Forbidden");
 
   const { id, itemId: itemIdParam } = await params;
   const itemId = Number(itemIdParam);
@@ -143,4 +141,41 @@ export async function PUT(
     .returning();
 
   return Response.json({ ok: true, product: updated });
+}
+
+/**
+ * DELETE /api/sessions/[id]/products/[itemId] — remove a product from a session.
+ * Only SCHEDULED sessions accept removal (spec §5.9: config frozen once a
+ * session leaves SCHEDULED). OWNER-only.
+ */
+export async function DELETE(
+  _request: Request,
+  { params }: { params: Promise<{ id: string; itemId: string }> },
+) {
+  const auth = await getSession();
+  if (!auth) return jsonError(401, "Unauthorized");
+  if (auth.user.role !== "OWNER") return jsonError(403, "Forbidden");
+
+  const { id, itemId: itemIdParam } = await params;
+  const itemId = Number(itemIdParam);
+  if (!Number.isInteger(itemId) || itemId <= 0)
+    return jsonError(400, "Invalid itemId");
+
+  const [session] = await db
+    .select()
+    .from(flashSessions)
+    .where(eq(flashSessions.id, id));
+  if (!session) return jsonError(404, "Session not found");
+  if (session.status !== "SCHEDULED")
+    return jsonError(409, "Only SCHEDULED sessions can modify products");
+
+  await db
+    .delete(sessionProducts)
+    .where(
+      and(
+        eq(sessionProducts.sessionId, id),
+        eq(sessionProducts.itemId, itemId),
+      ),
+    );
+  return Response.json({ ok: true });
 }

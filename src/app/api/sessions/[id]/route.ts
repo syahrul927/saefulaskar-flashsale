@@ -42,7 +42,7 @@ export async function PATCH(
   const auth = await getSession();
   if (!auth) return jsonError(401, "Unauthorized");
   const user = auth.user;
-  if ((user.role as string) !== "OWNER") return jsonError(403, "Forbidden");
+  if (user.role !== "OWNER") return jsonError(403, "Forbidden");
 
   const { id } = await params;
 
@@ -122,7 +122,7 @@ export async function DELETE(
   const auth = await getSession();
   if (!auth) return jsonError(401, "Unauthorized");
   const user = auth.user;
-  if ((user.role as string) !== "OWNER") return jsonError(403, "Forbidden");
+  if (user.role !== "OWNER") return jsonError(403, "Forbidden");
 
   const { id } = await params;
 

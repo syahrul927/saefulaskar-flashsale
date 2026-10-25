@@ -23,7 +23,7 @@ export async function POST(
   const auth = await getSession();
   if (!auth) return jsonError(401, "Unauthorized");
   const user = auth.user;
-  if ((user.role as string) !== "OWNER") return jsonError(403, "Forbidden");
+  if (user.role !== "OWNER") return jsonError(403, "Forbidden");
 
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success)

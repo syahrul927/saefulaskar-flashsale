@@ -1,4 +1,4 @@
-import { eq, inArray } from "drizzle-orm";
+import { inArray } from "drizzle-orm";
 import type { Metadata } from "next";
 
 import { Badge } from "@/components/ui/badge";

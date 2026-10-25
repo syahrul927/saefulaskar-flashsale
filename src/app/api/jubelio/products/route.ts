@@ -32,7 +32,7 @@ type RawMaster = {
 export async function GET(request: Request) {
   const auth = await getSession();
   if (!auth) return jsonError(401, "Unauthorized");
-  if ((auth.user.role as string) !== "OWNER") return jsonError(403, "Forbidden");
+  if (auth.user.role !== "OWNER") return jsonError(403, "Forbidden");
 
   const search =
     new URL(request.url).searchParams.get("search") ??

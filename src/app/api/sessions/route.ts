@@ -48,7 +48,7 @@ export async function POST(request: Request) {
   const auth = await getSession();
   if (!auth) return jsonError(401, "Unauthorized");
   const user = auth.user;
-  if ((user.role as string) !== "OWNER") return jsonError(403, "Forbidden");
+  if (user.role !== "OWNER") return jsonError(403, "Forbidden");
 
   let body: z.infer<typeof CreateSession>;
   try {
