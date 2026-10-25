@@ -8,7 +8,7 @@ import { getSession } from "@/server/better-auth/server";
 import { buildWaLink, parseBankAccounts } from "@/server/checkout";
 import { db } from "@/server/db";
 import { orderItems, orders } from "@/server/db/schema";
-import { ProofUploadButton } from "../_components/proof-upload-button";
+import { ProofUploadButton } from "@/app/_components/proof-upload-button";
 
 export const metadata: Metadata = {
   title: "Riwayat Pesanan — Flash Studio",

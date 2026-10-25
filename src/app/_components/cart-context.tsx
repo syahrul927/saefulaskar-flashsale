@@ -33,6 +33,11 @@ type CartContextValue = {
   clear: () => void;
   subtotal: number;
   count: number;
+  /** Cart drawer visibility — owned here so the header, mobile bar and any
+   * future trigger can open the one drawer mounted in the storefront layout. */
+  drawerOpen: boolean;
+  openDrawer: () => void;
+  closeDrawer: () => void;
 };
 
 const CartContext = createContext<CartContextValue | null>(null);
@@ -75,6 +80,7 @@ function saveCart(items: CartItem[]) {
 
 function CartProvider({ children }: { children: ReactNode }) {
   const [items, setItems] = useState<CartItem[]>(loadCart);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
     saveCart(items);
@@ -125,6 +131,9 @@ function CartProvider({ children }: { children: ReactNode }) {
 
   const clear = useCallback(() => setItems(EMPTY), []);
 
+  const openDrawer = useCallback(() => setDrawerOpen(true), []);
+  const closeDrawer = useCallback(() => setDrawerOpen(false), []);
+
   const { subtotal, count } = useMemo(() => {
     let subtotal = 0;
     let count = 0;
@@ -136,8 +145,32 @@ function CartProvider({ children }: { children: ReactNode }) {
   }, [items]);
 
   const value = useMemo<CartContextValue>(
-    () => ({ items, add, increment, decrement, remove, clear, subtotal, count }),
-    [items, add, increment, decrement, remove, clear, subtotal, count],
+    () => ({
+      items,
+      add,
+      increment,
+      decrement,
+      remove,
+      clear,
+      subtotal,
+      count,
+      drawerOpen,
+      openDrawer,
+      closeDrawer,
+    }),
+    [
+      items,
+      add,
+      increment,
+      decrement,
+      remove,
+      clear,
+      subtotal,
+      count,
+      drawerOpen,
+      openDrawer,
+      closeDrawer,
+    ],
   );
 
   return <CartContext.Provider value={value}>{children}</CartContext.Provider>;

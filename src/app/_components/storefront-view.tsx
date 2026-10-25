@@ -5,7 +5,6 @@ import { useMemo, useState } from "react";
 import { CategoryPills } from "./category-pills";
 import { CountdownTimer } from "./countdown-timer";
 import { ProductCard, type StorefrontProduct } from "./product-card";
-import { CartDrawer } from "./cart-drawer";
 import { MobileCartBar } from "./mobile-cart-bar";
 
 type ActiveSession = {
@@ -26,10 +25,11 @@ type StorefrontViewProps = {
  * Interactive storefront body — category filter + product grid live on the
  * client, session/products are fetched (server components) and passed in.
  * G13: page container uses `flex-1 space-y-6 p-4 md:p-6`.
+ * The cart drawer is NOT mounted here anymore — `(storefront)/layout` owns the
+ * single instance so `/orders` keeps a cart entry point too.
  */
 function StorefrontView({ session, products }: StorefrontViewProps) {
   const [activeCategory, setActiveCategory] = useState("All");
-  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const categories = useMemo(
     () =>
@@ -55,12 +55,10 @@ function StorefrontView({ session, products }: StorefrontViewProps) {
 
   return (
     <main className="flex-1 space-y-6 p-4 pb-28 md:p-6 md:pb-10">
-      {/* Hero — session name + countdown */}
+      {/* Hero — session name + countdown (sale-live status now lives in the
+          header badge, so the duplicated eyebrow line is gone) */}
       <section className="rounded-4xl border border-border bg-card p-6 shadow-sm">
-        <p className="text-xs font-semibold tracking-wide text-muted-foreground uppercase">
-          Flash Sale Sedang Berlangsung
-        </p>
-        <div className="mt-1 flex flex-wrap items-baseline justify-between gap-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
           <h1 className="text-2xl font-bold tracking-tight text-foreground md:text-3xl">
             {session.name || session.sessionName}
           </h1>
@@ -96,9 +94,7 @@ function StorefrontView({ session, products }: StorefrontViewProps) {
         </div>
       )}
 
-      <MobileCartBar onViewCart={() => setDrawerOpen(true)} />
-
-      <CartDrawer open={drawerOpen} onOpenChange={setDrawerOpen} sessionId={session.id} />
+      <MobileCartBar />
     </main>
   );
 }

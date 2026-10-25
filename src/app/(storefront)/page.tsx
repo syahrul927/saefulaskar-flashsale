@@ -3,8 +3,8 @@ import type { Metadata } from "next";
 
 import { db } from "@/server/db";
 import { flashSessions, sessionProducts } from "@/server/db/schema";
-import { StorefrontView } from "./_components/storefront-view";
-import type { StorefrontProduct } from "./_components/product-card";
+import { StorefrontView } from "@/app/_components/storefront-view";
+import type { StorefrontProduct } from "@/app/_components/product-card";
 
 export const metadata: Metadata = {
   title: "Flash Studio — Flash Sale",

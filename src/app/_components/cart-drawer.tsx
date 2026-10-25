@@ -41,24 +41,36 @@ type CheckoutResult = {
  * (MOQ floor via `decrement`), Subtotal + "Total Checkout" lines ONLY.
  * "Checkout" posts to `POST /api/orders` (Task 6) and, on success, replaces
  * the cart body with the bank list + "Kirim Bukti Transfer" buttons.
+ *
+ * Visibility lives in `CartContext` (`drawerOpen` / `openDrawer` /
+ * `closeDrawer`), not props — mounted exactly once by `(storefront)/layout`
+ * so the header, the mobile bar and swipe-to-close all drive the same
+ * instance on `/` and `/orders` alike. `sessionId` is optional: with no
+ * ACTIVE session checkout is held (empty storefront), not silently broken.
  */
-function CartDrawer({
-  open,
-  onOpenChange,
-  sessionId,
-}: {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
-  sessionId: string;
-}) {
-  const { items, increment, decrement, remove, subtotal, count, clear } =
-    useCartContext();
+function CartDrawer({ sessionId }: { sessionId?: string }) {
+  const {
+    items,
+    increment,
+    decrement,
+    remove,
+    subtotal,
+    count,
+    clear,
+    drawerOpen,
+    openDrawer,
+    closeDrawer,
+  } = useCartContext();
   const [checkoutLoading, setCheckoutLoading] = useState(false);
   const [checkoutResult, setCheckoutResult] = useState<CheckoutResult | null>(
     null,
   );
 
   const handleCheckout = async () => {
+    if (!sessionId) {
+      toast.error("Belum ada flash sale aktif. Coba lagi saat sesi berjalan.");
+      return;
+    }
     setCheckoutLoading(true);
     try {
       const res = await fetch("/api/orders", {
@@ -101,7 +113,11 @@ function CartDrawer({
   };
 
   return (
-    <Drawer open={open} onOpenChange={onOpenChange} swipeDirection="down">
+    <Drawer
+      open={drawerOpen}
+      onOpenChange={(next) => (next ? openDrawer() : closeDrawer())}
+      swipeDirection="down"
+    >
       <DrawerContent className="h-[80dvh]">
         <DrawerHeader className="flex-row items-center justify-between">
           <DrawerTitle>
@@ -109,7 +125,7 @@ function CartDrawer({
           </DrawerTitle>
           <button
             type="button"
-            onClick={() => onOpenChange(false)}
+            onClick={closeDrawer}
             aria-label="Tutup keranjang"
             className="rounded-full p-1.5 text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
           >
@@ -184,7 +200,7 @@ function CartDrawer({
                 size="lg"
                 variant="outline"
                 className="w-full"
-                onClick={() => onOpenChange(false)}
+                onClick={closeDrawer}
               >
                 Selesai
               </Button>
@@ -273,10 +289,16 @@ function CartDrawer({
 
         {!checkoutResult && (
           <DrawerFooter>
+            {!sessionId && count > 0 && (
+              <p className="text-center text-xs text-muted-foreground">
+                Belum ada flash sale aktif — checkout tersedia saat sesi
+                berjalan.
+              </p>
+            )}
             <Button
               size="lg"
               className="w-full"
-              disabled={count === 0 || checkoutLoading}
+              disabled={count === 0 || !sessionId || checkoutLoading}
               onClick={handleCheckout}
             >
               {checkoutLoading ? <Spinner /> : null}
