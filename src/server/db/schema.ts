@@ -107,6 +107,15 @@ export const flashSessions = createTable(
   (t) => [index("flash_session_status_idx").on(t.status)],
 );
 
+export const PRODUCT_TYPES = ["single", "variable", "bundle"] as const;
+export type ProductType = (typeof PRODUCT_TYPES)[number];
+
+export const PRODUCT_TYPE_LABELS: Record<ProductType, string> = {
+  single: "Single SKU",
+  variable: "Varian",
+  bundle: "Bundle Pack",
+};
+
 export const sessionProducts = createTable(
   "session_product",
   (t) => ({
@@ -125,6 +134,7 @@ export const sessionProducts = createTable(
     minOrder: t.integer("min_order").default(1).notNull(),
     flashPrice: t.integer("flash_price").notNull(),
     category: t.text("category"),
+    type: t.text("type").notNull().default("single").$type<ProductType>(),
   }),
   (t) => [
     unique().on(t.sessionId, t.itemId),
@@ -153,6 +163,11 @@ export const orders = createTable(
     contactId: t
       .uuid("contact_id")
       .references(() => contacts.id),
+    // Order-level recipient snapshot — collected at checkout, falls back to
+    // the linked contact record for orders created before it existed.
+    recipientName: t.text("recipient_name"),
+    recipientPhone: t.text("recipient_phone"),
+    recipientAddress: t.text("recipient_address"),
     createdAt: t
       .timestamp("created_at", { withTimezone: true })
       .$defaultFn(() => /* @__PURE__ */ new Date())

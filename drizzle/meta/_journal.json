@@ -36,6 +36,13 @@
       "when": 1792948005483,
       "tag": "0004_faulty_firebrand",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1792954702982,
+      "tag": "0005_daffy_norrin_radd",
+      "breakpoints": true
     }
   ]
 }
