@@ -40,8 +40,9 @@ function formatRupiah(value: number) {
  * Customer product card — mockup transplant (design.html:519-598).
  * aspect-square amber letter-tile frame (Task 7 `RosterThumb` treatment sized
  * up) with floating category pill + MOQ badge, mono price block, a low-stock
- * "sisa N" callout and a whiteout sold-out overlay. Quick-add at minOrder;
- * cart logic unchanged, CTA disabled while sold out.
+ * "sisa N" callout, the brand-gradient quota bar and a whiteout sold-out
+ * overlay. Quick-add at minOrder; cart logic unchanged, CTA disabled while
+ * sold out.
  */
 function ProductCard({ product }: ProductCardProps) {
   const { add } = useCartContext();
@@ -52,6 +53,10 @@ function ProductCard({ product }: ProductCardProps) {
     (product.availableStock !== null && product.availableStock <= 0);
   // Urgency threshold — show the "sisa N" callout once stock is genuinely low.
   const lowStock = remaining <= Math.max(10, Math.ceil(product.sessionQuota * 0.15));
+  const quotaPercent =
+    product.sessionQuota > 0
+      ? Math.min(100, Math.round((product.claimed / product.sessionQuota) * 100))
+      : 0;
 
   const handleAdd = () => {
     add(
@@ -129,11 +134,37 @@ function ProductCard({ product }: ProductCardProps) {
         )}
       </div>
 
-      {lowStock && (
+      {lowStock && remaining > 0 && (
         <p className="mt-1 font-mono text-[10px] font-bold text-brand-secondary">
           sisa {remaining}
         </p>
       )}
+
+      {/* Quota bar — brand-gradient fill on a thin neutral track
+          (design.html:558-569). Hand-built divs: the shadcn `Progress`
+          wrapper force-appends its own track after children, which would
+          render a second bar next to a restyled one. */}
+      <div className="mt-3">
+        <div className="mb-1 flex justify-between font-mono text-[10px] text-neutral-500">
+          <span>
+            Terjual {product.claimed}
+            {product.sessionQuota > 0 ? ` / ${product.sessionQuota}` : ""}
+          </span>
+        </div>
+        <div
+          role="progressbar"
+          aria-label={`Terjual ${quotaPercent}% dari kuota`}
+          aria-valuenow={quotaPercent}
+          aria-valuemin={0}
+          aria-valuemax={100}
+          className="h-1.5 w-full overflow-hidden rounded-full border border-neutral-200/60 bg-neutral-100 dark:border-border dark:bg-neutral-800"
+        >
+          <div
+            className="h-full bg-gradient-to-r from-brand-primary to-brand-secondary transition-all duration-300"
+            style={{ width: `${quotaPercent}%` }}
+          />
+        </div>
+      </div>
 
       <div className="mt-auto pt-3">
         <Button
