@@ -1,4 +1,7 @@
 import { Button as ButtonPrimitive } from "@base-ui/react/button"
+// SSR entry: Button is used in server components and the icon set's main
+// entry relies on React Context, which RSC forbids.
+import { CircleNotchIcon } from "@phosphor-icons/react/ssr"
 import { cva, type VariantProps } from "class-variance-authority"
 import { cn } from "cn"
 
@@ -8,6 +11,9 @@ const buttonVariants = cva(
     variants: {
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/80",
+        ink: "bg-neutral-900 text-white hover:bg-neutral-950 dark:bg-neutral-50 dark:text-neutral-900 dark:hover:bg-white",
+        brand:
+          "bg-brand-primary text-neutral-950 hover:bg-brand-primary-hover border-brand-primary/40",
         outline:
           "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:bg-transparent dark:hover:bg-input/30",
         secondary:
@@ -41,14 +47,24 @@ function Button({
   className,
   variant = "default",
   size = "default",
+  isLoading,
+  children,
   ...props
-}: ButtonPrimitive.Props & VariantProps<typeof buttonVariants>) {
+}: ButtonPrimitive.Props &
+  VariantProps<typeof buttonVariants> & {
+    /** Shows a spinner, disables the button and marks it `aria-busy` while `true`. */
+    isLoading?: boolean
+  }) {
   return (
     <ButtonPrimitive
       data-slot="button"
       className={cn(buttonVariants({ variant, size, className }))}
       {...props}
-    />
+      {...(isLoading && { disabled: true, "aria-busy": true })}
+    >
+      {isLoading && <CircleNotchIcon className="animate-spin" aria-hidden="true" />}
+      {children}
+    </ButtonPrimitive>
   )
 }
 

@@ -6,6 +6,13 @@ import { defineConfig } from "vitest/config";
 const srcDir = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
+  // tsconfig sets jsx: "preserve" (Next transpiles). Tests import .tsx
+  // components directly, so Oxc must transform JSX to the React runtime.
+  oxc: {
+    jsx: {
+      runtime: "automatic",
+    },
+  },
   resolve: {
     alias: {
       "@": path.join(srcDir, "src"),
