@@ -2,7 +2,8 @@ import { eq } from "drizzle-orm";
 import type { Metadata } from "next";
 
 import { db } from "@/server/db";
-import { flashSessions, sessionProducts } from "@/server/db/schema";
+import { sessionProducts } from "@/server/db/schema";
+import { getPrimaryActiveSession } from "@/server/session-query";
 import { StorefrontView } from "@/app/_components/storefront-view";
 import type { StorefrontProduct } from "@/app/_components/product-card";
 
@@ -16,11 +17,9 @@ export const revalidate = 0;
 export const dynamic = "force-dynamic";
 
 export default async function HomePage() {
-  const [active] = await db
-    .select()
-    .from(flashSessions)
-    .where(eq(flashSessions.status, "ACTIVE"))
-    .orderBy(flashSessions.createdAt);
+  // Cached per request — the storefront layout asks the same question for the
+  // cart drawer, so this row is read from the DB once even on a cold `/`.
+  const active = await getPrimaryActiveSession(db);
 
   if (!active) {
     return (

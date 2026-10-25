@@ -1,5 +1,6 @@
 import { eq } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
+import { cache } from "react";
 
 import { flashSessions, sessionProducts } from "@/server/db/schema";
 import type * as schema from "@/server/db/schema";
@@ -13,21 +14,27 @@ export type SessionDbLike = Pick<PostgresJsDatabase<typeof schema>, "select">;
 /**
  * Earliest-created ACTIVE session, or `null` when none is active.
  *
- * Same filter + ordering the storefront uses (`src/app/page.tsx`), so the
- * admin header pill always describes the session customers are seeing — even
- * if bad data leaves more than one row ACTIVE.
+ * Same filter + ordering the storefront uses (`src/app/(storefront)/page.tsx`),
+ * so the admin header pill always describes the session customers are seeing —
+ * even if bad data leaves more than one row ACTIVE.
+ *
+ * Wrapped in React `cache()`: the storefront layout (cart drawer checkout) and
+ * the storefront page both ask for this row during one request, and they pass
+ * the same `db` singleton, so the identical query runs once per request.
  */
-export async function getPrimaryActiveSession(
-  db: SessionDbLike,
-): Promise<typeof flashSessions.$inferSelect | null> {
-  const [session] = await db
-    .select()
-    .from(flashSessions)
-    .where(eq(flashSessions.status, "ACTIVE"))
-    .orderBy(flashSessions.createdAt);
+export const getPrimaryActiveSession = cache(
+  async (
+    db: SessionDbLike,
+  ): Promise<typeof flashSessions.$inferSelect | null> => {
+    const [session] = await db
+      .select()
+      .from(flashSessions)
+      .where(eq(flashSessions.status, "ACTIVE"))
+      .orderBy(flashSessions.createdAt);
 
-  return session ?? null;
-}
+    return session ?? null;
+  },
+);
 
 export type SessionKpis = {
   productCount: number;

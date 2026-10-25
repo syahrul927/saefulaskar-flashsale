@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { MinusIcon, PlusIcon, TrashIcon, XIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
@@ -65,6 +65,15 @@ function CartDrawer({ sessionId }: { sessionId?: string }) {
   const [checkoutResult, setCheckoutResult] = useState<CheckoutResult | null>(
     null,
   );
+
+  // The group layout owns this drawer, so it never unmounts on navigation —
+  // the old per-route unmount used to reset the post-checkout bank screen for
+  // free. Reset it whenever the drawer closes instead, otherwise reopening
+  // the cart later drops the user back into the previous booking's receipt
+  // with the cart body and a second checkout unreachable.
+  useEffect(() => {
+    if (!drawerOpen) setCheckoutResult(null);
+  }, [drawerOpen]);
 
   const handleCheckout = async () => {
     if (!sessionId) {
