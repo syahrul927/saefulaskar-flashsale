@@ -1,0 +1,66 @@
+"use client";
+
+import { useRef, useState } from "react";
+import { UploadIcon } from "@phosphor-icons/react";
+import { toast } from "sonner";
+
+import { Button } from "@/components/ui/button";
+import { Spinner } from "@/components/ui/spinner";
+
+/**
+ * Client-side "Upload Bukti Transfer" control. Picks a file, POSTs it to
+ * `POST /api/orders/[id]/upload-proof`, and surfaces success/failure via toast.
+ */
+function ProofUploadButton({ orderId }: { orderId: string }) {
+  const inputRef = useRef<HTMLInputElement>(null);
+  const [uploading, setUploading] = useState(false);
+
+  const handleFile = async (file: File | undefined) => {
+    if (!file) return;
+    setUploading(true);
+    try {
+      const form = new FormData();
+      form.append("file", file);
+      const res = await fetch(`/api/orders/${orderId}/upload-proof`, {
+        method: "POST",
+        body: form,
+      });
+      const data = (await res.json().catch(() => null)) as
+        | { ok?: boolean; error?: string }
+        | null;
+      if (!res.ok || !data?.ok) {
+        toast.error(data?.error ?? "Upload gagal, coba lagi.");
+        return;
+      }
+      toast.success("Bukti transfer terkirim!");
+    } catch {
+      toast.error("Terjadi kesalahan, coba lagi.");
+    } finally {
+      setUploading(false);
+      if (inputRef.current) inputRef.current.value = "";
+    }
+  };
+
+  return (
+    <>
+      <input
+        ref={inputRef}
+        type="file"
+        accept="image/jpeg,image/png"
+        className="hidden"
+        onChange={(e) => void handleFile(e.target.files?.[0])}
+      />
+      <Button
+        size="sm"
+        variant="secondary"
+        disabled={uploading}
+        onClick={() => inputRef.current?.click()}
+      >
+        {uploading ? <Spinner /> : <UploadIcon />}
+        {uploading ? "Mengunggah..." : "Upload Bukti Transfer"}
+      </Button>
+    </>
+  );
+}
+
+export { ProofUploadButton };

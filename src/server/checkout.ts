@@ -13,6 +13,24 @@ export type BankAccount = {
   account_name: string;
 };
 
+/** Parse the raw `BANK_ACCOUNTS` JSON string; empty list on malformed input. */
+export function parseBankAccounts(raw: string): BankAccount[] {
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (row): row is BankAccount =>
+        !!row &&
+        typeof row === "object" &&
+        typeof (row as BankAccount).bank === "string" &&
+        typeof (row as BankAccount).account_number === "string" &&
+        typeof (row as BankAccount).account_name === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
 /** Snapshot of a `session_products` row needed to validate one cart line. */
 export type ProductState = {
   sessionProductId: string;

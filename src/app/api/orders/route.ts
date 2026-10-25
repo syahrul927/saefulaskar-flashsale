@@ -8,7 +8,7 @@ import { nextBookingId } from "@/server/booking-id";
 import {
   buildWaLink,
   evaluateCheckout,
-  type BankAccount,
+  parseBankAccounts,
   type CheckoutError,
   type ProductState,
 } from "@/server/checkout";
@@ -52,24 +52,6 @@ function errorResponse(error: CheckoutError): Response {
       return jsonError(409, "Quota exceeded", error.itemId);
     case "BELOW_MIN_ORDER":
       return jsonError(400, "Pesanan di bawah minimal order", error.itemId);
-  }
-}
-
-/** Parse `BANK_ACCOUNTS` (JSON array) into typed records; empty on malformed input. */
-function parseBankAccounts(): BankAccount[] {
-  try {
-    const parsed: unknown = JSON.parse(env.BANK_ACCOUNTS);
-    if (!Array.isArray(parsed)) return [];
-    return parsed.filter(
-      (row): row is BankAccount =>
-        !!row &&
-        typeof row === "object" &&
-        typeof (row as BankAccount).bank === "string" &&
-        typeof (row as BankAccount).account_number === "string" &&
-        typeof (row as BankAccount).account_name === "string",
-    );
-  } catch {
-    return [];
   }
 }
 
@@ -176,7 +158,7 @@ export async function POST(request: Request) {
       );
     });
 
-    const bankAccounts = parseBankAccounts()
+    const bankAccounts = parseBankAccounts(env.BANK_ACCOUNTS)
       .map((bank) => ({
         ...bank,
         waLink: buildWaLink({
