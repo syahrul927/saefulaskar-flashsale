@@ -76,7 +76,7 @@ export const user = pgTable("user", {
     .$defaultFn(() => false)
     .notNull(),
   image: text("image"),
-  role: userRole("role").notNull().default("STAFF"),
+  role: userRole("role").notNull().default("CUSTOMER"),
   currentCompany: integer("current_company").notNull().default(59325),
   nik: text("nik"),
   // Jubelio API token + profile name — better-auth additionalFields, so

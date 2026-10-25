@@ -4,6 +4,7 @@ import { useState, type FormEvent } from "react";
 
 import { useRouter } from "next/navigation";
 import { RiEyeLine, RiEyeOffLine } from "@remixicon/react";
+import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
@@ -38,7 +39,7 @@ function AuthForm() {
       });
 
       if (res.ok) {
-        router.push("/login/success");
+        router.push("/admin");
         return;
       }
 
@@ -52,8 +53,10 @@ function AuthForm() {
         // Non-JSON error body — fall back to the generic message.
       }
       setError(message);
+      toast.error(message);
     } catch {
       setError("Username atau Password salah!");
+      toast.error("Username atau Password salah!");
     } finally {
       setIsLoading(false);
     }

@@ -1,5 +1,7 @@
 # PRD — Jubelio Login (SSO-style)
 
+> **Superseded (2026-10-26):** this PRD documents the original Jubelio-login feature, whose role model was `STAFF`/`OWNER` with role preserved across logins. The implementation has since moved to a two-role model — Jubelio login → `OWNER` (forced), Google OAuth → `CUSTOMER`; `STAFF` removed, and login redirects to `/admin`. See `docs/superpowers/specs/2026-10-23-flashstudio-design.md`.
+
 ## 1. Goal
 
 Allow backoffice users to sign in with their existing Jubelio account credentials (username + password), the same way the reference safar-operation app does. The app calls Jubelio's login endpoint, treats it as the single source of truth for authentication, and creates/updates a local user record so tRPC protected procedures and role checks work.

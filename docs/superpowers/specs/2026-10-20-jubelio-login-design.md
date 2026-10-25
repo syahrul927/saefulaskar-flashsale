@@ -3,6 +3,8 @@
 Date: 2026-10-20
 Status: Draft
 
+> **Superseded (2026-10-26):** role model is now two roles — Jubelio login → `OWNER` (forced), Google OAuth → `CUSTOMER`; `STAFF` removed. Login redirects to `/admin` (the `/login/success` dummy page is unused). See `2026-10-23-flashstudio-design.md` for the current token/role model.
+
 ## 1. Intent & Why
 
 Allow staff and owner (anyone with a Jubelio account) to sign in with their existing Jubelio credentials. Jubelio is the source of truth for authentication. The app creates a local mirror of the user so tRPC protected procedures can run and future per-user features (roles, NIK) have a home.
@@ -64,9 +66,9 @@ Better Auth configured for **JWT sessions** (`session.strategy = 'jwt'`), not DB
 - `verifyCompany` tRPC query dropped for this iteration (server enforces at login).
 
 ### 4.3 Role / owner
-- Drizzle `role` enum (`STAFF` / `OWNER`), default `STAFF`.
-- Upsert: **keep existing role, don't overwrite**. New users default `STAFF`.
-- Owner flagged manually in DB (one-time UPDATE) — no Jubelio-side owner detection.
+- Two roles: `OWNER` (Jubelio login, forced) and `CUSTOMER` (Google OAuth). No `STAFF`.
+- Drizzle `role` enum (`OWNER` / `CUSTOMER`), default `CUSTOMER`.
+- Upsert on Jubelio login sets `role: "OWNER"` on both insert and conflict-update; no manual DB flagging.
 
 Security note: Better Auth session cookie is what protects dummy page + future API. No token in URL from client. Good.
 
@@ -87,7 +89,7 @@ Security note: Better Auth session cookie is what protects dummy page + future A
 ### 4.8 Session shape
 Augment Better Auth session user with:
 ```ts
-{ id, email, name, image?, token: string, currentCompany: number, role: 'STAFF'|'OWNER', fullName: string }
+{ id, email, name, image?, token: string, currentCompany: number, role: 'OWNER'|'CUSTOMER', fullName: string }
 ```
 `getSession` / `createTRPCContext` unchanged; `protectedProcedure` needs `ctx.session.user`.
 
@@ -126,8 +128,8 @@ Augment Better Auth session user with:
 
 1. Valid Jubelio creds → session created → redirect to `/login/success` showing user name.
 2. Invalid creds → error message, form re-enabled, no session.
-3. New user on first login → local row auto-created, `role` default `STAFF`.
-4. Existing user role preserved on subsequent logins (owner stays owner).
+3. New user on first Jubelio login → local row auto-created with `role` `OWNER`.
+4. Every Jubelio login forces `role: OWNER` (Google logins are `CUSTOMER` via the onboarding hook).
 5. `currentCompany !== 59325` → login rejected with clear message.
 6. Mobile layout: no horizontal scroll, usable at 375px width.
 7. Logged-in user → dummy page; logged-out user → redirect to login.

@@ -2,9 +2,11 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
+> **Superseded (2026-10-26):** role model is now two roles — Jubelio login → `OWNER` (forced), Google OAuth → `CUSTOMER`; `STAFF` removed. Login redirects to `/admin`, not the dummy `/login/success` page. See `2026-10-23-flashstudio-design.md` for the current token/role model.
+
 **Goal:** Users sign in with their Jubelio account; session carries the Jubelio token; mobile-first shadcn login form; dummy success page after login.
 
-**Architecture:** Custom server-side login route validates credentials against Jubelio `POST {JUBELIO_HOST}/login`, upserts a local Drizzle `user` row (role preserved, default STAFF), then issues a Better Auth session carrying the raw Jubelio token, role and currentCompany. JWT-oriented session (cookie cache enabled) so login survives DB downtime — no hard-block. A root-page guard redirects unauthenticated users to `/auth/login`.
+**Architecture:** Custom server-side login route validates credentials against Jubelio `POST {JUBELIO_HOST}/login`, upserts a local Drizzle `user` row (role forced OWNER), then issues a Better Auth session carrying the raw Jubelio token, role and currentCompany. JWT-oriented session (cookie cache enabled) so login survives DB downtime — no hard-block. A root-page guard redirects unauthenticated users to `/auth/login`.
 
 **Tech Stack:** Next.js 15 (App Router), TypeScript, Better Auth 1.7.11, Drizzle ORM 0.41 + Postgres, Tailwind v4, shadcn/ui base-nova (remixicon icons), zod.
 
@@ -27,7 +29,7 @@
 - **Missing/wrong Jubelio credentials**: form shows clear error ("Username atau Password salah!"), no session created, inputs re-enabled.
 - **DB unavailable at login**: login still succeeds if Jubelio validates (JWT/cookie session), local upsert degrades gracefully (best-effort), login never hard-blocks.
 - **Company mismatch (currentCompany ≠ SAFAR_COMPANY_ID)**: login rejected server-side, client shows "Company tidak valid" (matches reference copy).
-- **Existing user role preservation**: repeated logins never reset role to STAFF (owner stays owner).
+- **Role assignment**: Jubelio login always sets `role: OWNER`; Google OAuth customers are `CUSTOMER` (no STAFF).
 - **Logged-out access to protected page**: redirected to `/auth/login`, no crash.
 - **Schéma migration**: `pnpm db:generate` succeeds; git diff contains only additive user-column changes.
 
@@ -58,7 +60,7 @@ Add both to `runtimeEnv` map.
 
 - [ ] **Step 3: Extend Drizzle `user` table in `src/server/db/schema.ts`**
 
-- `role`: `pgEnum("user_role", ["STAFF", "OWNER"])`, column `.notNull().default("STAFF")`
+- `role`: `pgEnum("user_role", ["OWNER", "CUSTOMER"])`, column `.notNull().default("CUSTOMER")`
 - `currentCompany`: `integer("current_company").notNull().default(59325)`
 - `nik`: `text("nik")` nullable
 

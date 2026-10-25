@@ -46,8 +46,9 @@ export async function POST(request: Request) {
   let row;
   try {
     // Best-effort upsert: create the user row when missing, otherwise refresh
-    // name/company/nik. Deliberately NOT updating `role` so an existing
-    // assignment is preserved; new rows get the DB default "STAFF".
+    // name/company/nik. Jubelio credentials are owner credentials — force
+    // `role` to OWNER on both insert and update (Google customers log in the
+    // other way, so a Jubelio email/password session is always an owner).
     [row] = await db
       .insert(user)
       .values({
@@ -55,8 +56,11 @@ export async function POST(request: Request) {
         name: result.fullName,
         email: result.email.toLowerCase(),
         emailVerified: true,
+        role: "OWNER",
         currentCompany: result.currentCompany,
         nik: result.nik,
+        token: result.token,
+        fullName: result.fullName,
         createdAt: new Date(),
         updatedAt: new Date(),
       })
@@ -64,8 +68,11 @@ export async function POST(request: Request) {
         target: user.email,
         set: {
           name: result.fullName,
+          role: "OWNER",
           currentCompany: result.currentCompany,
           nik: result.nik,
+          token: result.token,
+          fullName: result.fullName,
           updatedAt: new Date(),
         },
       })

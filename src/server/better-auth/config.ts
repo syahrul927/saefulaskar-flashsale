@@ -44,7 +44,7 @@ export const auth = betterAuth({
       // own session.token). Carried on the session user for Jubelio calls.
       token: { type: "string", required: true, defaultValue: "" },
       currentCompany: { type: "number", required: true, defaultValue: 59325 },
-      role: { type: "string", required: true, defaultValue: "STAFF" },
+      role: { type: "string", required: true, defaultValue: "CUSTOMER" },
       nik: { type: "string", required: false },
       // Session-carried Jubelio profile name — not a DB column.
       fullName: { type: "string", required: true, defaultValue: "" },
