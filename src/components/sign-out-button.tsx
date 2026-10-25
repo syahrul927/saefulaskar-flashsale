@@ -6,8 +6,9 @@ import { useRouter } from "next/navigation";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { cn } from "@/lib/utils";
 
-function SignOutButton() {
+function SignOutButton({ className }: { className?: string }) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -31,7 +32,7 @@ function SignOutButton() {
       type="button"
       variant="outline"
       size="lg"
-      className="h-11 w-full"
+      className={cn("h-11 w-full", className)}
       disabled={isLoading}
       onClick={handleSignOut}
     >
