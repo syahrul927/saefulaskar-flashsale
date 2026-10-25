@@ -1,0 +1,243 @@
+import { desc, eq, inArray, sql } from "drizzle-orm";
+import { z } from "zod";
+
+import { env } from "@/env";
+import { jubelioClient, toAvailableStock } from "@/lib/jubelio";
+import { getSession } from "@/server/better-auth/server";
+import { nextBookingId } from "@/server/booking-id";
+import {
+  buildWaLink,
+  evaluateCheckout,
+  type BankAccount,
+  type CheckoutError,
+  type ProductState,
+} from "@/server/checkout";
+import { db } from "@/server/db";
+import {
+  flashSessions,
+  orderItems,
+  orders,
+  sessionProducts,
+} from "@/server/db/schema";
+
+export const runtime = "nodejs";
+
+const CheckoutBody = z.object({
+  sessionId: z.string().uuid(),
+  items: z
+    .array(
+      z.object({
+        sessionProductId: z.string().uuid(),
+        qty: z.number().int().positive(),
+      }),
+    )
+    .min(1),
+});
+
+function jsonError(status: number, error: string, itemId?: number) {
+  return Response.json({ ok: false, error, ...(itemId === undefined ? {} : { itemId }) }, { status });
+}
+
+function errorResponse(error: CheckoutError): Response {
+  switch (error.code) {
+    case "SESSION_NOT_ACTIVE":
+      return jsonError(409, "Sesi telah berakhir");
+    case "UNKNOWN_PRODUCT":
+      return jsonError(400, "Produk tidak dikenal");
+    case "STOCK_CHECK_FAILED":
+      return jsonError(409, "Gagal cek stok, coba lagi", error.itemId);
+    case "STOCK_INSUFFICIENT":
+      return jsonError(409, "Stock tidak mencukupi", error.itemId);
+    case "QUOTA_EXCEEDED":
+      return jsonError(409, "Quota exceeded", error.itemId);
+    case "BELOW_MIN_ORDER":
+      return jsonError(400, "Pesanan di bawah minimal order", error.itemId);
+  }
+}
+
+/** Parse `BANK_ACCOUNTS` (JSON array) into typed records; empty on malformed input. */
+function parseBankAccounts(): BankAccount[] {
+  try {
+    const parsed: unknown = JSON.parse(env.BANK_ACCOUNTS);
+    if (!Array.isArray(parsed)) return [];
+    return parsed.filter(
+      (row): row is BankAccount =>
+        !!row &&
+        typeof row === "object" &&
+        typeof (row as BankAccount).bank === "string" &&
+        typeof (row as BankAccount).account_number === "string" &&
+        typeof (row as BankAccount).account_name === "string",
+    );
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * POST /api/orders — checkout: oversell guard + local booking (spec §4.4).
+ * Body: { sessionId, items: [{ sessionProductId, qty }] }.
+ * Checks: session ACTIVE → live stock ≥ qty → claimed+qty ≤ quota → qty ≥ minOrder.
+ * On pass (one transaction): claimed += qty per product, insert `order` + items.
+ * Responds { bookingId, grandTotal, bankAccounts, waLink }.
+ */
+export async function POST(request: Request) {
+  const auth = await getSession();
+  if (!auth) return jsonError(401, "Unauthorized");
+
+  let body: z.infer<typeof CheckoutBody>;
+  try {
+    body = CheckoutBody.parse(await request.json());
+  } catch {
+    return jsonError(
+      400,
+      "Invalid body: sessionId + items [{ sessionProductId, qty }]",
+    );
+  }
+
+  const [session] = await db
+    .select()
+    .from(flashSessions)
+    .where(eq(flashSessions.id, body.sessionId));
+  if (!session) return jsonError(404, "Sesi tidak ditemukan");
+
+  const rows = await db
+    .select()
+    .from(sessionProducts)
+    .where(eq(sessionProducts.sessionId, body.sessionId));
+
+  const products = new Map<string, ProductState>();
+  for (const row of rows) {
+    products.set(row.id, {
+      sessionProductId: row.id,
+      itemId: row.itemId,
+      skuCode: row.skuCode ?? "",
+      itemName: row.itemGroupName ?? "",
+      claimed: row.claimed,
+      sessionQuota: row.sessionQuota,
+      minOrder: row.minOrder,
+      flashPrice: row.flashPrice,
+    });
+  }
+
+  const result = await evaluateCheckout({
+    sessionStatus: session.status,
+    products,
+    requested: body.items,
+    stockForItem: async ({ skuCode }) => {
+      if (!skuCode) return null;
+      try {
+        const raw = await jubelioClient.getStockBySku(skuCode);
+        return toAvailableStock(raw) ?? null;
+      } catch {
+        return null;
+      }
+    },
+  });
+
+  if (!result.ok) return errorResponse(result.error);
+
+  const { lines, grandTotal } = result;
+
+  try {
+    const { bookingId } = await nextBookingId(db, new Date());
+
+    await db.transaction(async (tx) => {
+      for (const line of lines) {
+        await tx
+          .update(sessionProducts)
+          .set({ claimed: sql`${sessionProducts.claimed} + ${line.qty}` })
+          .where(eq(sessionProducts.id, line.sessionProductId));
+      }
+
+      const [order] = await tx
+        .insert(orders)
+        .values({
+          bookingId,
+          customerId: auth.user.id,
+          sessionId: body.sessionId,
+          status: "UNPAID",
+          grandTotal,
+          paymentMethod: "transfer",
+        })
+        .returning();
+      if (!order) throw new Error("order insert returned no row");
+
+      await tx.insert(orderItems).values(
+        lines.map((line) => ({
+          orderId: order.id,
+          sessionProductId: line.sessionProductId,
+          itemId: line.itemId,
+          sku: line.sku,
+          itemName: line.itemName,
+          qty: line.qty,
+          price: line.price,
+          subtotal: line.subtotal,
+        })),
+      );
+    });
+
+    const bankAccounts = parseBankAccounts()
+      .map((bank) => ({
+        ...bank,
+        waLink: buildWaLink({
+          bookingId,
+          grandTotal,
+          bank,
+          whatsappNumber: env.WHATSAPP_NUMBER,
+        }),
+      }));
+
+    return Response.json(
+      {
+        ok: true,
+        bookingId,
+        grandTotal,
+        bankAccounts,
+        waLink: bankAccounts[0]?.waLink ?? null,
+      },
+      { status: 201 },
+    );
+  } catch {
+    // A concurrent checkout may have collided on the daily booking sequence
+    // (unique `booking_id`). Surface a retryable error rather than a raw 500.
+    return jsonError(409, "Checkout gagal, silakan coba lagi");
+  }
+}
+
+/**
+ * GET /api/orders — list the signed-in customer's orders (newest first),
+ * each with its line items.
+ */
+export async function GET() {
+  const auth = await getSession();
+  if (!auth) return jsonError(401, "Unauthorized");
+
+  const rows = await db
+    .select()
+    .from(orders)
+    .where(eq(orders.customerId, auth.user.id))
+    .orderBy(desc(orders.createdAt));
+
+  const allItems =
+    rows.length === 0
+      ? []
+      : await db
+          .select()
+          .from(orderItems)
+          .where(inArray(orderItems.orderId, rows.map((r) => r.id)));
+
+  const itemsByOrder = new Map<string, typeof allItems>();
+  for (const item of allItems) {
+    const list = itemsByOrder.get(item.orderId) ?? [];
+    list.push(item);
+    itemsByOrder.set(item.orderId, list);
+  }
+
+  return Response.json({
+    ok: true,
+    orders: rows.map((order) => ({
+      ...order,
+      items: itemsByOrder.get(order.id) ?? [],
+    })),
+  });
+}

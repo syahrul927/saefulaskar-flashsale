@@ -98,7 +98,7 @@ function StorefrontView({ session, products }: StorefrontViewProps) {
 
       <MobileCartBar onViewCart={() => setDrawerOpen(true)} />
 
-      <CartDrawer open={drawerOpen} onOpenChange={setDrawerOpen} />
+      <CartDrawer open={drawerOpen} onOpenChange={setDrawerOpen} sessionId={session.id} />
     </main>
   );
 }

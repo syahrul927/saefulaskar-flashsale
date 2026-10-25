@@ -1,0 +1,166 @@
+/**
+ * Checkout guard — pure, testable core (spec §4.4).
+ *
+ * `evaluateCheckout` is deliberately free of HTTP/db so it can be unit-tested:
+ * stock re-check and the product table are injected via `deps`. The route
+ * handler (`src/app/api/orders/route.ts`) supplies real implementations.
+ */
+
+/** One bank account from `env.BANK_ACCOUNTS` (JSON array). */
+export type BankAccount = {
+  bank: string;
+  account_number: string;
+  account_name: string;
+};
+
+/** Snapshot of a `session_products` row needed to validate one cart line. */
+export type ProductState = {
+  sessionProductId: string;
+  itemId: number;
+  skuCode: string;
+  itemName: string;
+  claimed: number;
+  sessionQuota: number;
+  minOrder: number;
+  flashPrice: number;
+};
+
+/** A persisted order line (mirrors `order_items` columns). */
+export type CheckoutLine = {
+  sessionProductId: string;
+  itemId: number;
+  sku: string;
+  itemName: string;
+  qty: number;
+  price: number;
+  subtotal: number;
+};
+
+export type CheckoutErrorCode =
+  | "SESSION_NOT_ACTIVE"
+  | "UNKNOWN_PRODUCT"
+  | "STOCK_CHECK_FAILED"
+  | "STOCK_INSUFFICIENT"
+  | "QUOTA_EXCEEDED"
+  | "BELOW_MIN_ORDER";
+
+export type CheckoutError = {
+  code: CheckoutErrorCode;
+  /** Present when the failure is specific to one product line. */
+  itemId?: number;
+  sessionProductId?: string;
+};
+
+export type EvaluateCheckoutDeps = {
+  sessionStatus: string;
+  products: Map<string, ProductState>;
+  requested: Array<{ sessionProductId: string; qty: number }>;
+  /**
+   * Live stock re-check (spec §4.4 step 1). Returns `null` when stock cannot
+   * be determined (network error / missing field) — the checkout is then
+   * blocked instead of silently allowing an oversell.
+   */
+  stockForItem: (item: {
+    itemId: number;
+    skuCode: string;
+  }) => Promise<number | null>;
+};
+
+export type EvaluateCheckoutResult =
+  | { ok: true; lines: CheckoutLine[]; grandTotal: number }
+  | { ok: false; error: CheckoutError };
+
+/**
+ * Validate a cart against a session. Check order matters (spec §4.4):
+ *   1. session ACTIVE
+ *   2. live `availableStock >= qty`
+ *   3. `claimed + qty <= sessionQuota`
+ *   4. `qty >= minOrder`
+ */
+export async function evaluateCheckout(
+  deps: EvaluateCheckoutDeps,
+): Promise<EvaluateCheckoutResult> {
+  if (deps.sessionStatus !== "ACTIVE") {
+    return { ok: false, error: { code: "SESSION_NOT_ACTIVE" } };
+  }
+
+  const lines: CheckoutLine[] = [];
+  let grandTotal = 0;
+
+  for (const req of deps.requested) {
+    const product = deps.products.get(req.sessionProductId);
+    if (!product) {
+      return {
+        ok: false,
+        error: {
+          code: "UNKNOWN_PRODUCT",
+          sessionProductId: req.sessionProductId,
+        },
+      };
+    }
+
+    const liveStock = await deps.stockForItem({
+      itemId: product.itemId,
+      skuCode: product.skuCode,
+    });
+    if (liveStock === null) {
+      return {
+        ok: false,
+        error: { code: "STOCK_CHECK_FAILED", itemId: product.itemId },
+      };
+    }
+    if (liveStock < req.qty) {
+      return {
+        ok: false,
+        error: { code: "STOCK_INSUFFICIENT", itemId: product.itemId },
+      };
+    }
+    if (product.claimed + req.qty > product.sessionQuota) {
+      return {
+        ok: false,
+        error: { code: "QUOTA_EXCEEDED", itemId: product.itemId },
+      };
+    }
+    if (req.qty < product.minOrder) {
+      return {
+        ok: false,
+        error: { code: "BELOW_MIN_ORDER", itemId: product.itemId },
+      };
+    }
+
+    const subtotal = req.qty * product.flashPrice;
+    lines.push({
+      sessionProductId: product.sessionProductId,
+      itemId: product.itemId,
+      sku: product.skuCode,
+      itemName: product.itemName,
+      qty: req.qty,
+      price: product.flashPrice,
+      subtotal,
+    });
+    grandTotal += subtotal;
+  }
+
+  return { ok: true, lines, grandTotal };
+}
+
+/**
+ * Build the pre-filled WhatsApp "proof of transfer" link (spec §5.2, template G6).
+ * The number is `WHATSAPP_NUMBER` without the leading `+` (already `wa.me`-ready).
+ */
+export function buildWaLink(input: {
+  bookingId: string;
+  grandTotal: number;
+  bank: BankAccount;
+  whatsappNumber: string;
+}): string {
+  const formattedTotal = new Intl.NumberFormat("id-ID", {
+    maximumFractionDigits: 0,
+  }).format(input.grandTotal);
+  const text =
+    `Halo, saya sudah transfer untuk pesanan ${input.bookingId} sejumlah ` +
+    `Rp${formattedTotal} ke rekening ${input.bank.bank} ` +
+    `${input.bank.account_number} atas nama ${input.bank.account_name}. ` +
+    `Bukti transfer terlampir.`;
+  return `https://wa.me/${input.whatsappNumber}?text=${encodeURIComponent(text)}`;
+}
