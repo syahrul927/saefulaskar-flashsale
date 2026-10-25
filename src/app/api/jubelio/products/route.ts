@@ -1,6 +1,6 @@
 import { getSession } from "@/server/better-auth/server";
 
-import { jubelioClient } from "@/lib/jubelio";
+import { createJubelioClient, isJubelioAuthError } from "@/lib/jubelio";
 
 export const runtime = "nodejs";
 
@@ -38,7 +38,13 @@ export async function GET(request: Request) {
     new URL(request.url).searchParams.get("search") ??
     undefined;
 
-  const raw = (await jubelioClient.listProducts(search)) as unknown;
+  let raw: unknown;
+  try {
+    raw = await createJubelioClient(auth.user.token).listProducts(search);
+  } catch (e) {
+    if (isJubelioAuthError(e)) return jsonError(401, "SESSION_EXPIRED");
+    return jsonError(502, "Gagal memuat produk, coba lagi");
+  }
   const rows = Array.isArray(raw) ? raw : [];
 
   return Response.json(

@@ -2,10 +2,10 @@ import { eq, isNotNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { env } from "@/env";
-import { jubelioClient } from "@/lib/jubelio";
 import { db } from "@/server/db";
 import { orders } from "@/server/db/schema";
 import { planSync } from "@/server/daily-sync";
+import { withSystemClient } from "@/server/jubelio-token";
 
 /**
  * Daily cron: poll Jubelio sales orders and advance local order statuses
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
   }
 
-  const raw = await jubelioClient.listSalesOrders();
+  const raw = await withSystemClient((client) => client.listSalesOrders());
 
   const localOrders = await db
     .select({

@@ -1,0 +1,21 @@
+- generic [active] [ref=f1e1]:
+  - main [ref=f1e2]:
+    - complementary [ref=f1e3]:
+      - paragraph [ref=f1e4]: Saeful Askar
+      - generic [ref=f1e5]:
+        - heading "Kelola flash sale kamu" [level=1] [ref=f1e6]
+        - paragraph [ref=f1e7]: Masuk menggunakan akun Jubelio untuk melanjutkan.
+      - paragraph [ref=f1e8]: Butuh akses? Hubungi admin.
+    - generic [ref=f1e14]:
+      - group [ref=f1e15]:
+        - generic [ref=f1e16]: Email / Username
+        - textbox "Email / Username" [ref=f1e17]
+      - group [ref=f1e18]:
+        - generic [ref=f1e19]: Password
+        - group [ref=f1e20]:
+          - textbox "Password" [ref=f1e21]
+          - group [ref=f1e22]:
+            - button "Tampilkan password" [ref=f1e23]
+      - button "Masuk" [ref=f1e24]
+  - button "Open Next.js Dev Tools" [ref=f1e30] [cursor=pointer]
+  - alert [ref=f1e34]

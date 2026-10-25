@@ -37,6 +37,8 @@ export type ProductState = {
   itemId: number;
   skuCode: string;
   itemName: string;
+  /** DB-stored Jubelio stock snapshot (`session_products.jubelio_stock`). */
+  availableStock: number;
   claimed: number;
   sessionQuota: number;
   minOrder: number;
@@ -57,7 +59,6 @@ export type CheckoutLine = {
 export type CheckoutErrorCode =
   | "SESSION_NOT_ACTIVE"
   | "UNKNOWN_PRODUCT"
-  | "STOCK_CHECK_FAILED"
   | "STOCK_INSUFFICIENT"
   | "QUOTA_EXCEEDED"
   | "BELOW_MIN_ORDER";
@@ -73,15 +74,6 @@ export type EvaluateCheckoutDeps = {
   sessionStatus: string;
   products: Map<string, ProductState>;
   requested: Array<{ sessionProductId: string; qty: number }>;
-  /**
-   * Live stock re-check (spec §4.4 step 1). Returns `null` when stock cannot
-   * be determined (network error / missing field) — the checkout is then
-   * blocked instead of silently allowing an oversell.
-   */
-  stockForItem: (item: {
-    itemId: number;
-    skuCode: string;
-  }) => Promise<number | null>;
 };
 
 export type EvaluateCheckoutResult =
@@ -91,13 +83,16 @@ export type EvaluateCheckoutResult =
 /**
  * Validate a cart against a session. Check order matters (spec §4.4):
  *   1. session ACTIVE
- *   2. live `availableStock >= qty`
+ *   2. DB-stored `availableStock >= qty`
  *   3. `claimed + qty <= sessionQuota`
  *   4. `qty >= minOrder`
+ *
+ * Stock is the local DB snapshot (`session_products.jubelio_stock`) — customers
+ * don't hold a Jubelio account, so there is no live per-cart recheck here.
  */
-export async function evaluateCheckout(
+export function evaluateCheckout(
   deps: EvaluateCheckoutDeps,
-): Promise<EvaluateCheckoutResult> {
+): EvaluateCheckoutResult {
   if (deps.sessionStatus !== "ACTIVE") {
     return { ok: false, error: { code: "SESSION_NOT_ACTIVE" } };
   }
@@ -117,17 +112,7 @@ export async function evaluateCheckout(
       };
     }
 
-    const liveStock = await deps.stockForItem({
-      itemId: product.itemId,
-      skuCode: product.skuCode,
-    });
-    if (liveStock === null) {
-      return {
-        ok: false,
-        error: { code: "STOCK_CHECK_FAILED", itemId: product.itemId },
-      };
-    }
-    if (liveStock < req.qty) {
+    if (product.availableStock < req.qty) {
       return {
         ok: false,
         error: { code: "STOCK_INSUFFICIENT", itemId: product.itemId },

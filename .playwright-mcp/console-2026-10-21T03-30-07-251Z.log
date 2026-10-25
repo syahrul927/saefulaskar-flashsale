@@ -1,0 +1,35 @@
+[     657ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_compiled_react-dom_5956d26e._.js:14537
+[    4845ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5956
+[    5003ms] [LOG] [Fast Refresh] done in 258ms @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5816
+[  211777ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5956
+[  211835ms] [LOG] [Fast Refresh] done in 159ms @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5816
+[  397564ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5956
+[  397709ms] [LOG] [Fast Refresh] done in 247ms @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5816
+[  401008ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5956
+[  401079ms] [LOG] [Fast Refresh] done in 173ms @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5816
+[  406021ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5956
+[  406080ms] [LOG] [Fast Refresh] done in 160ms @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5816
+[  519416ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5956
+[  519444ms] [LOG] [Fast Refresh] done in 129ms @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5816
+[  593392ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5956
+[  594566ms] [LOG] [Fast Refresh] done in 1275ms @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5816
+[  595287ms] [ERROR] Failed to load resource: the server responded with a status of 401 (Unauthorized) @ http://localhost:3000/api/auth/jubelio-login:0
+[  651076ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5956
+[  652340ms] [LOG] [Fast Refresh] done in 1347ms @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5816
+[  654599ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5956
+[  654622ms] [LOG] [Fast Refresh] done in 125ms @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5816
+[  659721ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5956
+[  660143ms] [LOG] [Fast Refresh] done in 506ms @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5816
+[  660354ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5956
+[  660446ms] [LOG] [Fast Refresh] done in 194ms @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5816
+[  660962ms] [INFO] %cDownload the React DevTools for a better development experience: https://react.dev/link/react-devtools font-weight:bold @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_compiled_react-dom_5956d26e._.js:14537
+[  667398ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5956
+[  667548ms] [LOG] [Fast Refresh] done in 230ms @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5816
+[  670657ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5956
+[  670766ms] [LOG] [Fast Refresh] done in 182ms @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5816
+[  673032ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5956
+[  673081ms] [LOG] [Fast Refresh] done in 124ms @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5816
+[  695456ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5956
+[  695786ms] [LOG] [Fast Refresh] done in 431ms @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5816
+[  752284ms] [LOG] [Fast Refresh] rebuilding @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5956
+[  752383ms] [LOG] [Fast Refresh] done in 203ms @ http://localhost:3000/_next/static/chunks/03dd5_next_dist_client_3a603721._.js:5816

@@ -1,7 +1,9 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { JubelioError, jubelioClient } from "@/lib/jubelio";
+import { createJubelioClient, JubelioError } from "@/lib/jubelio";
 import { env } from "@/env";
+
+const TOKEN = "test-token";
 
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
@@ -14,43 +16,35 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
-describe("jubelioClient", () => {
+describe("createJubelioClient", () => {
+  const client = createJubelioClient(TOKEN);
+
   it("sends Authorization Bearer + JSON headers on listProducts", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse([{ item_id: 1 }]));
     vi.stubGlobal("fetch", fetchMock);
 
-    await jubelioClient.listProducts("baju");
+    await client.listProducts("baju");
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(`${env.JUBELIO_BASE_URL}/inventory/items/masters?search=baju`);
     expect(init.method).toBe("GET");
     expect(init.headers).toEqual({
-      Authorization: `Bearer ${env.JUBELIO_ACCESS_TOKEN}`,
+      Authorization: `Bearer ${TOKEN}`,
       ...JSON_HEADERS,
     });
   });
 
-  it("retries once on 401 after env token swap", async () => {
-    const fetchMock = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse({ message: "unauthorized" }, 401))
-      .mockResolvedValueOnce(jsonResponse([{ item_id: 2 }]));
-    vi.stubGlobal("fetch", fetchMock);
-
-    const res = await jubelioClient.listProducts();
-
-    expect(fetchMock).toHaveBeenCalledTimes(2);
-    // Second call still reads env.JUBELIO_ACCESS_TOKEN (the swapped value).
-    const authHeaders = fetchMock.mock.calls.map(
-      (c) => (c[1] as RequestInit).headers,
+  it("throws JubelioError 401 when the token is rejected", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(jsonResponse({ message: "unauthorized" }, 401)),
     );
-    expect(authHeaders[0]).toEqual({
-      Authorization: `Bearer ${env.JUBELIO_ACCESS_TOKEN}`,
-      ...JSON_HEADERS,
+    await expect(client.listProducts()).rejects.toMatchObject({
+      name: "JubelioError",
+      status: 401,
+      message: "unauthorized",
     });
-    expect(authHeaders[1]).toEqual(authHeaders[0]);
-    expect(res).toEqual([{ item_id: 2 }]);
   });
 
   it("throws JubelioError with status + code on non-ok", async () => {
@@ -58,7 +52,7 @@ describe("jubelioClient", () => {
       "fetch",
       vi.fn().mockResolvedValue(jsonResponse({ code: "E", message: "boom" }, 500)),
     );
-    await expect(jubelioClient.listProducts()).rejects.toMatchObject({
+    await expect(client.listProducts()).rejects.toMatchObject({
       name: "JubelioError",
       status: 500,
       code: "E",
@@ -70,7 +64,7 @@ describe("jubelioClient", () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse([{ item_id: 1 }]));
     vi.stubGlobal("fetch", fetchMock);
 
-    await jubelioClient.listStock();
+    await client.listStock();
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(`${env.JUBELIO_BASE_URL}/inventory/items/all-stocks/`);
@@ -82,7 +76,7 @@ describe("jubelioClient", () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ item_id: 1 }));
     vi.stubGlobal("fetch", fetchMock);
 
-    await jubelioClient.getStockBySku("AB/1");
+    await client.getStockBySku("AB/1");
 
     const [url] = fetchMock.mock.calls[0] as [string];
     expect(url).toBe(`${env.JUBELIO_BASE_URL}/inventory/items/by-sku/AB%2F1`);
@@ -102,7 +96,7 @@ describe("jubelioClient", () => {
       is_reseller: true,
     };
 
-    await jubelioClient.createContact(payload);
+    await client.createContact(payload);
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(`${env.JUBELIO_BASE_URL}/contacts/`);
@@ -129,7 +123,7 @@ describe("jubelioClient", () => {
       grand_total: 100000,
     };
 
-    await jubelioClient.createSalesOrder(payload);
+    await client.createSalesOrder(payload);
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(`${env.JUBELIO_BASE_URL}/sales/orders/`);
@@ -140,14 +134,14 @@ describe("jubelioClient", () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse([]));
     vi.stubGlobal("fetch", fetchMock);
 
-    const orders = await jubelioClient.listSalesOrders();
+    const orders = await client.listSalesOrders();
     expect(fetchMock).toHaveBeenLastCalledWith(
       `${env.JUBELIO_BASE_URL}/sales/orders/`,
       expect.objectContaining({ method: "GET" }),
     );
     expect(orders).toEqual([]);
 
-    const invoices = await jubelioClient.listInvoices();
+    const invoices = await client.listInvoices();
     expect(fetchMock).toHaveBeenLastCalledWith(
       `${env.JUBELIO_BASE_URL}/sales/invoices/`,
       expect.objectContaining({ method: "GET" }),

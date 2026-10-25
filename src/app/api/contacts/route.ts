@@ -1,10 +1,10 @@
 import { eq } from "drizzle-orm";
 import { z } from "zod";
 
-import { jubelioClient } from "@/lib/jubelio";
 import { getSession } from "@/server/better-auth/server";
 import { db } from "@/server/db";
 import { contacts } from "@/server/db/schema";
+import { withSystemClient } from "@/server/jubelio-token";
 
 export const runtime = "nodejs";
 
@@ -41,18 +41,21 @@ export async function POST(request: Request) {
   }
 
   // Create the Jubelio contact first so a partial local row isn't left behind.
+  // The customer holds no Jubelio login, so this runs as the system account.
   let data: unknown;
   try {
-    data = await jubelioClient.createContact({
-      contact_id: 0,
-      contact_name: body.contactName,
-      contact_type: 0,
-      phone: body.phone,
-      primary_contact: body.primaryContact,
-      contact_position: body.contactPosition,
-      s_address: body.sAddress,
-      is_reseller: true,
-    });
+    data = await withSystemClient((client) =>
+      client.createContact({
+        contact_id: 0,
+        contact_name: body.contactName,
+        contact_type: 0,
+        phone: body.phone,
+        primary_contact: body.primaryContact,
+        contact_position: body.contactPosition,
+        s_address: body.sAddress,
+        is_reseller: true,
+      }),
+    );
   } catch (e) {
     console.error("contacts: jubelio createContact failed", e);
     return jsonError(502, "Gagal mendaftar ke Jubelio, coba lagi");

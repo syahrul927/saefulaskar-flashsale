@@ -3,7 +3,11 @@ import { and, eq } from "drizzle-orm";
 import { getSession } from "@/server/better-auth/server";
 import { db } from "@/server/db";
 import { flashSessions, sessionProducts } from "@/server/db/schema";
-import { jubelioClient, toAvailableStock } from "@/lib/jubelio";
+import {
+  createJubelioClient,
+  isJubelioAuthError,
+  toAvailableStock,
+} from "@/lib/jubelio";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -61,9 +65,12 @@ export async function GET(
   let availableStock: number | null = null;
   if (row.skuCode) {
     try {
-      const raw = await jubelioClient.getStockBySku(row.skuCode);
+      const raw = await createJubelioClient(auth.user.token).getStockBySku(
+        row.skuCode,
+      );
       availableStock = toAvailableStock(raw) ?? null;
-    } catch {
+    } catch (e) {
+      if (isJubelioAuthError(e)) return jsonError(401, "SESSION_EXPIRED");
       availableStock = null;
     }
   }

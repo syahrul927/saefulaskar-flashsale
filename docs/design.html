@@ -1,0 +1,1703 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Flash Sale & Jubelio Sync - Saeful Askar Edition</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Urbanist:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.14.8/dist/cdn.min.js"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              primary: '#FFCC05',      // Saeful Askar Primary Brand Yellow
+              primaryHover: '#EBB800',
+              secondary: '#FF7E33',    // Saeful Askar Secondary Orange
+              dark: '#171717',
+              surface: '#FFFFFF',
+              muted: '#737373'
+            }
+          },
+          fontFamily: {
+            sans: ['Urbanist', 'sans-serif'],
+            mono: ['JetBrains Mono', 'monospace']
+          }
+        }
+      }
+    }
+  </script>
+  <style>
+    body { font-family: 'Urbanist', sans-serif; }
+    .font-mono { font-family: 'JetBrains Mono', monospace; }
+    [x-cloak] { display: none !important; }
+    ::-webkit-scrollbar { width: 5px; height: 5px; }
+    ::-webkit-scrollbar-track { background: #f5f5f5; }
+    ::-webkit-scrollbar-thumb { background: #d4d4d4; border-radius: 3px; }
+    ::-webkit-scrollbar-thumb:hover { background: #a3a3a3; }
+    .no-scrollbar::-webkit-scrollbar { display: none; }
+    .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  </style>
+</head>
+<body class="bg-neutral-50/90 text-neutral-800 min-h-screen flex flex-col selection:bg-brand-primary selection:text-neutral-950 pb-20 md:pb-6"
+      x-data="appData()" x-init="initApp()" x-cloak>
+
+  <!-- TOP APP NAV & PERSONA SWITCHER -->
+  <header class="border-b border-neutral-200/90 bg-white/95 backdrop-blur sticky top-0 z-40 shadow-xs">
+    <div class="max-w-7xl mx-auto px-3 sm:px-6 h-14 sm:h-16 flex items-center justify-between gap-2">
+
+      <!-- Logo & Brand Identity -->
+      <div class="flex items-center gap-2 sm:gap-3 shrink-0">
+        <div class="w-8 h-8 sm:w-9 sm:h-9 rounded-xl bg-brand-primary text-neutral-950 flex items-center justify-center font-black text-sm shadow-sm border border-brand-primary/40 shrink-0">
+          <svg class="w-4 h-4 sm:w-5 sm:h-5 text-neutral-950" fill="currentColor" viewBox="0 0 24 24">
+            <path d="M13 10V3L4 14h7v7l9-11h-7z" />
+          </svg>
+        </div>
+        <div>
+          <div class="flex items-center gap-1.5 sm:gap-2">
+            <span class="font-extrabold text-sm sm:text-base tracking-tight text-neutral-950 uppercase">FlashStudio</span>
+            <!-- Jubelio tag shown ONLY in Admin mode -->
+            <template x-if="role === 'admin'">
+              <span class="text-[9px] sm:text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-amber-50 text-amber-900 border border-amber-200 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-brand-secondary animate-pulse"></span>
+                JUBELIO SYNC
+              </span>
+            </template>
+            <!-- Customer sees generic verified badge, no Jubelio mention -->
+            <template x-if="role === 'customer'">
+              <span class="text-[9px] sm:text-[10px] font-mono font-bold px-1.5 py-0.2 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                OFFICIAL SALE
+              </span>
+            </template>
+          </div>
+          <p class="text-[10px] text-neutral-500 hidden md:block">Saeful Askar Enterprise Clearance Engine</p>
+        </div>
+      </div>
+
+      <!-- Mode Switcher (Admin vs Customer) -->
+      <div class="flex items-center bg-neutral-100 p-0.5 sm:p-1 rounded-xl border border-neutral-200 text-xs">
+        <button
+          @click="setRole('admin')"
+          :class="role === 'admin' ? 'bg-neutral-950 text-white shadow-sm font-bold' : 'text-neutral-600 hover:text-neutral-950 font-semibold'"
+          class="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg transition text-[11px] sm:text-xs">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M10.325 4.317c.426-1.756 2.924-1.756 3.35 0a1.724 1.724 0 002.573 1.066c1.543-.94 3.31.826 2.37 2.37a1.724 1.724 0 001.065 2.572c1.756.426 1.756 2.924 0 3.35a1.724 1.724 0 00-1.066 2.573c.94 1.543-.826 3.31-2.37 2.37a1.724 1.724 0 00-2.572 1.065c-.426 1.756-2.924 1.756-3.35 0a1.724 1.724 0 00-2.573-1.066c-1.543.94-3.31-.826-2.37-2.37a1.724 1.724 0 00-1.065-2.572c-1.756-.426-1.756-2.924 0-3.35a1.724 1.724 0 001.066-2.573c-.94-1.543.826-3.31 2.37-2.37.996.608 2.296.07 2.572-1.065z" />
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" />
+          </svg>
+          <span class="hidden xs:inline">Admin</span><span class="hidden sm:inline"> Console</span>
+        </button>
+
+        <button
+          @click="setRole('customer')"
+          :class="role === 'customer' ? 'bg-neutral-950 text-white shadow-sm font-bold' : 'text-neutral-600 hover:text-neutral-950 font-semibold'"
+          class="flex items-center gap-1 sm:gap-1.5 px-2.5 sm:px-3.5 py-1 sm:py-1.5 rounded-lg transition text-[11px] sm:text-xs">
+          <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+          </svg>
+          <span class="hidden xs:inline">Customer</span><span class="hidden sm:inline"> Store</span>
+        </button>
+      </div>
+
+      <!-- Quick Status & Cart indicator -->
+      <div class="flex items-center gap-1.5 sm:gap-3 shrink-0">
+        <template x-if="role === 'customer'">
+          <div class="flex items-center gap-1 sm:gap-2">
+            <!-- Transactions icon button -->
+            <button @click="customerTab = 'transactions'"
+                    class="p-2 text-neutral-600 hover:text-neutral-900 rounded-lg hover:bg-neutral-100 border border-transparent hover:border-neutral-200 transition relative"
+                    title="Transaction History">
+              <svg class="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+              </svg>
+              <template x-if="orders.length > 0">
+                <span class="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-brand-secondary"></span>
+              </template>
+            </button>
+
+            <!-- Cart button with counter -->
+            <button @click="isCartOpen = true"
+                    class="flex items-center gap-1.5 sm:gap-2 bg-neutral-100 hover:bg-neutral-200/80 border border-neutral-200 px-2.5 sm:px-3 py-1.5 rounded-lg text-xs font-bold transition">
+              <span class="relative">
+                <svg class="w-4 h-4 text-neutral-900" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+                </svg>
+                <span x-show="cartTotalCount > 0" x-text="cartTotalCount"
+                      class="absolute -top-2 -right-2 bg-brand-primary text-neutral-950 text-[9px] font-mono px-1 rounded-full font-black border border-neutral-950"></span>
+              </span>
+              <span class="hidden sm:inline font-mono text-neutral-900 font-bold" x-text="formatRupiah(cartSubtotal)"></span>
+            </button>
+          </div>
+        </template>
+
+        <template x-if="role === 'admin'">
+          <div class="flex items-center gap-2">
+            <span class="text-xs font-mono text-neutral-500 hidden md:inline">Active:</span>
+            <span class="text-[11px] sm:text-xs font-mono text-neutral-950 font-bold bg-brand-primary/20 border border-brand-primary/50 px-2 sm:px-2.5 py-1 rounded-lg truncate max-w-[120px] sm:max-w-[200px]" x-text="activeSession.name"></span>
+          </div>
+        </template>
+      </div>
+    </div>
+  </header>
+
+  <!-- NOTIFICATIONS TOAST -->
+  <div class="fixed bottom-16 sm:bottom-4 right-3 left-3 sm:left-auto sm:right-4 z-50 flex flex-col gap-2 max-w-sm">
+    <template x-for="t in toasts" :key="t.id">
+      <div class="p-3.5 rounded-xl border shadow-xl flex items-center justify-between text-xs font-medium backdrop-blur transition-all duration-300"
+           :class="t.type === 'error' ? 'bg-red-50 border-red-200 text-red-900' : 'bg-neutral-950 text-white border-neutral-800'">
+        <span x-text="t.message"></span>
+        <button @click="removeToast(t.id)" class="text-neutral-400 hover:text-white ml-3 font-mono text-sm">&times;</button>
+      </div>
+    </template>
+  </div>
+
+  <!-- ============================================================== -->
+  <!-- ROLE: ADMIN CONSOLE                                            -->
+  <!-- ============================================================== -->
+  <main x-show="role === 'admin'" class="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-6">
+
+    <!-- Admin Sub Nav & Stats -->
+    <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-5">
+      <div>
+        <h1 class="text-lg sm:text-xl font-bold tracking-tight text-neutral-950 flex flex-wrap items-center gap-2">
+          <span>Flash Sale Session Manager</span>
+          <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-50 text-amber-900 border border-amber-200">Jubelio ERP Connected</span>
+        </h1>
+        <p class="text-xs text-neutral-500 mt-0.5">Configure active sale windows, pick stock SKUs from Jubelio warehouse, and set minimum order thresholds.</p>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <button @click="openJubelioModal = true"
+                class="w-full sm:w-auto flex items-center justify-center gap-2 px-3.5 sm:px-4 py-2 bg-brand-primary hover:bg-brand-primaryHover active:scale-95 text-neutral-950 rounded-xl text-xs font-bold transition shadow-sm border border-brand-primary/40">
+          <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
+          </svg>
+          Select Jubelio Products (+<span x-text="jubelioProducts.length"></span>)
+        </button>
+      </div>
+    </div>
+
+    <!-- Active Session Settings Panel -->
+    <div class="bg-white border border-neutral-200/90 rounded-2xl p-4 sm:p-6 mb-6 sm:mb-8 shadow-xs relative overflow-hidden">
+      <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-brand-primary via-brand-secondary to-brand-primary"></div>
+
+      <div class="flex items-center justify-between border-b border-neutral-100 pb-3 mb-4">
+        <div class="flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-brand-primary border border-neutral-950"></span>
+          <h2 class="text-xs sm:text-sm font-bold uppercase tracking-wider text-neutral-950">Live Session Parameters</h2>
+        </div>
+        <div class="text-[11px] text-neutral-500 font-mono">
+          ID: <span class="text-neutral-900 font-bold" x-text="activeSession.id"></span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-3 sm:gap-4">
+        <!-- Session Name -->
+        <div class="sm:col-span-2 md:col-span-1">
+          <label class="block text-[10px] font-mono uppercase text-neutral-500 mb-1">Session Title</label>
+          <input type="text" x-model="activeSession.name"
+                 class="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-brand-primary focus:bg-white font-semibold">
+        </div>
+
+        <!-- Start Time -->
+        <div>
+          <label class="block text-[10px] font-mono uppercase text-neutral-500 mb-1">Session Start Time</label>
+          <input type="datetime-local" x-model="activeSession.startTime"
+                 class="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-2 text-xs text-neutral-900 focus:outline-none focus:border-brand-primary focus:bg-white font-mono">
+        </div>
+
+        <!-- End Time -->
+        <div>
+          <label class="block text-[10px] font-mono uppercase text-neutral-500 mb-1">Session End Time</label>
+          <input type="datetime-local" x-model="activeSession.endTime"
+                 class="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-2 text-xs text-neutral-900 focus:outline-none focus:border-brand-primary focus:bg-white font-mono">
+        </div>
+
+        <!-- Session Status Toggle -->
+        <div>
+          <label class="block text-[10px] font-mono uppercase text-neutral-500 mb-1">Status State</label>
+          <div class="flex items-center gap-2">
+            <select x-model="activeSession.status"
+                    class="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-2.5 py-2 text-xs text-neutral-900 focus:outline-none focus:border-brand-primary focus:bg-white font-bold">
+              <option value="ACTIVE">ACTIVE (Storefront Live)</option>
+              <option value="SCHEDULED">SCHEDULED (Countdown)</option>
+              <option value="PAUSED">PAUSED (Locked)</option>
+              <option value="ENDED">ENDED</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <!-- Quick KPI summary for admin -->
+      <div class="mt-4 pt-3.5 border-t border-neutral-100 grid grid-cols-2 md:grid-cols-4 gap-2 sm:gap-3 text-xs font-mono">
+        <div class="bg-neutral-50 p-2.5 sm:p-3 rounded-xl border border-neutral-100">
+          <span class="text-neutral-500 block text-[9px] uppercase">Products Allocated</span>
+          <span class="text-sm sm:text-base font-bold text-neutral-950" x-text="sessionProducts.length"></span> SKUs
+        </div>
+        <div class="bg-neutral-50 p-2.5 sm:p-3 rounded-xl border border-neutral-100">
+          <span class="text-neutral-500 block text-[9px] uppercase">Total Sale Quota</span>
+          <span class="text-sm sm:text-base font-bold text-neutral-950" x-text="totalAllocatedQuota"></span> units
+        </div>
+        <div class="bg-neutral-50 p-2.5 sm:p-3 rounded-xl border border-neutral-100">
+          <span class="text-neutral-500 block text-[9px] uppercase">Reserved / Bought</span>
+          <span class="text-sm sm:text-base font-bold text-brand-secondary" x-text="totalClaimedQuota"></span> units
+        </div>
+        <div class="bg-neutral-50 p-2.5 sm:p-3 rounded-xl border border-neutral-100">
+          <span class="text-neutral-500 block text-[9px] uppercase">Estimated GMV</span>
+          <span class="text-xs sm:text-sm font-bold text-emerald-600 truncate block" x-text="formatRupiah(estimatedSessionValue)"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Products in Current Flash Sale Table / Cards on mobile -->
+    <div class="bg-white border border-neutral-200/90 rounded-2xl overflow-hidden shadow-xs">
+      <div class="p-4 border-b border-neutral-100 flex flex-col sm:flex-row sm:items-center justify-between gap-2 bg-neutral-50/70">
+        <div>
+          <h3 class="text-xs sm:text-sm font-bold text-neutral-950 uppercase tracking-wider">Active Flash Sale Product Roster</h3>
+          <p class="text-xs text-neutral-500">Edit Category, Type, Allocation Quota, and Minimum Order Rule per product.</p>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="text-xs text-neutral-600 font-mono font-bold" x-text="sessionProducts.length + ' Items Ready'"></span>
+        </div>
+      </div>
+
+      <!-- DESKTOP TABLE VIEW (hidden on small mobile screens) -->
+      <div class="hidden md:block overflow-x-auto">
+        <table class="w-full text-left text-xs">
+          <thead class="bg-neutral-100/70 text-neutral-600 font-mono uppercase text-[10px] border-b border-neutral-200">
+            <tr>
+              <th class="py-3 px-4">Product Info & SKU</th>
+              <th class="py-3 px-3">Category</th>
+              <th class="py-3 px-3">Type</th>
+              <th class="py-3 px-3">Jubelio Stock</th>
+              <th class="py-3 px-3">Sale Quota</th>
+              <th class="py-3 px-3">Min Order</th>
+              <th class="py-3 px-3">Flash Price (Rp)</th>
+              <th class="py-3 px-4 text-right">Actions</th>
+            </tr>
+          </thead>
+          <tbody class="divide-y divide-neutral-100 font-medium">
+            <template x-for="(prod, idx) in sessionProducts" :key="prod.id">
+              <tr class="hover:bg-neutral-50/80 transition">
+                <td class="py-3 px-4">
+                  <div class="flex items-center gap-3">
+                    <img :src="prod.image" class="w-10 h-10 rounded-lg object-cover bg-neutral-100 border border-neutral-200 shrink-0">
+                    <div>
+                      <div class="font-bold text-neutral-950 line-clamp-1" x-text="prod.name"></div>
+                      <div class="text-[10px] font-mono text-neutral-400">
+                        SKU: <span class="text-neutral-700 font-bold" x-text="prod.sku"></span>
+                      </div>
+                    </div>
+                  </div>
+                </td>
+                <td class="py-3 px-3">
+                  <select x-model="prod.category"
+                          class="bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-1 text-xs text-neutral-800 focus:border-brand-primary focus:outline-none">
+                    <option value="Electronics">Electronics</option>
+                    <option value="Audio">Audio</option>
+                    <option value="Peripherals">Peripherals</option>
+                    <option value="Displays">Displays</option>
+                    <option value="Accessories">Accessories</option>
+                  </select>
+                </td>
+                <td class="py-3 px-3">
+                  <select x-model="prod.type"
+                          class="bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-1 text-xs text-neutral-800 focus:border-brand-primary focus:outline-none">
+                    <option value="Single SKU">Single SKU</option>
+                    <option value="Variable">Variable / Variant</option>
+                    <option value="Bundle Pack">Bundle Pack</option>
+                  </select>
+                </td>
+                <td class="py-3 px-3">
+                  <span class="font-mono px-2 py-0.5 rounded bg-neutral-100 border border-neutral-200 text-neutral-700 font-bold" x-text="prod.jubelioStock + ' pcs'"></span>
+                </td>
+                <td class="py-3 px-3">
+                  <div class="flex items-center gap-1">
+                    <input type="number" x-model.number="prod.sessionQuota" min="1" :max="prod.jubelioStock"
+                           class="w-16 bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-1 text-xs font-mono text-neutral-950 font-bold focus:border-brand-primary focus:outline-none">
+                    <span class="text-[10px] text-neutral-400 font-mono">max</span>
+                  </div>
+                </td>
+                <td class="py-3 px-3">
+                  <div class="flex items-center gap-1">
+                    <input type="number" x-model.number="prod.minOrder" min="1" :max="prod.sessionQuota"
+                           class="w-14 bg-amber-50 border border-amber-200 rounded-lg px-2 py-1 text-xs font-mono text-amber-950 font-black focus:border-brand-primary focus:outline-none">
+                    <span class="text-[10px] text-neutral-400 font-mono">pcs</span>
+                  </div>
+                </td>
+                <td class="py-3 px-3">
+                  <input type="number" x-model.number="prod.flashPrice" step="10000"
+                         class="w-28 bg-neutral-50 border border-neutral-200 rounded-lg px-2 py-1 text-xs font-mono text-neutral-950 font-bold focus:border-brand-primary focus:outline-none">
+                </td>
+                <td class="py-3 px-4 text-right">
+                  <button @click="removeProductFromSession(prod.id)"
+                          class="text-neutral-400 hover:text-red-600 p-1.5 rounded-lg hover:bg-red-50 transition" title="Remove from session">
+                    <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                    </svg>
+                  </button>
+                </td>
+              </tr>
+            </template>
+          </tbody>
+        </table>
+      </div>
+
+      <!-- MOBILE RESPONSIVE CARD ROSTER (Shown on phones < 768px) -->
+      <div class="md:hidden divide-y divide-neutral-100">
+        <template x-for="(prod, idx) in sessionProducts" :key="prod.id">
+          <div class="p-4 space-y-3">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-center gap-2.5">
+                <img :src="prod.image" class="w-12 h-12 rounded-xl object-cover bg-neutral-100 border border-neutral-200 shrink-0">
+                <div>
+                  <h4 class="font-bold text-neutral-950 text-xs line-clamp-1" x-text="prod.name"></h4>
+                  <div class="text-[10px] font-mono text-neutral-400 mt-0.5">
+                    SKU: <span class="text-neutral-800 font-bold" x-text="prod.sku"></span>
+                  </div>
+                  <div class="text-[10px] font-mono text-emerald-700">
+                    Jubelio Stock: <strong x-text="prod.jubelioStock + ' pcs'"></strong>
+                  </div>
+                </div>
+              </div>
+              <button @click="removeProductFromSession(prod.id)" class="text-neutral-400 hover:text-red-600 p-1.5">
+                <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                </svg>
+              </button>
+            </div>
+
+            <!-- Mobile Editable Fields Grid -->
+            <div class="grid grid-cols-2 gap-2 text-xs">
+              <div>
+                <label class="block text-[9px] font-mono text-neutral-500 uppercase">Category</label>
+                <select x-model="prod.category" class="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-1.5 text-xs">
+                  <option value="Electronics">Electronics</option>
+                  <option value="Audio">Audio</option>
+                  <option value="Peripherals">Peripherals</option>
+                  <option value="Displays">Displays</option>
+                  <option value="Accessories">Accessories</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-[9px] font-mono text-neutral-500 uppercase">Type</label>
+                <select x-model="prod.type" class="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-1.5 text-xs">
+                  <option value="Single SKU">Single SKU</option>
+                  <option value="Variable">Variable</option>
+                  <option value="Bundle Pack">Bundle</option>
+                </select>
+              </div>
+
+              <div>
+                <label class="block text-[9px] font-mono text-neutral-500 uppercase">Sale Quota (Qty)</label>
+                <input type="number" x-model.number="prod.sessionQuota" min="1" :max="prod.jubelioStock"
+                       class="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-1.5 text-xs font-mono font-bold">
+              </div>
+
+              <div>
+                <label class="block text-[9px] font-mono text-neutral-500 uppercase">Min Order (MOQ)</label>
+                <input type="number" x-model.number="prod.minOrder" min="1" :max="prod.sessionQuota"
+                       class="w-full bg-amber-50 border border-amber-200 rounded-lg p-1.5 text-xs font-mono font-black text-amber-950">
+              </div>
+
+              <div class="col-span-2">
+                <label class="block text-[9px] font-mono text-neutral-500 uppercase">Flash Price (Rp)</label>
+                <input type="number" x-model.number="prod.flashPrice" step="10000"
+                       class="w-full bg-neutral-50 border border-neutral-200 rounded-lg p-1.5 text-xs font-mono font-bold text-neutral-950">
+              </div>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Empty state -->
+      <template x-if="sessionProducts.length === 0">
+        <div class="py-12 text-center px-4">
+          <svg class="w-12 h-12 text-neutral-400 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4" />
+          </svg>
+          <p class="text-sm font-semibold text-neutral-600">No products assigned to this session yet.</p>
+          <button @click="openJubelioModal = true" class="mt-3 px-4 py-2 bg-brand-primary text-neutral-950 text-xs font-bold rounded-xl hover:bg-brand-primaryHover">
+            Import from Jubelio
+          </button>
+        </div>
+      </template>
+    </div>
+  </main>
+
+
+  <!-- ============================================================== -->
+  <!-- ROLE: CUSTOMER STOREFRONT (Clean, No Jubelio Mentions)          -->
+  <!-- ============================================================== -->
+  <main x-show="role === 'customer'" class="flex-1 max-w-7xl mx-auto w-full px-3 sm:px-6 py-4 sm:py-6">
+
+    <!-- Sub tabs: Store vs Transactions -->
+    <div class="flex items-center gap-4 border-b border-neutral-200 pb-2.5 mb-5 sm:mb-6">
+      <button @click="customerTab = 'catalog'"
+              :class="customerTab === 'catalog' ? 'text-neutral-950 border-b-2 border-brand-primary pb-2 font-bold' : 'text-neutral-500 hover:text-neutral-900 pb-2'"
+              class="text-xs uppercase tracking-wider flex items-center gap-1.5 transition">
+        <svg class="w-4 h-4 text-brand-secondary" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M13 10V3L4 14h7v7l9-11h-7z" />
+        </svg>
+        Live Flash Deals
+      </button>
+
+      <button @click="customerTab = 'transactions'"
+              :class="customerTab === 'transactions' ? 'text-neutral-950 border-b-2 border-brand-primary pb-2 font-bold' : 'text-neutral-500 hover:text-neutral-900 pb-2'"
+              class="text-xs uppercase tracking-wider flex items-center gap-1.5 relative transition">
+        <svg class="w-4 h-4 text-neutral-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
+        </svg>
+        Transaction History
+        <span class="bg-neutral-200 text-neutral-800 font-mono text-[10px] font-bold px-1.5 py-0.2 rounded-full" x-text="orders.length"></span>
+        <span x-show="countUnpaidOrders > 0" class="w-2 h-2 rounded-full bg-amber-500 animate-ping" title="Orders pending payment"></span>
+      </button>
+    </div>
+
+    <!-- TAB 1: CATALOG -->
+    <div x-show="customerTab === 'catalog'">
+
+      <!-- Urgency Banner (Mobile responsive layout) -->
+      <div class="relative overflow-hidden rounded-2xl border border-neutral-200/90 bg-white p-4 sm:p-7 mb-6 shadow-xs">
+        <div class="absolute top-0 left-0 right-0 h-1.5 bg-gradient-to-r from-brand-primary via-brand-secondary to-brand-primary"></div>
+
+        <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 sm:gap-6 relative z-10">
+          <div>
+            <div class="inline-flex items-center gap-2 px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-950 text-[11px] font-bold mb-2 border border-amber-200">
+              <span class="w-2 h-2 rounded-full bg-brand-primary animate-ping"></span>
+              SESSION LIVE: <span x-text="activeSession.name"></span>
+            </div>
+            <h1 class="text-xl sm:text-2xl md:text-3xl font-black tracking-tight text-neutral-950">Direct Official Clearance Drops</h1>
+            <p class="text-neutral-600 text-xs sm:text-sm mt-1 max-w-xl">
+              Limited session units reserved on first-checkout basis. Strict order minimums apply per SKU.
+            </p>
+          </div>
+
+          <!-- Live countdown ticker (flex wrap for phone) -->
+          <div class="flex items-center gap-2 self-start md:self-auto bg-neutral-50/80 p-2 rounded-xl border border-neutral-100">
+            <div class="text-[10px] uppercase font-mono font-bold text-neutral-500 mr-1 sm:hidden">Ends In:</div>
+            <div class="bg-white border border-neutral-200 rounded-lg p-2 text-center min-w-[50px] sm:min-w-[65px] shadow-xs">
+              <div class="text-lg sm:text-xl font-black font-mono text-neutral-950" x-text="timeLeft.hours"></div>
+              <div class="text-[8px] text-neutral-500 uppercase font-mono font-bold">Hours</div>
+            </div>
+            <span class="text-neutral-400 font-bold font-mono text-sm sm:text-lg">:</span>
+            <div class="bg-white border border-neutral-200 rounded-lg p-2 text-center min-w-[50px] sm:min-w-[65px] shadow-xs">
+              <div class="text-lg sm:text-xl font-black font-mono text-neutral-950" x-text="timeLeft.minutes"></div>
+              <div class="text-[8px] text-neutral-500 uppercase font-mono font-bold">Mins</div>
+            </div>
+            <span class="text-neutral-400 font-bold font-mono text-sm sm:text-lg">:</span>
+            <div class="bg-amber-50 border border-amber-200 rounded-lg p-2 text-center min-w-[50px] sm:min-w-[65px] shadow-xs">
+              <div class="text-lg sm:text-xl font-black font-mono text-amber-950" x-text="timeLeft.seconds"></div>
+              <div class="text-[8px] text-amber-800 uppercase font-mono font-bold">Secs</div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Category Filter Pills (Horizontal scrollable on mobile) -->
+      <div class="flex items-center gap-2 overflow-x-auto pb-2.5 mb-5 no-scrollbar">
+        <button @click="selectedCategory = 'ALL'"
+                :class="selectedCategory === 'ALL' ? 'bg-neutral-950 text-white font-bold' : 'bg-white text-neutral-600 hover:text-neutral-900 border border-neutral-200'"
+                class="px-3.5 py-1.5 rounded-full text-xs transition shrink-0 shadow-xs">
+          All Drops (<span x-text="sessionProducts.length"></span>)
+        </button>
+        <template x-for="cat in uniqueCategories" :key="cat">
+          <button @click="selectedCategory = cat"
+                  :class="selectedCategory === cat ? 'bg-neutral-950 text-white font-bold' : 'bg-white text-neutral-600 hover:text-neutral-900 border border-neutral-200'"
+                  class="px-3.5 py-1.5 rounded-full text-xs transition shrink-0 shadow-xs" x-text="cat">
+          </button>
+        </template>
+      </div>
+
+      <!-- Flash Sale Cards Grid (Responsive 1 col phone, 2 col tablet, 3-4 col desktop) -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4 sm:gap-6">
+        <template x-for="item in filteredCustomerProducts" :key="item.id">
+          <div class="bg-white border border-neutral-200/90 hover:border-neutral-300 hover:shadow-md rounded-2xl p-3.5 sm:p-4 flex flex-col justify-between transition-all duration-200 group">
+
+            <div>
+              <!-- Image & Badge -->
+              <div class="relative overflow-hidden rounded-xl bg-neutral-100 border border-neutral-200/80 mb-3 aspect-video sm:aspect-square flex items-center justify-center">
+                <img :src="item.image" class="w-full h-full object-cover group-hover:scale-105 transition duration-300">
+
+                <!-- Category Tag -->
+                <div class="absolute top-2 left-2 flex gap-1">
+                  <span class="text-[9px] sm:text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-white/95 text-neutral-800 border border-neutral-200 backdrop-blur"
+                        x-text="item.category"></span>
+                </div>
+
+                <!-- MOQ Rule Badge -->
+                <div class="absolute top-2 right-2">
+                  <span class="text-[9px] sm:text-[10px] font-mono font-bold px-2 py-0.5 rounded-md bg-brand-primary text-neutral-950 border border-brand-primary/60 backdrop-blur"
+                        x-text="'MIN: ' + item.minOrder + ' PCS'"></span>
+                </div>
+
+                <!-- Sold out overlay -->
+                <div x-show="item.claimed >= item.sessionQuota"
+                     class="absolute inset-0 bg-white/90 backdrop-blur-xs flex items-center justify-center">
+                  <span class="text-xs font-mono font-black tracking-widest text-neutral-700 border border-neutral-300 bg-neutral-100 px-3 py-1 uppercase rounded-md shadow-xs">
+                    ALLOCATION SOLD OUT
+                  </span>
+                </div>
+              </div>
+
+              <!-- Title & SKU -->
+              <div class="text-[10px] font-mono text-neutral-400 mb-0.5" x-text="'SKU: ' + item.sku + ' · ' + item.type"></div>
+              <h3 class="font-bold text-neutral-950 text-sm line-clamp-1 group-hover:text-amber-800 transition" x-text="item.name"></h3>
+
+              <!-- Price Box -->
+              <div class="mt-2.5 sm:mt-3 flex items-baseline gap-2">
+                <span class="text-base font-extrabold font-mono text-neutral-950" x-text="formatRupiah(item.flashPrice)"></span>
+                <span class="text-xs line-through text-neutral-400 font-mono" x-text="formatRupiah(item.originalPrice)"></span>
+              </div>
+
+              <!-- Quota Bar with Saeful Askar Brand Gradient -->
+              <div class="mt-3">
+                <div class="flex justify-between text-[10px] font-mono mb-1 text-neutral-500">
+                  <span>Claimed <span x-text="item.claimed"></span>/<span x-text="item.sessionQuota"></span></span>
+                  <span :class="(item.sessionQuota - item.claimed) <= 5 ? 'text-brand-secondary font-bold' : 'text-neutral-500'"
+                        x-text="(item.sessionQuota - item.claimed) + ' remaining'"></span>
+                </div>
+                <div class="h-1.5 w-full bg-neutral-100 rounded-full overflow-hidden border border-neutral-200/60">
+                  <div class="h-full bg-gradient-to-r from-brand-primary to-brand-secondary transition-all duration-300"
+                       :style="'width: ' + Math.min(100, Math.round((item.claimed / item.sessionQuota) * 100)) + '%'"></div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Action Area -->
+            <div class="mt-4 pt-3 border-t border-neutral-100">
+              <template x-if="item.claimed < item.sessionQuota">
+                <div class="flex items-center gap-2">
+                  <button @click="addToCart(item)"
+                          class="flex-1 py-2.5 bg-brand-primary hover:bg-brand-primaryHover active:scale-95 text-neutral-950 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1.5 shadow-xs border border-brand-primary/50">
+                    <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
+                    </svg>
+                    Add to Cart
+                  </button>
+                  <button @click="quickBuy(item)"
+                          class="py-2.5 px-3 bg-neutral-100 hover:bg-neutral-200 text-neutral-900 rounded-xl text-xs font-bold transition" title="Direct Checkout">
+                    ⚡
+                  </button>
+                </div>
+              </template>
+
+              <template x-if="item.claimed >= item.sessionQuota">
+                <button disabled
+                        class="w-full py-2.5 bg-neutral-100 text-neutral-400 rounded-xl text-xs font-semibold cursor-not-allowed">
+                  Sold Out
+                </button>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+    </div>
+
+    <!-- TAB 2: TRANSACTIONS & ORDER HISTORY (NO JUBELIO MENTION) -->
+    <div x-show="customerTab === 'transactions'">
+      <div class="bg-white border border-neutral-200/90 rounded-2xl p-4 sm:p-6 shadow-xs">
+
+        <!-- Header & Status Filter Pills -->
+        <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-neutral-100 pb-4 mb-5">
+          <div>
+            <h2 class="text-sm sm:text-base font-bold text-neutral-950 uppercase tracking-wider">Transaction Records</h2>
+            <p class="text-xs text-neutral-500 mt-0.5">Purchases tied to official session quota and fulfillment orders.</p>
+          </div>
+          <div class="flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+            <template x-for="st in [
+              { key: 'ALL', label: 'All Orders' },
+              { key: 'UNPAID', label: 'Waiting Payment', badge: countUnpaidOrders },
+              { key: 'CONFIRMED', label: 'Confirmed' },
+              { key: 'SHIPPED', label: 'In Transit' }
+            ]" :key="st.key">
+              <button @click="orderStatusFilter = st.key"
+                      :class="orderStatusFilter === st.key
+                        ? 'bg-neutral-950 text-white font-bold'
+                        : 'bg-neutral-100 text-neutral-600 hover:bg-neutral-200'"
+                      class="px-3 py-1.5 rounded-lg text-xs transition font-mono whitespace-nowrap flex items-center gap-1.5">
+                <span x-text="st.label"></span>
+                <span x-show="st.badge && st.badge > 0" class="w-4 h-4 rounded-full bg-amber-400 text-neutral-950 text-[10px] font-black flex items-center justify-center" x-text="st.badge"></span>
+              </button>
+            </template>
+          </div>
+        </div>
+
+        <template x-if="filteredOrders.length === 0">
+          <div class="py-14 text-center px-4">
+            <div class="w-12 h-12 rounded-full bg-neutral-100 flex items-center justify-center mx-auto mb-3 text-neutral-400">
+              <svg class="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2" />
+              </svg>
+            </div>
+            <p class="text-sm font-semibold text-neutral-800">No transactions match selected filter.</p>
+            <p class="text-xs text-neutral-500 mt-1">Try switching status filter above or place a new order from flash deals.</p>
+            <button @click="orderStatusFilter = 'ALL'; customerTab = 'catalog'" class="mt-4 px-5 py-2.5 bg-brand-primary hover:bg-brand-primaryHover text-neutral-950 text-xs font-bold rounded-xl transition shadow-xs">
+              Explore Flash Deals
+            </button>
+          </div>
+        </template>
+
+        <div class="space-y-3.5" x-show="filteredOrders.length > 0">
+          <template x-for="order in filteredOrders" :key="order.id">
+            <div class="border rounded-xl bg-white p-4 sm:p-5 transition shadow-xs"
+                 :class="{
+                   'border-amber-300 ring-1 ring-amber-200 bg-amber-50/20': order.status === 'UNPAID',
+                   'border-neutral-200 hover:border-neutral-300': order.status !== 'UNPAID'
+                 }">
+
+              <!-- Card Top Row -->
+              <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-2 border-b border-neutral-100 pb-3 mb-3">
+                <div class="flex items-center gap-2 flex-wrap">
+                  <span class="text-xs font-mono font-bold text-neutral-950" x-text="order.orderNumber"></span>
+
+                  <!-- UNPAID Status Tag -->
+                  <template x-if="order.status === 'UNPAID'">
+                    <span class="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 flex items-center gap-1.5 font-bold animate-pulse">
+                      <span class="w-1.5 h-1.5 rounded-full bg-amber-500"></span>
+                      WAITING PAYMENT
+                    </span>
+                  </template>
+
+                  <!-- CONFIRMED Status Tag -->
+                  <template x-if="order.status === 'CONFIRMED'">
+                    <span class="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-emerald-50 text-emerald-800 border border-emerald-200 flex items-center gap-1.5 font-bold">
+                      <span class="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                      PAID &bull; ALLOCATION CONFIRMED
+                    </span>
+                  </template>
+
+                  <!-- SHIPPED Status Tag -->
+                  <template x-if="order.status === 'SHIPPED'">
+                    <span class="text-[10px] font-mono px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200 flex items-center gap-1.5 font-bold">
+                      <span class="w-1.5 h-1.5 rounded-full bg-blue-500"></span>
+                      IN TRANSIT &bull; DISPATCHED
+                    </span>
+                  </template>
+                </div>
+
+                <div class="text-[11px] font-mono text-neutral-500 flex items-center gap-2">
+                  <span x-text="order.date"></span>
+                </div>
+              </div>
+
+              <!-- Unpaid Prompt Notice Banner -->
+              <template x-if="order.status === 'UNPAID'">
+                <div class="mb-3.5 p-3 rounded-xl bg-amber-50 border border-amber-200 flex flex-col sm:flex-row sm:items-center justify-between gap-2.5">
+                  <div class="flex items-start gap-2.5">
+                    <svg class="w-4 h-4 text-amber-700 shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <div>
+                      <div class="text-xs font-bold text-amber-950 font-mono">Stock reserved for 15 minutes!</div>
+                      <div class="text-[11px] text-amber-800 mt-0.5 font-mono">
+                        Transfer to <strong x-text="order.paymentMethod"></strong>: <span class="bg-amber-100/80 px-1.5 py-0.5 rounded font-bold" x-text="order.vaNumber"></span>
+                      </div>
+                    </div>
+                  </div>
+                  <div class="flex items-center gap-2 shrink-0">
+                    <button @click="openPaymentModal(order)"
+                            class="px-3.5 py-1.5 bg-brand-primary hover:bg-brand-primaryHover text-neutral-950 text-xs font-bold rounded-lg transition shadow-xs border border-brand-primary/50 whitespace-nowrap">
+                      Pay / Simulate &rarr;
+                    </button>
+                  </div>
+                </div>
+              </template>
+
+              <!-- Order items -->
+              <div class="space-y-2 mb-3">
+                <template x-for="it in order.items" :key="it.id">
+                  <div class="flex items-center justify-between text-xs gap-2 py-1">
+                    <div class="flex items-center gap-2.5 min-w-0">
+                      <img :src="it.image" class="w-9 h-9 rounded-lg object-cover bg-neutral-100 border border-neutral-200 shrink-0">
+                      <div class="min-w-0">
+                        <div class="text-neutral-950 font-bold truncate" x-text="it.name"></div>
+                        <div class="text-[10px] text-neutral-500 font-mono" x-text="it.quantity + ' pcs @ ' + formatRupiah(it.flashPrice)"></div>
+                      </div>
+                    </div>
+                    <div class="font-mono font-bold text-neutral-900 shrink-0" x-text="formatRupiah(it.flashPrice * it.quantity)"></div>
+                  </div>
+                </template>
+              </div>
+
+              <!-- Order summary & interactive action buttons -->
+              <div class="pt-3 border-t border-neutral-100 flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs font-mono">
+                <div class="flex flex-wrap items-center gap-3 text-neutral-500 text-[11px]">
+                  <span>Payment: <strong class="text-neutral-800" x-text="order.paymentMethod"></strong></span>
+                  <template x-if="order.trackingNumber && order.trackingNumber !== 'PENDING_PAYMENT'">
+                    <span class="text-neutral-400">&bull;</span>
+                  </template>
+                  <template x-if="order.trackingNumber && order.trackingNumber !== 'PENDING_PAYMENT'">
+                    <span class="text-emerald-700 font-bold">AWB: <span x-text="order.trackingNumber"></span></span>
+                  </template>
+                </div>
+
+                <div class="flex items-center justify-between sm:justify-end gap-3">
+                  <div>
+                    <span class="text-neutral-500 mr-1.5 text-[11px]">Total:</span>
+                    <span class="text-sm font-bold text-neutral-950 font-mono" x-text="formatRupiah(order.total)"></span>
+                  </div>
+
+                  <div class="flex items-center gap-1.5">
+                    <!-- If Confirmed, allow simulating dispatch to shipped -->
+                    <template x-if="order.status === 'CONFIRMED'">
+                      <button @click="simulateShipping(order)"
+                              title="Simulate dispatch courier"
+                              class="px-2.5 py-1.5 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 rounded-lg text-[11px] font-bold transition font-sans">
+                        Simulate Ship &rarr;
+                      </button>
+                    </template>
+
+                    <!-- View Invoice Button -->
+                    <button @click="viewInvoice(order)"
+                            class="px-3 py-1.5 bg-neutral-950 hover:bg-neutral-800 text-white rounded-lg text-[11px] font-bold transition font-sans flex items-center gap-1">
+                      <svg class="w-3.5 h-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+                      </svg>
+                      <span>Receipt</span>
+                    </button>
+                  </div>
+                </div>
+              </div>
+
+            </div>
+          </template>
+        </div>
+      </div>
+    </div>
+  </main>
+
+
+  <!-- ============================================================== -->
+  <!-- MOBILE BOTTOM ACTION BAR (FOR CUSTOMER)                        -->
+  <!-- ============================================================== -->
+  <div x-show="role === 'customer'" class="md:hidden fixed bottom-0 left-0 right-0 bg-white/95 backdrop-blur border-t border-neutral-200 px-4 py-2.5 z-30 flex items-center justify-between shadow-lg">
+    <div>
+      <div class="text-[10px] text-neutral-500 font-mono">Cart Subtotal</div>
+      <div class="text-sm font-extrabold text-neutral-950 font-mono" x-text="formatRupiah(cartSubtotal)"></div>
+    </div>
+    <div class="flex items-center gap-2">
+      <button @click="isCartOpen = true"
+              class="px-4 py-2 bg-brand-primary text-neutral-950 rounded-xl text-xs font-bold transition flex items-center gap-1.5 shadow-sm border border-brand-primary/50">
+        <svg class="w-4 h-4 text-neutral-950" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z" />
+        </svg>
+        <span>View Cart (<span x-text="cartTotalCount"></span>)</span>
+      </button>
+    </div>
+  </div>
+
+
+  <!-- ============================================================== -->
+  <!-- MODAL 1: JUBELIO PRODUCT PICKER (FOR ADMIN ONLY)               -->
+  <!-- ============================================================== -->
+  <div x-show="openJubelioModal"
+       class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100">
+
+    <div class="bg-white border border-neutral-200 rounded-2xl w-full max-w-3xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh] sm:max-h-[85vh]"
+         @click.outside="openJubelioModal = false">
+
+      <!-- Modal Header -->
+      <div class="p-4 sm:p-5 border-b border-neutral-200 flex items-center justify-between bg-neutral-50">
+        <div>
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-brand-primary border border-neutral-950"></span>
+            <h3 class="text-sm sm:text-base font-bold text-neutral-950">Select Products from Jubelio ERP</h3>
+          </div>
+          <p class="text-xs text-neutral-500 mt-0.5">Real-time inventory lookup across connected warehouses.</p>
+        </div>
+        <button @click="openJubelioModal = false" class="text-neutral-400 hover:text-neutral-800 text-xl font-mono p-1">&times;</button>
+      </div>
+
+      <!-- Search & Filter inside Jubelio picker -->
+      <div class="p-3 sm:p-4 border-b border-neutral-200 bg-white flex items-center gap-3">
+        <div class="relative flex-1">
+          <input type="text" x-model="jubelioSearch" placeholder="Search SKU, item title..."
+                 class="w-full bg-neutral-50 border border-neutral-200 rounded-lg pl-8 pr-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-brand-primary focus:bg-white font-mono">
+          <svg class="w-4 h-4 text-neutral-400 absolute left-2.5 top-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
+          </svg>
+        </div>
+        <span class="text-xs font-mono text-neutral-500 whitespace-nowrap" x-text="filteredJubelioList.length + ' SKUs'"></span>
+      </div>
+
+      <!-- Item list -->
+      <div class="overflow-y-auto p-3 sm:p-4 space-y-2 flex-1 bg-neutral-50/50">
+        <template x-for="item in filteredJubelioList" :key="item.id">
+          <div class="flex items-center justify-between p-2.5 sm:p-3 rounded-xl border border-neutral-200 bg-white hover:border-neutral-300 transition gap-2">
+            <div class="flex items-center gap-2.5 sm:gap-3 min-w-0">
+              <img :src="item.image" class="w-11 h-11 sm:w-12 sm:h-12 rounded-lg object-cover bg-neutral-100 border border-neutral-200 shrink-0">
+              <div class="min-w-0">
+                <div class="font-bold text-neutral-950 text-xs truncate" x-text="item.name"></div>
+                <div class="flex flex-wrap items-center gap-1 sm:gap-2 mt-0.5 text-[10px] font-mono text-neutral-500">
+                  <span class="bg-neutral-100 px-1.5 py-0.2 rounded border border-neutral-200 text-neutral-700" x-text="item.sku"></span>
+                  <span>Stock: <strong class="text-emerald-700 font-bold" x-text="item.jubelioStock"></strong></span>
+                  <span class="hidden sm:inline">Norm: <span x-text="formatRupiah(item.originalPrice)"></span></span>
+                </div>
+              </div>
+            </div>
+
+            <!-- Inclusion toggle button -->
+            <div class="shrink-0">
+              <template x-if="isProductInSession(item.id)">
+                <button @click="removeProductFromSession(item.id)"
+                        class="px-2.5 sm:px-3.5 py-1.5 rounded-lg bg-neutral-100 hover:bg-red-50 text-neutral-700 hover:text-red-700 border border-neutral-200 text-[11px] sm:text-xs font-bold transition">
+                  Added &check;
+                </button>
+              </template>
+              <template x-if="!isProductInSession(item.id)">
+                <button @click="addProductToSession(item)"
+                        class="px-2.5 sm:px-3.5 py-1.5 rounded-lg bg-brand-primary hover:bg-brand-primaryHover text-neutral-950 text-[11px] sm:text-xs font-bold transition shadow-xs border border-brand-primary/40 whitespace-nowrap">
+                  + Add
+                </button>
+              </template>
+            </div>
+          </div>
+        </template>
+      </div>
+
+      <!-- Modal Footer -->
+      <div class="p-3 sm:p-4 border-t border-neutral-200 bg-white flex items-center justify-between">
+        <span class="text-xs text-neutral-500 font-mono">
+          Selected: <strong class="text-neutral-950" x-text="sessionProducts.length"></strong>
+        </span>
+        <button @click="openJubelioModal = false" class="px-4 sm:px-5 py-2 bg-neutral-950 text-white rounded-xl text-xs font-bold hover:bg-neutral-800 transition">
+          Done Configuring
+        </button>
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ============================================================== -->
+  <!-- DRAWER: CUSTOMER CART (Mobile Slide-up / Desktop Slide-over)    -->
+  <!-- ============================================================== -->
+  <div x-show="isCartOpen" class="fixed inset-0 z-50 overflow-hidden" aria-labelledby="slide-over-title" role="dialog" aria-modal="true">
+    <div class="absolute inset-0 bg-black/60 backdrop-blur-xs transition-opacity"
+         @click="isCartOpen = false"></div>
+
+    <div class="fixed inset-y-0 right-0 max-w-full flex md:pl-10">
+      <div class="w-screen max-w-md bg-white border-l border-neutral-200 text-neutral-900 flex flex-col justify-between shadow-2xl">
+
+        <!-- Cart Head -->
+        <div class="p-4 sm:p-5 border-b border-neutral-200 flex items-center justify-between bg-neutral-50">
+          <div class="flex items-center gap-2">
+            <span class="w-2.5 h-2.5 rounded-full bg-brand-primary border border-neutral-950"></span>
+            <h2 class="text-sm sm:text-base font-bold text-neutral-950 uppercase tracking-wider">Your Flash Cart</h2>
+            <span class="font-mono text-xs bg-neutral-200 font-bold px-2 py-0.5 rounded-full text-neutral-800" x-text="cartTotalCount"></span>
+          </div>
+          <button @click="isCartOpen = false" class="text-neutral-400 hover:text-neutral-800 font-mono text-2xl p-1">&times;</button>
+        </div>
+
+        <!-- Cart Items List -->
+        <div class="p-4 sm:p-5 overflow-y-auto flex-1 space-y-3.5 bg-neutral-50/40">
+          <template x-if="cart.length === 0">
+            <div class="py-16 text-center">
+              <svg class="w-12 h-12 text-neutral-400 mx-auto mb-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M16 11V7a4 4 0 00-8 0v4M5 9h14l1 12H4L5 9z" />
+              </svg>
+              <p class="text-sm font-bold text-neutral-800">Your cart is empty</p>
+              <p class="text-xs text-neutral-500 mt-1">Grab high-demand products before session ends!</p>
+            </div>
+          </template>
+
+          <template x-for="(item, idx) in cart" :key="item.id">
+            <div class="p-3 sm:p-3.5 rounded-xl border border-neutral-200 bg-white shadow-xs flex flex-col gap-2">
+              <div class="flex items-start justify-between gap-3">
+                <div class="flex items-center gap-2.5 sm:gap-3">
+                  <img :src="item.image" class="w-11 h-11 sm:w-12 sm:h-12 rounded-lg object-cover bg-neutral-100 border border-neutral-200 shrink-0">
+                  <div>
+                    <h4 class="font-bold text-xs text-neutral-950 line-clamp-1" x-text="item.name"></h4>
+                    <div class="text-[10px] font-mono text-neutral-900 font-bold" x-text="formatRupiah(item.flashPrice)"></div>
+                    <div class="text-[9px] text-amber-900 font-mono font-semibold" x-text="'Min order rule: ' + item.minOrder + ' pcs'"></div>
+                  </div>
+                </div>
+                <button @click="removeFromCart(item.id)" class="text-neutral-400 hover:text-red-600 text-sm font-mono p-1">&times;</button>
+              </div>
+
+              <!-- Quantity selector with MOQ enforcement -->
+              <div class="flex items-center justify-between border-t border-neutral-100 pt-2 mt-1">
+                <span class="text-[10px] text-neutral-500 font-mono">
+                  Subtotal: <strong class="text-neutral-950 font-bold" x-text="formatRupiah(item.flashPrice * item.quantity)"></strong>
+                </span>
+
+                <div class="flex items-center bg-neutral-100 border border-neutral-200 rounded-lg p-0.5">
+                  <button @click="decrementCart(item)"
+                          class="w-6 h-6 flex items-center justify-center text-neutral-600 hover:text-neutral-950 font-mono text-xs font-bold hover:bg-neutral-200 rounded">
+                    -
+                  </button>
+                  <span class="px-2.5 text-xs font-mono font-bold text-neutral-950" x-text="item.quantity"></span>
+                  <button @click="incrementCart(item)"
+                          class="w-6 h-6 flex items-center justify-center text-neutral-600 hover:text-neutral-950 font-mono text-xs font-bold hover:bg-neutral-200 rounded">
+                    +
+                  </button>
+                </div>
+              </div>
+            </div>
+          </template>
+        </div>
+
+        <!-- Cart Summary & Checkout -->
+        <div class="p-4 sm:p-5 border-t border-neutral-200 bg-white">
+          <div class="space-y-1.5 sm:space-y-2 mb-3 sm:mb-4 text-xs font-mono">
+            <div class="flex justify-between text-neutral-500">
+              <span>Subtotal</span>
+              <span class="text-neutral-900 font-bold" x-text="formatRupiah(cartSubtotal)"></span>
+            </div>
+            <div class="flex justify-between text-neutral-500">
+              <span>Express Delivery</span>
+              <span class="text-emerald-700 font-bold">Free Promotion</span>
+            </div>
+            <div class="flex justify-between text-neutral-500">
+              <span>Flash Session Discount</span>
+              <span class="text-brand-secondary font-bold">- <span x-text="formatRupiah(cartSavings)"></span></span>
+            </div>
+            <div class="border-t border-neutral-100 pt-2 flex justify-between text-sm font-bold text-neutral-950">
+              <span>Total Checkout</span>
+              <span class="text-neutral-950 font-black" x-text="formatRupiah(cartSubtotal)"></span>
+            </div>
+          </div>
+
+          <!-- Checkout Button -->
+          <button @click="openCheckoutModal = true; isCartOpen = false"
+                  :disabled="cart.length === 0"
+                  :class="cart.length === 0 ? 'bg-neutral-200 text-neutral-400 cursor-not-allowed' : 'bg-brand-primary hover:bg-brand-primaryHover text-neutral-950 shadow-sm border border-brand-primary/50'"
+                  class="w-full py-3 rounded-xl text-xs font-bold tracking-wider uppercase transition">
+            Proceed to Checkout &rarr;
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ============================================================== -->
+  <!-- MODAL 2: CHECKOUT & ORDER PROCESSOR (NO JUBELIO ON CUSTOMER)   -->
+  <!-- ============================================================== -->
+  <div x-show="openCheckoutModal"
+       class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/65 backdrop-blur-xs"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100">
+
+    <div class="bg-white border border-neutral-200 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+         @click.outside="if(!isCheckingOut) openCheckoutModal = false">
+
+      <!-- Checkout Header -->
+      <div class="p-4 sm:p-5 border-b border-neutral-200 flex items-center justify-between bg-neutral-50">
+        <div>
+          <h3 class="text-sm sm:text-base font-bold text-neutral-950">Checkout & Secure Claim</h3>
+          <p class="text-xs text-neutral-500 mt-0.5">Locks allocated stock and creates official order.</p>
+        </div>
+        <button x-show="!isCheckingOut" @click="openCheckoutModal = false" class="text-neutral-400 hover:text-neutral-800 font-mono text-xl p-1">&times;</button>
+      </div>
+
+      <div class="p-4 sm:p-5 space-y-3.5 overflow-y-auto">
+
+        <!-- Recipient details form -->
+        <div>
+          <label class="block text-[10px] font-mono uppercase text-neutral-500 mb-1">Customer / Store Name</label>
+          <input type="text" x-model="checkoutForm.customerName"
+                 class="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-brand-primary focus:bg-white font-medium">
+        </div>
+
+        <div>
+          <label class="block text-[10px] font-mono uppercase text-neutral-500 mb-1">Delivery Destination Address</label>
+          <input type="text" x-model="checkoutForm.address"
+                 class="w-full bg-neutral-50 border border-neutral-200 rounded-lg px-3 py-2 text-xs text-neutral-900 focus:outline-none focus:border-brand-primary focus:bg-white font-medium">
+        </div>
+
+        <div>
+          <label class="block text-[10px] font-mono uppercase text-neutral-500 mb-1">Payment Method</label>
+          <div class="grid grid-cols-3 gap-2">
+            <template x-for="pm in ['BCA Virtual Account', 'QRIS Live', 'Mandiri VA']" :key="pm">
+              <button type="button" @click="checkoutForm.paymentMethod = pm"
+                      :class="checkoutForm.paymentMethod === pm ? 'border-brand-primary bg-amber-50 text-neutral-950 font-bold shadow-xs' : 'border-neutral-200 bg-neutral-50 text-neutral-600'"
+                      class="border rounded-lg p-2 text-center text-[10px] sm:text-[11px] transition" x-text="pm">
+              </button>
+            </template>
+          </div>
+        </div>
+
+        <!-- Breakdown -->
+        <div class="bg-neutral-50 border border-neutral-200 rounded-xl p-3 font-mono text-xs space-y-1.5">
+          <div class="flex justify-between text-neutral-500">
+            <span>Items to checkout:</span>
+            <span class="text-neutral-950 font-bold" x-text="cartTotalCount + ' units'"></span>
+          </div>
+          <div class="flex justify-between text-neutral-500">
+            <span>Instant Stock Allocation:</span>
+            <span class="text-emerald-700 font-bold">Guaranteed</span>
+          </div>
+          <div class="border-t border-neutral-200 pt-1.5 flex justify-between font-bold text-neutral-950">
+            <span>Amount Due:</span>
+            <span class="text-neutral-950 font-black text-sm" x-text="formatRupiah(cartSubtotal)"></span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Footer Button -->
+      <div class="p-4 sm:p-5 border-t border-neutral-200 bg-white">
+        <button @click="processCheckout()"
+                :disabled="isCheckingOut"
+                class="w-full py-3 bg-brand-primary hover:bg-brand-primaryHover text-neutral-950 rounded-xl text-xs font-bold tracking-wider uppercase transition flex items-center justify-center gap-2 shadow-sm border border-brand-primary/50">
+          <template x-if="isCheckingOut">
+            <div class="flex items-center gap-2">
+              <span class="w-3.5 h-3.5 border-2 border-neutral-950 border-t-transparent rounded-full animate-spin"></span>
+              <span>Reserving Stock & Confirming Order...</span>
+            </div>
+          </template>
+          <template x-if="!isCheckingOut">
+            <span>Confirm & Complete Transaction</span>
+          </template>
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+
+  <!-- ============================================================== -->
+  <!-- MODAL 3: PAYMENT SIMULATION & VIRTUAL ACCOUNT INSTRUCTIONS     -->
+  <!-- ============================================================== -->
+  <div x-show="selectedOrderForPayment"
+       class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100">
+
+    <div class="bg-white border border-neutral-200 rounded-2xl w-full max-w-lg overflow-hidden shadow-2xl flex flex-col"
+         @click.outside="closePaymentModal()">
+
+      <!-- Header -->
+      <div class="p-4 sm:p-5 border-b border-neutral-200 bg-neutral-50 flex items-center justify-between">
+        <div class="flex items-center gap-2">
+          <span class="w-2.5 h-2.5 rounded-full bg-amber-500 animate-pulse"></span>
+          <div>
+            <h3 class="text-sm sm:text-base font-bold text-neutral-950">Payment Instructions</h3>
+            <p class="text-xs text-neutral-500 font-mono" x-text="selectedOrderForPayment?.orderNumber"></p>
+          </div>
+        </div>
+        <button @click="closePaymentModal()" class="text-neutral-400 hover:text-neutral-800 font-mono text-xl p-1">&times;</button>
+      </div>
+
+      <div class="p-4 sm:p-5 space-y-4" x-show="selectedOrderForPayment">
+
+        <!-- Timer alert -->
+        <div class="bg-amber-50 border border-amber-200 rounded-xl p-3 flex items-center justify-between">
+          <div class="flex items-center gap-2 text-xs font-mono text-amber-900">
+            <svg class="w-4 h-4 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+            </svg>
+            <span>Time Remaining to Pay:</span>
+          </div>
+          <span class="text-sm font-black font-mono text-amber-900 bg-white px-2 py-0.5 rounded border border-amber-300" x-text="paymentCountdown"></span>
+        </div>
+
+        <!-- VA Number Box -->
+        <div class="bg-neutral-50 border border-neutral-200 rounded-xl p-4 space-y-2">
+          <div class="text-[10px] uppercase font-mono text-neutral-500">Selected Gateway</div>
+          <div class="text-sm font-bold text-neutral-950" x-text="selectedOrderForPayment?.paymentMethod"></div>
+
+          <div class="pt-2 border-t border-neutral-200">
+            <div class="text-[10px] uppercase font-mono text-neutral-500 mb-1">Virtual Account / Billing No.</div>
+            <div class="flex items-center justify-between bg-white border border-neutral-200 rounded-lg px-3 py-2">
+              <span class="font-mono text-sm sm:text-base font-black text-neutral-950 tracking-wider" x-text="selectedOrderForPayment?.vaNumber"></span>
+              <button @click="copyToClipboard(selectedOrderForPayment?.vaNumber, 'VA Number')"
+                      class="text-xs font-bold text-neutral-800 hover:text-black bg-neutral-100 hover:bg-neutral-200 px-2 py-1 rounded transition">
+                Copy
+              </button>
+            </div>
+          </div>
+
+          <div class="pt-2 border-t border-neutral-200 flex items-center justify-between">
+            <span class="text-xs text-neutral-500 font-mono">Total Due:</span>
+            <span class="text-base font-extrabold text-neutral-950 font-mono" x-text="formatRupiah(selectedOrderForPayment?.total)"></span>
+          </div>
+        </div>
+
+        <!-- How to Pay Guide -->
+        <div class="text-xs text-neutral-600 space-y-1.5 font-sans">
+          <div class="font-bold text-neutral-900 text-[11px] uppercase tracking-wider font-mono">Simulation Guide:</div>
+          <p class="text-[11px] text-neutral-500">1. In production, Jubelio webhooks automatically listen to Virtual Account settlement.</p>
+          <p class="text-[11px] text-neutral-500">2. In this prototype, click below to trigger instant successful payment validation.</p>
+        </div>
+
+        <!-- Interactive Simulation Buttons -->
+        <div class="pt-2 space-y-2">
+          <button @click="simulateSuccessfulPayment(selectedOrderForPayment)"
+                  class="w-full py-2.5 bg-brand-primary hover:bg-brand-primaryHover text-neutral-950 font-bold text-xs uppercase tracking-wider rounded-xl transition shadow-xs border border-brand-primary/50 flex items-center justify-center gap-1.5">
+            <span>&check; Simulate Instant Successful Payment</span>
+          </button>
+          <button @click="closePaymentModal()"
+                  class="w-full py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-700 font-semibold text-xs rounded-xl transition">
+            I'll Pay Later (Keep in Waiting Payment)
+          </button>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+
+  <!-- ============================================================== -->
+  <!-- MODAL 4: TRANSACTION DETAIL & OFFICIAL RECEIPT (NO JUBELIO)     -->
+  <!-- ============================================================== -->
+  <div x-show="selectedOrderForInvoice"
+       class="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-black/60 backdrop-blur-xs"
+       x-transition:enter="transition ease-out duration-200"
+       x-transition:enter-start="opacity-0"
+       x-transition:enter-end="opacity-100">
+
+    <div class="bg-white border border-neutral-200 rounded-2xl w-full max-w-xl overflow-hidden shadow-2xl flex flex-col max-h-[90vh]"
+         @click.outside="selectedOrderForInvoice = null">
+
+      <!-- Invoice Header -->
+      <div class="p-4 sm:p-5 border-b border-neutral-200 bg-neutral-50 flex items-center justify-between">
+        <div class="flex items-center gap-2.5">
+          <div class="w-8 h-8 rounded-lg bg-brand-primary text-neutral-950 font-black text-xs flex items-center justify-center border border-brand-primary/50 shadow-xs">
+            SA
+          </div>
+          <div>
+            <h3 class="text-sm sm:text-base font-bold text-neutral-950">Official Order Receipt</h3>
+            <p class="text-xs font-mono text-neutral-500" x-text="selectedOrderForInvoice?.orderNumber"></p>
+          </div>
+        </div>
+        <button @click="selectedOrderForInvoice = null" class="text-neutral-400 hover:text-neutral-800 font-mono text-xl p-1">&times;</button>
+      </div>
+
+      <!-- Receipt Body -->
+      <div class="p-4 sm:p-6 overflow-y-auto space-y-4" x-show="selectedOrderForInvoice">
+
+        <!-- Status & Date bar -->
+        <div class="flex items-center justify-between bg-neutral-50 rounded-xl p-3 border border-neutral-200/80">
+          <div>
+            <div class="text-[10px] font-mono uppercase text-neutral-400">Order Status</div>
+            <div class="text-xs font-bold font-mono mt-0.5"
+                 :class="{
+                   'text-amber-700': selectedOrderForInvoice?.status === 'UNPAID',
+                   'text-emerald-700': selectedOrderForInvoice?.status === 'CONFIRMED',
+                   'text-blue-700': selectedOrderForInvoice?.status === 'SHIPPED'
+                 }"
+                 x-text="selectedOrderForInvoice?.status">
+            </div>
+          </div>
+          <div class="text-right">
+            <div class="text-[10px] font-mono uppercase text-neutral-400">Transaction Date</div>
+            <div class="text-xs font-bold text-neutral-800 font-mono mt-0.5" x-text="selectedOrderForInvoice?.date"></div>
+          </div>
+        </div>
+
+        <!-- Tracking Timeline Section (if paid or shipped) -->
+        <div class="border border-neutral-200 rounded-xl p-3.5 space-y-2 bg-neutral-50/40 font-mono text-xs">
+          <div class="text-[10px] uppercase text-neutral-400 font-bold">Fulfillment & Logistics</div>
+          <div class="flex justify-between">
+            <span class="text-neutral-500">Logistics Partner:</span>
+            <span class="font-bold text-neutral-900" x-text="selectedOrderForInvoice?.shippingCourier"></span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-neutral-500">Tracking Code (AWB):</span>
+            <span class="font-bold text-neutral-900" x-text="selectedOrderForInvoice?.trackingNumber"></span>
+          </div>
+          <div class="flex justify-between">
+            <span class="text-neutral-500">Delivery Address:</span>
+            <span class="font-semibold text-neutral-800 text-right max-w-[240px] truncate" x-text="selectedOrderForInvoice?.address"></span>
+          </div>
+        </div>
+
+        <!-- Items Table -->
+        <div class="border border-neutral-200 rounded-xl overflow-hidden">
+          <div class="bg-neutral-100 px-3 py-2 text-[10px] font-mono uppercase text-neutral-600 font-bold flex justify-between">
+            <span>Product Details</span>
+            <span>Subtotal</span>
+          </div>
+          <div class="divide-y divide-neutral-100 p-2">
+            <template x-for="item in selectedOrderForInvoice?.items" :key="item.id">
+              <div class="p-2 flex items-center justify-between text-xs gap-3">
+                <div class="flex items-center gap-2.5 min-w-0">
+                  <img :src="item.image" class="w-10 h-10 rounded-lg object-cover bg-neutral-100 border border-neutral-200 shrink-0">
+                  <div class="min-w-0">
+                    <div class="font-bold text-neutral-950 truncate" x-text="item.name"></div>
+                    <div class="text-[10px] text-neutral-500 font-mono" x-text="item.quantity + ' pcs &bull; ' + formatRupiah(item.flashPrice)"></div>
+                  </div>
+                </div>
+                <div class="font-mono font-bold text-neutral-950 shrink-0" x-text="formatRupiah(item.flashPrice * item.quantity)"></div>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <!-- Grand Total Breakdown -->
+        <div class="bg-neutral-50 rounded-xl p-3.5 border border-neutral-200 space-y-1.5 font-mono text-xs">
+          <div class="flex justify-between text-neutral-500">
+            <span>Payment Method</span>
+            <span class="text-neutral-900 font-bold" x-text="selectedOrderForInvoice?.paymentMethod"></span>
+          </div>
+          <div class="flex justify-between text-neutral-500">
+            <span>Platform Service Fee</span>
+            <span class="text-emerald-700 font-bold">Rp 0 (Special Promo)</span>
+          </div>
+          <div class="border-t border-neutral-200 pt-1.5 flex justify-between text-sm font-black text-neutral-950">
+            <span>Total Paid</span>
+            <span x-text="formatRupiah(selectedOrderForInvoice?.total)"></span>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- Receipt Footer Actions -->
+      <div class="p-4 sm:p-5 border-t border-neutral-200 bg-white flex items-center justify-between gap-3">
+        <button @click="copyToClipboard(selectedOrderForInvoice?.orderNumber, 'Order Number')"
+                class="px-3 py-2 bg-neutral-100 hover:bg-neutral-200 text-neutral-800 rounded-xl text-xs font-bold transition font-mono">
+          Copy Order ID
+        </button>
+        <button @click="selectedOrderForInvoice = null"
+                class="px-5 py-2 bg-neutral-950 hover:bg-neutral-800 text-white rounded-xl text-xs font-bold transition">
+          Close
+        </button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- JAVASCRIPT STATE ENGINE -->
+  <script>
+    function appData() {
+      return {
+        role: 'customer', // 'admin' | 'customer'
+        customerTab: 'catalog', // 'catalog' | 'transactions'
+        openJubelioModal: false,
+        isCartOpen: false,
+        openCheckoutModal: false,
+        isCheckingOut: false,
+        selectedCategory: 'ALL',
+        orderStatusFilter: 'ALL', // 'ALL' | 'UNPAID' | 'CONFIRMED' | 'SHIPPED'
+        selectedOrderForInvoice: null,
+        selectedOrderForPayment: null,
+        paymentCountdown: '14:59',
+        paymentInterval: null,
+        jubelioSearch: '',
+        toasts: [],
+
+        // Countdown timer state
+        timeLeft: { hours: '01', minutes: '48', seconds: '25' },
+
+        // Active Session
+        activeSession: {
+          id: 'FS-SA-2026-10',
+          name: 'Saeful Askar Flash Drop // Q4 Allocation',
+          startTime: '2026-10-20T20:00',
+          endTime: '2026-10-20T23:59',
+          status: 'ACTIVE'
+        },
+
+        // Master Jubelio Products (mock API pool)
+        jubelioProducts: [
+          {
+            id: 1,
+            sku: 'JBL-AUDIO-XM5',
+            name: 'Sony WH-1000XM5 Wireless Noise Canceling',
+            category: 'Audio',
+            type: 'Variable',
+            image: 'https://images.unsplash.com/photo-1505740420928-5e560c06d30e?w=500&auto=format&fit=crop&q=80',
+            originalPrice: 5499000,
+            flashPrice: 3899000,
+            jubelioStock: 120,
+            sessionQuota: 40,
+            minOrder: 2,
+            claimed: 34
+          },
+          {
+            id: 2,
+            sku: 'JBL-KEY-Q1P',
+            name: 'Keychron Q1 Pro Wireless Custom Mechanical Keyboard',
+            category: 'Peripherals',
+            type: 'Single SKU',
+            image: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=500&auto=format&fit=crop&q=80',
+            originalPrice: 2800000,
+            flashPrice: 1950000,
+            jubelioStock: 85,
+            sessionQuota: 30,
+            minOrder: 1,
+            claimed: 18
+          },
+          {
+            id: 3,
+            sku: 'JBL-DISP-28U',
+            name: 'LG DualUp Ergo Monitor 28" 16:18 SDQHD',
+            category: 'Displays',
+            type: 'Single SKU',
+            image: 'https://images.unsplash.com/photo-1527443224154-c4a3942d3acf?w=500&auto=format&fit=crop&q=80',
+            originalPrice: 8900000,
+            flashPrice: 6200000,
+            jubelioStock: 30,
+            sessionQuota: 15,
+            minOrder: 1,
+            claimed: 15 // Sold out
+          },
+          {
+            id: 4,
+            sku: 'JBL-MOU-MX3',
+            name: 'Logitech MX Master 3S Performance Wireless Mouse',
+            category: 'Peripherals',
+            type: 'Single SKU',
+            image: 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?w=500&auto=format&fit=crop&q=80',
+            originalPrice: 1699000,
+            flashPrice: 1190000,
+            jubelioStock: 250,
+            sessionQuota: 60,
+            minOrder: 2,
+            claimed: 45
+          },
+          {
+            id: 5,
+            sku: 'JBL-CAM-C920',
+            name: 'Logitech C920 HD Pro Stream Webcam 1080p',
+            category: 'Accessories',
+            type: 'Single SKU',
+            image: 'https://images.unsplash.com/photo-1588508065123-287b28e013da?w=500&auto=format&fit=crop&q=80',
+            originalPrice: 1250000,
+            flashPrice: 820000,
+            jubelioStock: 95,
+            sessionQuota: 25,
+            minOrder: 1,
+            claimed: 9
+          },
+          {
+            id: 6,
+            sku: 'JBL-EAR-APP2',
+            name: 'Apple AirPods Pro (2nd Generation) USB-C',
+            category: 'Audio',
+            type: 'Single SKU',
+            image: 'https://images.unsplash.com/photo-1600294037681-c80b4cb5b434?w=500&auto=format&fit=crop&q=80',
+            originalPrice: 3999000,
+            flashPrice: 2999000,
+            jubelioStock: 180,
+            sessionQuota: 50,
+            minOrder: 1,
+            claimed: 28
+          }
+        ],
+
+        // Products currently enrolled in session
+        sessionProducts: [],
+
+        // Customer Cart
+        cart: [],
+
+        // Checkout Form State
+        checkoutForm: {
+          customerName: 'CV Mitra Sukses Mandiri',
+          address: 'Sentra Distribusi Niaga Blok C4, Jakarta Selatan',
+          paymentMethod: 'BCA Virtual Account'
+        },
+
+        // Orders / Transactions History
+        orders: [
+          {
+            id: 'ord-881',
+            orderNumber: 'ORD-20261020-098',
+            jubelioSO: 'SO-JBL-44910',
+            date: 'Today, 20:15 WIB',
+            status: 'CONFIRMED',
+            paymentMethod: 'BCA Virtual Account',
+            vaNumber: '8277 0812 3456 7890',
+            customerName: 'CV Mitra Sukses Mandiri',
+            address: 'Sentra Distribusi Niaga Blok C4, Jakarta Selatan',
+            shippingCourier: 'JNE Express (Trucking/Cargo)',
+            trackingNumber: 'TRK-JKT-8829104',
+            total: 3900000,
+            items: [
+              {
+                id: 2,
+                name: 'Keychron Q1 Pro Wireless Custom Mechanical Keyboard',
+                sku: 'JBL-KEY-Q1P',
+                flashPrice: 1950000,
+                quantity: 2,
+                image: 'https://images.unsplash.com/photo-1587829741301-dc798b83add3?w=500&auto=format&fit=crop&q=80'
+              }
+            ]
+          },
+          {
+            id: 'ord-882',
+            orderNumber: 'ORD-20261020-104',
+            jubelioSO: 'SO-JBL-44922',
+            date: 'Today, 19:40 WIB',
+            status: 'SHIPPED',
+            paymentMethod: 'Mandiri VA',
+            vaNumber: '8950 0819 8831 2291',
+            customerName: 'CV Mitra Sukses Mandiri',
+            address: 'Sentra Distribusi Niaga Blok C4, Jakarta Selatan',
+            shippingCourier: 'SiCepat Cargo Express',
+            trackingNumber: '002891902144',
+            total: 1190000,
+            items: [
+              {
+                id: 4,
+                name: 'Logitech MX Master 3S Performance Wireless Mouse',
+                sku: 'JBL-MOU-MX3',
+                flashPrice: 1190000,
+                quantity: 1,
+                image: 'https://images.unsplash.com/photo-1615663245857-ac93bb7c39e7?w=500&auto=format&fit=crop&q=80'
+              }
+            ]
+          }
+        ],
+
+        initApp() {
+          this.sessionProducts = JSON.parse(JSON.stringify(this.jubelioProducts.slice(0, 4)));
+
+          // Countdown timer simulation
+          setInterval(() => {
+            let s = parseInt(this.timeLeft.seconds);
+            let m = parseInt(this.timeLeft.minutes);
+            let h = parseInt(this.timeLeft.hours);
+
+            if (s > 0) {
+              s--;
+            } else {
+              s = 59;
+              if (m > 0) {
+                m--;
+              } else {
+                m = 59;
+                if (h > 0) h--;
+              }
+            }
+            this.timeLeft.seconds = s < 10 ? '0' + s : '' + s;
+            this.timeLeft.minutes = m < 10 ? '0' + m : '' + m;
+            this.timeLeft.hours = h < 10 ? '0' + h : '' + h;
+          }, 1000);
+        },
+
+        setRole(newRole) {
+          this.role = newRole;
+          this.notify(`Switched to ${newRole === 'admin' ? 'Admin Console' : 'Customer Storefront'}`);
+        },
+
+        // Computed helpers
+        get totalAllocatedQuota() {
+          return this.sessionProducts.reduce((acc, p) => acc + (p.sessionQuota || 0), 0);
+        },
+        get totalClaimedQuota() {
+          return this.sessionProducts.reduce((acc, p) => acc + (p.claimed || 0), 0);
+        },
+        get estimatedSessionValue() {
+          return this.sessionProducts.reduce((acc, p) => acc + ((p.sessionQuota || 0) * (p.flashPrice || 0)), 0);
+        },
+        get uniqueCategories() {
+          const cats = new Set(this.sessionProducts.map(p => p.category));
+          return Array.from(cats);
+        },
+        get filteredCustomerProducts() {
+          if (this.selectedCategory === 'ALL') return this.sessionProducts;
+          return this.sessionProducts.filter(p => p.category === this.selectedCategory);
+        },
+        get filteredOrders() {
+          if (this.orderStatusFilter === 'ALL') return this.orders;
+          return this.orders.filter(o => o.status === this.orderStatusFilter);
+        },
+        get countUnpaidOrders() {
+          return this.orders.filter(o => o.status === 'UNPAID').length;
+        },
+        get filteredJubelioList() {
+          if (!this.jubelioSearch.trim()) return this.jubelioProducts;
+          const q = this.jubelioSearch.toLowerCase();
+          return this.jubelioProducts.filter(p =>
+            p.name.toLowerCase().includes(q) ||
+            p.sku.toLowerCase().includes(q) ||
+            p.category.toLowerCase().includes(q)
+          );
+        },
+        get cartTotalCount() {
+          return this.cart.reduce((sum, item) => sum + item.quantity, 0);
+        },
+        get cartSubtotal() {
+          return this.cart.reduce((sum, item) => sum + (item.flashPrice * item.quantity), 0);
+        },
+        get cartSavings() {
+          return this.cart.reduce((sum, item) => sum + ((item.originalPrice - item.flashPrice) * item.quantity), 0);
+        },
+
+        // Jubelio Admin Actions
+        isProductInSession(id) {
+          return this.sessionProducts.some(p => p.id === id);
+        },
+        addProductToSession(item) {
+          if (this.isProductInSession(item.id)) return;
+          const copy = JSON.parse(JSON.stringify(item));
+          copy.sessionQuota = Math.min(20, copy.jubelioStock);
+          copy.minOrder = 1;
+          copy.claimed = 0;
+          this.sessionProducts.push(copy);
+          this.notify(`Added "${item.name}" to flash sale session!`);
+        },
+        removeProductFromSession(id) {
+          const prod = this.sessionProducts.find(p => p.id === id);
+          this.sessionProducts = this.sessionProducts.filter(p => p.id !== id);
+          this.notify(`Removed "${prod ? prod.name : 'product'}" from session.`, 'error');
+        },
+
+        // Customer Cart Actions
+        addToCart(item) {
+          const existing = this.cart.find(c => c.id === item.id);
+          const initialQty = item.minOrder || 1;
+
+          if (existing) {
+            if (existing.quantity + 1 > (item.sessionQuota - item.claimed)) {
+              this.notify('Maximum available session quota reached!', 'error');
+              return;
+            }
+            existing.quantity += 1;
+            this.notify(`Updated ${item.name} quantity to ${existing.quantity}`);
+          } else {
+            if (initialQty > (item.sessionQuota - item.claimed)) {
+              this.notify(`Not enough stock remaining to fulfill minimum order (${item.minOrder} pcs)`, 'error');
+              return;
+            }
+            this.cart.push({
+              ...item,
+              quantity: initialQty
+            });
+            this.notify(`Added to cart with MOQ of ${initialQty} pcs`);
+          }
+        },
+        quickBuy(item) {
+          this.addToCart(item);
+          this.isCartOpen = true;
+        },
+        incrementCart(item) {
+          const master = this.sessionProducts.find(p => p.id === item.id);
+          if (master && item.quantity + 1 > (master.sessionQuota - master.claimed)) {
+            this.notify('Exceeds available flash session limit', 'error');
+            return;
+          }
+          item.quantity++;
+        },
+        decrementCart(item) {
+          const min = item.minOrder || 1;
+          if (item.quantity > min) {
+            item.quantity--;
+          } else {
+            this.notify(`Cannot go below minimum order requirement (${min} pcs). Remove item instead?`, 'error');
+          }
+        },
+        removeFromCart(id) {
+          this.cart = this.cart.filter(c => c.id !== id);
+          this.notify('Item removed from cart');
+        },
+
+        // Checkout & Transaction Flow
+        processCheckout() {
+          if (this.cart.length === 0) return;
+          this.isCheckingOut = true;
+
+          setTimeout(() => {
+            // Deduct claimed quota from sessionProducts
+            this.cart.forEach(cartItem => {
+              const matched = this.sessionProducts.find(p => p.id === cartItem.id);
+              if (matched) {
+                matched.claimed += cartItem.quantity;
+              }
+            });
+
+            // Generate mock VA number
+            const prefix = this.checkoutForm.paymentMethod.includes('BCA') ? '8277 ' : this.checkoutForm.paymentMethod.includes('Mandiri') ? '8950 ' : '9360 ';
+            const generatedVA = prefix + Math.floor(1000 + Math.random() * 9000) + ' ' + Math.floor(1000 + Math.random() * 9000) + ' ' + Math.floor(1000 + Math.random() * 9000);
+
+            // Create Order record (Customer sees ORD-..., Jubelio SO kept in backend)
+            const newOrder = {
+              id: 'ord-' + Date.now(),
+              orderNumber: 'ORD-' + Math.floor(100000 + Math.random() * 900000),
+              jubelioSO: 'SO-JBL-' + Math.floor(10000 + Math.random() * 90000),
+              date: 'Just now',
+              status: 'UNPAID', // Start as UNPAID to let user experience payment simulation!
+              paymentMethod: this.checkoutForm.paymentMethod,
+              vaNumber: generatedVA,
+              customerName: this.checkoutForm.customerName,
+              address: this.checkoutForm.address,
+              shippingCourier: 'JNE Express (Trucking/Cargo)',
+              trackingNumber: 'PENDING_PAYMENT',
+              total: this.cartSubtotal,
+              items: JSON.parse(JSON.stringify(this.cart))
+            };
+
+            this.orders.unshift(newOrder);
+            this.cart = [];
+            this.isCheckingOut = false;
+            this.openCheckoutModal = false;
+            this.customerTab = 'transactions';
+            this.orderStatusFilter = 'ALL';
+            this.openPaymentModal(newOrder);
+            this.notify(`Order placed! Please complete payment.`, 'info');
+          }, 1200);
+        },
+
+        // Payment Simulation & Invoice Actions
+        openPaymentModal(order) {
+          this.selectedOrderForPayment = order;
+          this.startPaymentTicker();
+        },
+        closePaymentModal() {
+          this.selectedOrderForPayment = null;
+          if (this.paymentInterval) clearInterval(this.paymentInterval);
+        },
+        startPaymentTicker() {
+          if (this.paymentInterval) clearInterval(this.paymentInterval);
+          let secondsLeft = 14 * 60 + 59;
+          this.paymentInterval = setInterval(() => {
+            if (secondsLeft > 0) {
+              secondsLeft--;
+              const m = Math.floor(secondsLeft / 60);
+              const s = secondsLeft % 60;
+              this.paymentCountdown = `${m < 10 ? '0' + m : m}:${s < 10 ? '0' + s : s}`;
+            } else {
+              clearInterval(this.paymentInterval);
+            }
+          }, 1000);
+        },
+        simulateSuccessfulPayment(order) {
+          order.status = 'CONFIRMED';
+          order.trackingNumber = 'TRK-' + Math.floor(1000000 + Math.random() * 9000000);
+          this.closePaymentModal();
+          this.notify(`Payment confirmed for ${order.orderNumber}! Fulfillment queued.`, 'success');
+        },
+        simulateShipping(order) {
+          order.status = 'SHIPPED';
+          this.notify(`Order ${order.orderNumber} handed over to ${order.shippingCourier}!`, 'info');
+        },
+        viewInvoice(order) {
+          this.selectedOrderForInvoice = order;
+        },
+        copyToClipboard(text, label = 'Copied') {
+          navigator.clipboard ? navigator.clipboard.writeText(text) : null;
+          this.notify(`${label} copied to clipboard!`, 'info');
+        },
+
+        // Helper formatting
+        formatRupiah(num) {
+          if (num === undefined || num === null) return 'Rp 0';
+          return 'Rp ' + Number(num).toLocaleString('id-ID');
+        },
+        notify(msg, type = 'info') {
+          const id = Date.now();
+          this.toasts.push({ id, message: msg, type });
+          setTimeout(() => this.removeToast(id), 3500);
+        },
+        removeToast(id) {
+          this.toasts = this.toasts.filter(t => t.id !== id);
+        }
+      }
+    }
+  </script>
+</body>
+</html>

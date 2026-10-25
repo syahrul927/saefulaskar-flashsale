@@ -7,6 +7,8 @@
 - Before running any git operation on the `main` branch (commit, push, merge, rebase), confirm with your human partner first.
 - Never run `pnpm db:push` or `pnpm db:migrate`. Only `pnpm db:generate` is safe. Ask your human partner to apply migrations manually.
 - Always use yarn instead of npm, pnpm or bun.
+- Never use image as parameter input for your model. Either take a screenshot or reference existing file images. Your model doesn't support image input.
+- DO NOT EVER TRY TO USE READ FUNCTION FOR IMAGE EXTENSION LIKE PNG, JPG, JPEG or anything else.
 - Base components are shadcn in `src/app/_components/ui/`. Reuse those before writing new ones. Match shadcn look/style — use existing components when building visual companions or UI for the user.
 - New dashboard pages wrap their content in the standard page padding (`flex-1 space-y-6 p-4 md:p-6` or `p-6`) — match the sibling pages, not a bare unstyled div.
 

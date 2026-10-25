@@ -6,6 +6,7 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import { useSessionExpiry } from "@/app/_components/use-session-expiry";
 
 /**
  * "Konfirmasi Bayar" — calls `POST /api/orders/[id]/confirm` with a confirm
@@ -15,6 +16,7 @@ import { Spinner } from "@/components/ui/spinner";
 function ConfirmOrderButton({ orderId, bookingId }: { orderId: string; bookingId: string }) {
   const router = useRouter();
   const [loading, setLoading] = useState(false);
+  const signOutOnExpiry = useSessionExpiry();
 
   const handle = async () => {
     const ok = window.confirm(
@@ -30,6 +32,10 @@ function ConfirmOrderButton({ orderId, bookingId }: { orderId: string; bookingId
       const data = (await res.json().catch(() => null)) as
         | { ok?: boolean; error?: string }
         | null;
+      if (res.status === 401) {
+        await signOutOnExpiry();
+        return;
+      }
       if (!res.ok || !data?.ok) {
         toast.error(data?.error ?? "Konfirmasi gagal, coba lagi.");
         return;

@@ -3,7 +3,12 @@ import { eq } from "drizzle-orm";
 import { getSession } from "@/server/better-auth/server";
 import { db } from "@/server/db";
 import { flashSessions, sessionProducts } from "@/server/db/schema";
-import { jubelioClient, toAvailableStock } from "@/lib/jubelio";
+import {
+  createJubelioClient,
+  isJubelioAuthError,
+  toAvailableStock,
+  type JubelioClient,
+} from "@/lib/jubelio";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -12,12 +17,16 @@ function jsonError(status: number, error: string) {
   return Response.json({ error }, { status });
 }
 
-async function liveStock(sku: string | null): Promise<number | null> {
+async function liveStock(
+  client: JubelioClient,
+  sku: string | null,
+): Promise<number | null> {
   if (!sku) return null;
   try {
-    const raw = await jubelioClient.getStockBySku(sku);
+    const raw = await client.getStockBySku(sku);
     return toAvailableStock(raw) ?? null;
-  } catch {
+  } catch (e) {
+    if (isJubelioAuthError(e)) throw e; // surface session expiry to the route
     return null;
   }
 }
@@ -55,21 +64,29 @@ export async function GET(
     .from(sessionProducts)
     .where(eq(sessionProducts.sessionId, id));
 
-  const products = await Promise.all(
-    rows.map(async (row) => ({
-      id: row.id,
-      itemId: row.itemId,
-      skuCode: row.skuCode,
-      itemGroupName: row.itemGroupName,
-      originalPrice: row.originalPrice,
-      sessionQuota: row.sessionQuota,
-      claimed: row.claimed,
-      minOrder: row.minOrder,
-      flashPrice: row.flashPrice,
-      category: row.category,
-      availableStock: await liveStock(row.skuCode),
-    })),
-  );
+  const client = createJubelioClient(auth.user.token);
+
+  let products;
+  try {
+    products = await Promise.all(
+      rows.map(async (row) => ({
+        id: row.id,
+        itemId: row.itemId,
+        skuCode: row.skuCode,
+        itemGroupName: row.itemGroupName,
+        originalPrice: row.originalPrice,
+        sessionQuota: row.sessionQuota,
+        claimed: row.claimed,
+        minOrder: row.minOrder,
+        flashPrice: row.flashPrice,
+        category: row.category,
+        availableStock: await liveStock(client, row.skuCode),
+      })),
+    );
+  } catch (e) {
+    if (isJubelioAuthError(e)) return jsonError(401, "SESSION_EXPIRED");
+    return jsonError(502, "Gagal memuat stok, coba lagi");
+  }
 
   return Response.json({ ok: true, products });
 }
@@ -115,29 +132,20 @@ export async function POST(
   if (items.length === 0)
     return jsonError(400, "At least one product is required");
 
-  const created = await Promise.all(
-    items.map(async (input) => {
-      const availableStock = await liveStock(input.skuCode ?? null);
-      const sessionQuota = Math.min(20, availableStock ?? 0);
-      const jubelioStock = availableStock ?? 0;
-      return db
-        .insert(sessionProducts)
-        .values({
-          sessionId: id,
-          itemId: input.itemId,
-          skuCode: input.skuCode ?? "",
-          itemGroupName: input.itemGroupName ?? "",
-          originalPrice: input.originalPrice,
-          sessionQuota,
-          jubelioStock,
-          flashPrice: input.originalPrice,
-          minOrder: 1,
-          claimed: 0,
-          category: "",
-        })
-        .onConflictDoUpdate({
-          target: [sessionProducts.sessionId, sessionProducts.itemId],
-          set: {
+  const client = createJubelioClient(auth.user.token);
+
+  let created;
+  try {
+    created = await Promise.all(
+      items.map(async (input) => {
+        const availableStock = await liveStock(client, input.skuCode ?? null);
+        const sessionQuota = Math.min(20, availableStock ?? 0);
+        const jubelioStock = availableStock ?? 0;
+        return db
+          .insert(sessionProducts)
+          .values({
+            sessionId: id,
+            itemId: input.itemId,
             skuCode: input.skuCode ?? "",
             itemGroupName: input.itemGroupName ?? "",
             originalPrice: input.originalPrice,
@@ -145,12 +153,29 @@ export async function POST(
             jubelioStock,
             flashPrice: input.originalPrice,
             minOrder: 1,
+            claimed: 0,
             category: "",
-          },
-        })
-        .returning();
-    }),
-  ).then((results) => results.flat());
+          })
+          .onConflictDoUpdate({
+            target: [sessionProducts.sessionId, sessionProducts.itemId],
+            set: {
+              skuCode: input.skuCode ?? "",
+              itemGroupName: input.itemGroupName ?? "",
+              originalPrice: input.originalPrice,
+              sessionQuota,
+              jubelioStock,
+              flashPrice: input.originalPrice,
+              minOrder: 1,
+              category: "",
+            },
+          })
+          .returning();
+      }),
+    ).then((results) => results.flat());
+  } catch (e) {
+    if (isJubelioAuthError(e)) return jsonError(401, "SESSION_EXPIRED");
+    return jsonError(502, "Gagal memuat stok, coba lagi");
+  }
 
   return Response.json({ ok: true, products: created }, { status: 201 });
 }

@@ -20,7 +20,11 @@ export const env = createEnv({
     GOOGLE_CLIENT_SECRET: z.string().optional(),
     JUBELIO_HOST: z.string().url(),
     SAFAR_COMPANY_ID: z.coerce.number().default(59325),
-    JUBELIO_ACCESS_TOKEN: z.string(),
+    // "Default" system account for Jubelio calls with no logged-in user
+    // (cron, customer onboarding). Login (not a static token) issues the
+    // bearer used for those calls — see src/server/jubelio-token.ts.
+    JUBELIO_SYSTEM_EMAIL: z.string(),
+    JUBELIO_SYSTEM_PASSWORD: z.string(),
     JUBELIO_LOCATION_ID: z.coerce.number(),
     JUBELIO_BASE_URL: z
       .string()
@@ -58,7 +62,8 @@ export const env = createEnv({
     GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
     JUBELIO_HOST: process.env.JUBELIO_HOST,
     SAFAR_COMPANY_ID: process.env.SAFAR_COMPANY_ID,
-    JUBELIO_ACCESS_TOKEN: process.env.JUBELIO_ACCESS_TOKEN,
+    JUBELIO_SYSTEM_EMAIL: process.env.JUBELIO_SYSTEM_EMAIL,
+    JUBELIO_SYSTEM_PASSWORD: process.env.JUBELIO_SYSTEM_PASSWORD,
     JUBELIO_LOCATION_ID: process.env.JUBELIO_LOCATION_ID,
     JUBELIO_BASE_URL: process.env.JUBELIO_BASE_URL,
     WHATSAPP_NUMBER: process.env.WHATSAPP_NUMBER,

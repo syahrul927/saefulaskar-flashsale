@@ -13,6 +13,7 @@ function product(overrides: Partial<ProductState> = {}): ProductState {
     itemId: 101,
     skuCode: "SKU-1",
     itemName: "Test Product",
+    availableStock: 5,
     claimed: 0,
     sessionQuota: 10,
     minOrder: 1,
@@ -26,14 +27,13 @@ function deps(overrides: Partial<EvaluateCheckoutDeps> = {}): EvaluateCheckoutDe
     sessionStatus: "ACTIVE",
     products: new Map(),
     requested: [],
-    stockForItem: async () => 5,
     ...overrides,
   };
 }
 
 describe("evaluateCheckout", () => {
-  it("blocks when the session is not ACTIVE", async () => {
-    const result = await evaluateCheckout(
+  it("blocks when the session is not ACTIVE", () => {
+    const result = evaluateCheckout(
       deps({ sessionStatus: "ENDED" }),
     );
     expect(result).toEqual({
@@ -42,13 +42,12 @@ describe("evaluateCheckout", () => {
     });
   });
 
-  it("blocks when live stock is insufficient", async () => {
-    const p = product();
-    const result = await evaluateCheckout(
+  it("blocks when DB stock is insufficient", () => {
+    const p = product({ availableStock: 5 });
+    const result = evaluateCheckout(
       deps({
         products: new Map([[p.sessionProductId, p]]),
         requested: [{ sessionProductId: p.sessionProductId, qty: 6 }],
-        stockForItem: async () => 5,
       }),
     );
     expect(result).toEqual({
@@ -57,28 +56,12 @@ describe("evaluateCheckout", () => {
     });
   });
 
-  it("blocks when stock cannot be determined (null)", async () => {
-    const p = product();
-    const result = await evaluateCheckout(
-      deps({
-        products: new Map([[p.sessionProductId, p]]),
-        requested: [{ sessionProductId: p.sessionProductId, qty: 1 }],
-        stockForItem: async () => null,
-      }),
-    );
-    expect(result).toEqual({
-      ok: false,
-      error: { code: "STOCK_CHECK_FAILED", itemId: 101 },
-    });
-  });
-
-  it("blocks when claimed + qty exceeds session quota", async () => {
-    const p = product({ sessionQuota: 4, claimed: 0 });
-    const result = await evaluateCheckout(
+  it("blocks when claimed + qty exceeds session quota", () => {
+    const p = product({ sessionQuota: 4, claimed: 0, availableStock: 100 });
+    const result = evaluateCheckout(
       deps({
         products: new Map([[p.sessionProductId, p]]),
         requested: [{ sessionProductId: p.sessionProductId, qty: 5 }],
-        stockForItem: async () => 100,
       }),
     );
     expect(result).toEqual({
@@ -87,9 +70,9 @@ describe("evaluateCheckout", () => {
     });
   });
 
-  it("blocks when qty is below min order", async () => {
+  it("blocks when qty is below min order", () => {
     const p = product({ minOrder: 3 });
-    const result = await evaluateCheckout(
+    const result = evaluateCheckout(
       deps({
         products: new Map([[p.sessionProductId, p]]),
         requested: [{ sessionProductId: p.sessionProductId, qty: 2 }],
@@ -101,8 +84,8 @@ describe("evaluateCheckout", () => {
     });
   });
 
-  it("rejects an unknown session product", async () => {
-    const result = await evaluateCheckout(
+  it("rejects an unknown session product", () => {
+    const result = evaluateCheckout(
       deps({
         requested: [{ sessionProductId: "missing", qty: 1 }],
       }),
@@ -113,7 +96,7 @@ describe("evaluateCheckout", () => {
     });
   });
 
-  it("returns lines and grand total on the happy path", async () => {
+  it("returns lines and grand total on the happy path", () => {
     const p1 = product({
       itemId: 101,
       skuCode: "SKU-1",
@@ -127,7 +110,7 @@ describe("evaluateCheckout", () => {
       itemName: "Second",
       flashPrice: 25_000,
     });
-    const result = await evaluateCheckout(
+    const result = evaluateCheckout(
       deps({
         products: new Map([
           [p1.sessionProductId, p1],

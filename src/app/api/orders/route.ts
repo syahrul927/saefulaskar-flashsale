@@ -2,7 +2,6 @@ import { desc, eq, inArray, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { env } from "@/env";
-import { jubelioClient, toAvailableStock } from "@/lib/jubelio";
 import { getSession } from "@/server/better-auth/server";
 import { nextBookingId } from "@/server/booking-id";
 import {
@@ -44,8 +43,6 @@ function errorResponse(error: CheckoutError): Response {
       return jsonError(409, "Sesi telah berakhir");
     case "UNKNOWN_PRODUCT":
       return jsonError(400, "Produk tidak dikenal");
-    case "STOCK_CHECK_FAILED":
-      return jsonError(409, "Gagal cek stok, coba lagi", error.itemId);
     case "STOCK_INSUFFICIENT":
       return jsonError(409, "Stock tidak mencukupi", error.itemId);
     case "QUOTA_EXCEEDED":
@@ -58,7 +55,7 @@ function errorResponse(error: CheckoutError): Response {
 /**
  * POST /api/orders — checkout: oversell guard + local booking (spec §4.4).
  * Body: { sessionId, items: [{ sessionProductId, qty }] }.
- * Checks: session ACTIVE → live stock ≥ qty → claimed+qty ≤ quota → qty ≥ minOrder.
+ * Checks: session ACTIVE → DB stock ≥ qty → claimed+qty ≤ quota → qty ≥ minOrder.
  * On pass (one transaction): claimed += qty per product, insert `order` + items.
  * Responds { bookingId, grandTotal, bankAccounts, waLink }.
  */
@@ -94,6 +91,7 @@ export async function POST(request: Request) {
       itemId: row.itemId,
       skuCode: row.skuCode ?? "",
       itemName: row.itemGroupName ?? "",
+      availableStock: row.jubelioStock,
       claimed: row.claimed,
       sessionQuota: row.sessionQuota,
       minOrder: row.minOrder,
@@ -101,19 +99,10 @@ export async function POST(request: Request) {
     });
   }
 
-  const result = await evaluateCheckout({
+  const result = evaluateCheckout({
     sessionStatus: session.status,
     products,
     requested: body.items,
-    stockForItem: async ({ skuCode }) => {
-      if (!skuCode) return null;
-      try {
-        const raw = await jubelioClient.getStockBySku(skuCode);
-        return toAvailableStock(raw) ?? null;
-      } catch {
-        return null;
-      }
-    },
   });
 
   if (!result.ok) return errorResponse(result.error);

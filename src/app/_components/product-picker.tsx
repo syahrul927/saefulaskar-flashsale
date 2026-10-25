@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { useSessionExpiry } from "@/app/_components/use-session-expiry";
 
 export type SessionProduct = {
   id: string;
@@ -193,6 +194,7 @@ function ProductPicker({
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [adding, setAdding] = useState<number | null>(null);
+  const signOutOnExpiry = useSessionExpiry();
 
   useEffect(() => {
     const query = search.trim();
@@ -207,6 +209,10 @@ function ProductPicker({
           const res = await fetch(
             `/api/jubelio/products?search=${encodeURIComponent(query)}`,
           );
+          if (res.status === 401) {
+            await signOutOnExpiry();
+            return;
+          }
           const data = (await res.json().catch(() => [])) as SearchResult[];
           setResults(Array.isArray(data) ? data : []);
         } catch {
@@ -217,7 +223,7 @@ function ProductPicker({
       })();
     }, 300);
     return () => clearTimeout(handle);
-  }, [search]);
+  }, [search, signOutOnExpiry]);
 
   async function add(product: SearchResult) {
     setAdding(product.itemId);
@@ -237,6 +243,10 @@ function ProductPicker({
       const data = (await res.json().catch(() => null)) as
         | { ok?: boolean; products?: SessionProduct[]; error?: string }
         | null;
+      if (res.status === 401) {
+        await signOutOnExpiry();
+        return;
+      }
       if (!res.ok || !data?.ok) {
         toast.error(data?.error ?? "Gagal menambah produk.");
         return;
