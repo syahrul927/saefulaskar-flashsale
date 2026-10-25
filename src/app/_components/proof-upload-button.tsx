@@ -10,6 +10,11 @@ import { Spinner } from "@/components/ui/spinner";
 /**
  * Client-side "Upload Bukti Transfer" control. Picks a file, POSTs it to
  * `POST /api/orders/[id]/upload-proof`, and surfaces success/failure via toast.
+ *
+ * Restyle (Task 13) — mockup secondary CTA treatment (design.html:1141-1144:
+ * full-width, grey fill, small semibold label); upload/fetch behaviour is
+ * unchanged. Stacks full-width in `PaymentPanel` footers and wraps to its own
+ * line inside the orders-page action row.
  */
 function ProofUploadButton({ orderId }: { orderId: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
@@ -53,6 +58,7 @@ function ProofUploadButton({ orderId }: { orderId: string }) {
       <Button
         size="sm"
         variant="secondary"
+        className="w-full text-xs font-semibold"
         disabled={uploading}
         onClick={() => inputRef.current?.click()}
       >

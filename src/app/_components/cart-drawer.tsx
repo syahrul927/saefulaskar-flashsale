@@ -18,6 +18,7 @@ import {
   CheckoutDialog,
   type CheckoutResult,
 } from "./checkout-dialog";
+import { PaymentPanel } from "./payment-panel";
 
 function formatRupiah(value: number) {
   return new Intl.NumberFormat("id-ID", {
@@ -32,17 +33,19 @@ function formatRupiah(value: number) {
  * dot + "KERANJANG FLASH" + mono count header, letter-tile rows with mono
  * qty × price and a line subtotal, and a summary that shows the flash savings
  * ("Hemat Rp…") before the total. Bottom sheet on mobile, right slide-over
- * `max-w-md` from `md:` up. The drawer never mutates into the bank screen on
- * its own anymore — the CTA opens `CheckoutDialog` (recipient step, Task 12);
- * the existing bank-info view stays as the INTERIM payment surface, shown via
- * `checkoutResult` when the dialog's POST succeeds, until Task 13 replaces it
- * with PaymentPanel.
+ * `max-w-md` from `md:` up. The drawer never mutates into the payment screen
+ * on its own — the CTA opens `CheckoutDialog` (recipient step, Task 12).
  *
  * Visibility lives in `CartContext` (`drawerOpen` / `openDrawer` /
  * `closeDrawer`), not props — mounted exactly once by `(storefront)/layout`
  * so the header, the mobile bar and swipe-to-close all drive the same
  * instance on `/` and `/orders` alike. `sessionId` is optional: with no
  * ACTIVE session checkout is held (empty storefront), not silently broken.
+ *
+ * The payment surface is `PaymentPanel` (Task 13, mockup MODAL 3): the drawer
+ * morphs into it after a successful checkout, fed from `checkoutResult`, and
+ * the same close-resets-`checkoutResult` rule keeps it from surviving the
+ * drawer it lives in.
  */
 function CartDrawer({
   sessionId,
@@ -96,9 +99,9 @@ function CartDrawer({
     0,
   );
 
-  // Success flow (ruling: dialog closes, cart empties, the interim payment
-  // screen opens in the drawer). The toast + clear that used to live in the
-  // drawer's own fetch keep their exact behaviour here.
+  // Success flow (ruling: dialog closes, cart empties, `PaymentPanel` opens
+  // in the drawer). The toast + clear that used to live in the drawer's own
+  // fetch keep their exact behaviour here.
   const handleCheckoutSuccess = (result: CheckoutResult) => {
     setDialogOpen(false);
     setCheckoutResult(result);
@@ -141,78 +144,13 @@ function CartDrawer({
           </DrawerHeader>
 
           {checkoutResult ? (
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
-              <div className="flex-1 space-y-4 overflow-y-auto px-4 py-3">
-                <div className="rounded-2xl border border-border bg-muted/50 p-4">
-                  <p className="text-xs text-muted-foreground">Booking ID</p>
-                  <p className="mt-1 text-sm font-semibold tabular-nums text-foreground">
-                    {checkoutResult.bookingId}
-                  </p>
-                  <p className="mt-3 text-xs text-muted-foreground">
-                    Total yang harus ditransfer
-                  </p>
-                  <p className="mt-1 text-2xl font-bold tabular-nums text-foreground">
-                    {formatRupiah(checkoutResult.grandTotal)}
-                  </p>
-                </div>
-
-                <div>
-                  <p className="mb-2 text-sm font-medium text-foreground">
-                    Rekening Tujuan
-                  </p>
-                  {checkoutResult.bankAccounts.length === 0 ? (
-                    <p className="text-sm text-muted-foreground">
-                      Belum ada rekening yang diatur. Hubungi admin.
-                    </p>
-                  ) : (
-                    <div className="space-y-2">
-                      {checkoutResult.bankAccounts.map((bank) => (
-                        <div
-                          key={`${bank.bank}-${bank.account_number}`}
-                          className="rounded-2xl border border-border p-3"
-                        >
-                          <p className="text-sm font-semibold text-foreground">
-                            {bank.bank}
-                          </p>
-                          <p className="mt-0.5 text-sm tabular-nums text-muted-foreground">
-                            {bank.account_number}
-                          </p>
-                          <p className="text-xs text-muted-foreground">
-                            a.n. {bank.account_name}
-                          </p>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-              </div>
-
-              <DrawerFooter>
-                {checkoutResult.bankAccounts.length > 0 && (
-                  <Button
-                    size="lg"
-                    className="w-full"
-                    render={
-                      <a
-                        href={checkoutResult.bankAccounts[0]!.waLink}
-                        target="_blank"
-                        rel="noreferrer"
-                      />
-                    }
-                  >
-                    Kirim Bukti Transfer
-                  </Button>
-                )}
-                <Button
-                  size="lg"
-                  variant="outline"
-                  className="w-full"
-                  onClick={closeDrawer}
-                >
-                  Selesai
-                </Button>
-              </DrawerFooter>
-            </div>
+            <PaymentPanel
+              bookingId={checkoutResult.bookingId}
+              grandTotal={checkoutResult.grandTotal}
+              bankAccounts={checkoutResult.bankAccounts}
+              waLink={checkoutResult.bankAccounts[0]?.waLink ?? ""}
+              onDone={closeDrawer}
+            />
           ) : (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
               <div className="flex-1 space-y-3 overflow-y-auto bg-neutral-50/40 px-4 py-3 dark:bg-transparent">

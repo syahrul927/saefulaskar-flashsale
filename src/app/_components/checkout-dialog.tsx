@@ -32,9 +32,9 @@ export type CheckoutBankAccount = {
   waLink: string;
 };
 
-/** The `POST /api/orders` success payload — CartDrawer keeps it as its
- * interim payment screen (`checkoutResult`) until Task 13 swaps in
- * PaymentPanel. */
+/** The `POST /api/orders` success payload — CartDrawer keeps it as
+ * `checkoutResult` and feeds it to `PaymentPanel` (Task 13). Per-account
+ * `waLink`s ride on `bankAccounts`; the drawer hands the first one over. */
 export type CheckoutResult = {
   bookingId: string;
   grandTotal: number;
