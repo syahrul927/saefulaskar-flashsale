@@ -18,6 +18,9 @@ export type CartItem = {
   name: string;
   sku: string;
   price: number;
+  /** Flash-time original price — powers the drawer "Hemat Rp…" savings line.
+   * Optional so carts saved before Task 12 still load (they show no savings). */
+  originalPrice?: number;
   minOrder: number;
   qty: number;
 };
@@ -61,6 +64,9 @@ function loadCart(): CartItem[] {
         typeof (row as Record<string, unknown>).name === "string" &&
         typeof (row as Record<string, unknown>).sku === "string" &&
         typeof (row as Record<string, unknown>).price === "number" &&
+        ((row as Record<string, unknown>).originalPrice === undefined ||
+          typeof (row as Record<string, unknown>).originalPrice ===
+            "number") &&
         typeof (row as Record<string, unknown>).minOrder === "number" &&
         typeof (row as Record<string, unknown>).qty === "number",
     );

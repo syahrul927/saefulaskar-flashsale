@@ -147,6 +147,39 @@ export function evaluateCheckout(
   return { ok: true, lines, grandTotal };
 }
 
+/** Recipient fields a checkout body may carry (see `recipientSchema`). */
+export type CheckoutRecipientInput = {
+  recipientName?: string | null;
+  recipientPhone?: string | null;
+  recipientAddress?: string | null;
+};
+
+/**
+ * Build the `orders` insert values from a validated checkout body (Task 12).
+ * Pure so the recipient-snapshot rule is unit-testable: the three recipient
+ * fields land verbatim on the order, and missing/undefined inputs persist as
+ * `null` (never `undefined` — the columns are nullable and the receipt layer
+ * renders `null` as an em dash). `evaluateCheckout` stays untouched; this is
+ * the snapshot half of the same guard file.
+ */
+export function buildOrderValues(
+  body: CheckoutRecipientInput,
+  customerId: string,
+  sessionId: string,
+  grandTotal: number,
+) {
+  return {
+    customerId,
+    sessionId,
+    status: "UNPAID" as const,
+    grandTotal,
+    paymentMethod: "transfer",
+    recipientName: body.recipientName ?? null,
+    recipientPhone: body.recipientPhone ?? null,
+    recipientAddress: body.recipientAddress ?? null,
+  };
+}
+
 /**
  * Build the pre-filled WhatsApp "proof of transfer" link (spec §5.2, template G6).
  * The number is `WHATSAPP_NUMBER` without the leading `+` (already `wa.me`-ready).

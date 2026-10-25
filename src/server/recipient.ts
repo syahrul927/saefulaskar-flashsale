@@ -11,6 +11,17 @@ export const recipientSchema = z.object({
 });
 
 /**
+ * SSR-fetched checkout prefill (Task 12): the latest contact per field, or
+ * `null` when the shopper has none — the client form renders `null` as an
+ * empty input with no "← dari akun Anda" hint.
+ */
+export type RecipientDefaults = {
+  name: string | null;
+  phone: string | null;
+  address: string | null;
+};
+
+/**
  * Resolve the shipping recipient for an order, field by field: the order's own
  * snapshot first, then the linked `contacts` record (orders created before the
  * snapshot columns existed), then `null`.

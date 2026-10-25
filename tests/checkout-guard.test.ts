@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  buildOrderValues,
   buildWaLink,
   evaluateCheckout,
   type EvaluateCheckoutDeps,
@@ -147,6 +148,57 @@ describe("evaluateCheckout", () => {
         },
       ],
     });
+  });
+});
+
+describe("buildOrderValues", () => {
+  it("carries the three recipient fields verbatim into the order values", () => {
+    const values = buildOrderValues(
+      {
+        recipientName: "Budi Santoso",
+        recipientPhone: "081234567890",
+        recipientAddress: "Jl. Merdeka No. 1, Jakarta Pusat",
+      },
+      "customer-1",
+      "00000000-0000-0000-0000-000000000009",
+      175_000,
+    );
+
+    expect(values).toEqual({
+      customerId: "customer-1",
+      sessionId: "00000000-0000-0000-0000-000000000009",
+      status: "UNPAID",
+      grandTotal: 175_000,
+      paymentMethod: "transfer",
+      recipientName: "Budi Santoso",
+      recipientPhone: "081234567890",
+      recipientAddress: "Jl. Merdeka No. 1, Jakarta Pusat",
+    });
+  });
+
+  it("maps missing recipient fields to null", () => {
+    const values = buildOrderValues({}, "customer-1", "session-1", 50_000);
+
+    expect(values.recipientName).toBeNull();
+    expect(values.recipientPhone).toBeNull();
+    expect(values.recipientAddress).toBeNull();
+  });
+
+  it("maps explicitly undefined recipient fields to null", () => {
+    const values = buildOrderValues(
+      {
+        recipientName: undefined,
+        recipientPhone: undefined,
+        recipientAddress: undefined,
+      },
+      "customer-1",
+      "session-1",
+      50_000,
+    );
+
+    expect(values.recipientName).toBeNull();
+    expect(values.recipientPhone).toBeNull();
+    expect(values.recipientAddress).toBeNull();
   });
 });
 

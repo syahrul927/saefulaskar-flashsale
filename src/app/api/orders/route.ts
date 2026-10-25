@@ -5,6 +5,7 @@ import { env } from "@/env";
 import { getSession } from "@/server/better-auth/server";
 import { nextBookingId } from "@/server/booking-id";
 import {
+  buildOrderValues,
   buildWaLink,
   evaluateCheckout,
   parseBankAccounts,
@@ -18,20 +19,25 @@ import {
   orders,
   sessionProducts,
 } from "@/server/db/schema";
+import { recipientSchema } from "@/server/recipient";
 
 export const runtime = "nodejs";
 
-const CheckoutBody = z.object({
-  sessionId: z.string().uuid(),
-  items: z
-    .array(
-      z.object({
-        sessionProductId: z.string().uuid(),
-        qty: z.number().int().positive(),
-      }),
-    )
-    .min(1),
-});
+const CheckoutBody = z
+  .object({
+    sessionId: z.string().uuid(),
+    items: z
+      .array(
+        z.object({
+          sessionProductId: z.string().uuid(),
+          qty: z.number().int().positive(),
+        }),
+      )
+      .min(1),
+  })
+  // Task 12 recipient snapshot — optional, additive to the old body, so the
+  // guard's own tests and legacy clients keep working.
+  .merge(recipientSchema);
 
 function jsonError(status: number, error: string, itemId?: number) {
   return Response.json({ ok: false, error, ...(itemId === undefined ? {} : { itemId }) }, { status });
@@ -54,7 +60,9 @@ function errorResponse(error: CheckoutError): Response {
 
 /**
  * POST /api/orders — checkout: oversell guard + local booking (spec §4.4).
- * Body: { sessionId, items: [{ sessionProductId, qty }] }.
+ * Body: { sessionId, items: [{ sessionProductId, qty }], recipientName?,
+ * recipientPhone?, recipientAddress? } — the recipient fields snapshot onto
+ * the order row (undefined → null) via `buildOrderValues`.
  * Checks: session ACTIVE → DB stock ≥ qty → claimed+qty ≤ quota → qty ≥ minOrder.
  * On pass (one transaction): claimed += qty per product, insert `order` + items.
  * Responds { bookingId, grandTotal, bankAccounts, waLink }.
@@ -124,11 +132,7 @@ export async function POST(request: Request) {
         .insert(orders)
         .values({
           bookingId,
-          customerId: auth.user.id,
-          sessionId: body.sessionId,
-          status: "UNPAID",
-          grandTotal,
-          paymentMethod: "transfer",
+          ...buildOrderValues(body, auth.user.id, body.sessionId, grandTotal),
         })
         .returning();
       if (!order) throw new Error("order insert returned no row");

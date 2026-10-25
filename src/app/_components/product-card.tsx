@@ -66,6 +66,7 @@ function ProductCard({ product }: ProductCardProps) {
         name: product.itemGroupName ?? `SKU ${product.skuCode ?? product.itemId}`,
         sku: product.skuCode ?? "",
         price: product.flashPrice,
+        originalPrice: product.originalPrice,
         minOrder: product.minOrder,
       },
       product.minOrder,
