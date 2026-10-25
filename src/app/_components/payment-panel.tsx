@@ -34,6 +34,12 @@ function formatRupiah(value: number) {
  * and the upload control — the panel itself shows NO timer (D7). */
 const PROOF_POLL_MS = 4000;
 
+/** Consecutive not-found / 401-403 ticks tolerated before the poll gives up.
+ * A booking that is absent from the list or a dead session is permanent —
+ * without the cap the panel would re-hit `GET /api/orders` every 4s for its
+ * whole lifetime. Transient network/5xx errors never count. */
+const MAX_POLL_MISSES = 3;
+
 /** The order fields from `GET /api/orders` this panel actually reads. */
 export type OrderProofRow = {
   id?: unknown;
@@ -61,6 +67,41 @@ export function findOrderProof(
   };
 }
 
+/** One poll tick's classification, fed to `reduceMissStreak`. */
+export type PollOutcome = "found" | "miss" | "transient";
+
+/**
+ * Pure miss-streak reducer: `miss` (booking absent from the list, or 401/403
+ * auth failure) extends the consecutive streak; `found` resets it; `transient`
+ * (network/5xx) is neutral — it never counts toward giving up, so a brief
+ * offline blip cannot silently freeze a still-valid panel. `giveUp` flips once
+ * the streak reaches `maxMisses`.
+ */
+export function reduceMissStreak(
+  misses: number,
+  outcome: PollOutcome,
+  maxMisses = MAX_POLL_MISSES,
+): { misses: number; giveUp: boolean } {
+  const next =
+    outcome === "found" ? 0 : outcome === "miss" ? misses + 1 : misses;
+  return { misses: next, giveUp: next >= maxMisses };
+}
+
+type ProofPhase =
+  | { phase: "checking" }
+  | { phase: "ready"; orderId: string; uploaded: boolean }
+  | { phase: "unavailable" };
+
+/** Equality across the union — drives the "skip unchanged state" bail-out
+ * so a steady poll tick never re-renders the panel. */
+export function sameProofPhase(a: ProofPhase, b: ProofPhase): boolean {
+  if (a.phase !== b.phase) return false;
+  if (a.phase === "ready" && b.phase === "ready") {
+    return a.orderId === b.orderId && a.uploaded === b.uploaded;
+  }
+  return true;
+}
+
 /** Clipboard write + the verbatim "Disalin" toast. A missing/insecure
  * `navigator.clipboard` throws into the catch, which is the fallback path. */
 async function copyToClipboard(value: string) {
@@ -86,11 +127,6 @@ function CopyChip({ value, label }: { value: string; label: string }) {
     </Button>
   );
 }
-
-type ProofPhase =
-  | { phase: "checking" }
-  | { phase: "ready"; orderId: string; uploaded: boolean }
-  | { phase: "unavailable" };
 
 export type PaymentPanelProps = {
   bookingId: string;
@@ -130,11 +166,15 @@ function PaymentPanel({
   // Proof status comes from polling the order list — the POST response never
   // returns the order UUID that `/api/orders/[id]/upload-proof` requires, so
   // the panel resolves bookingId → order row and mirrors `transferProofUrl`.
-  // Polling stops the moment the upload is confirmed; failures never toast
-  // (background loop) and only the first one drops the skeleton.
+  // Bounded lifecycle: ticks are skipped while the tab is hidden (the
+  // interval itself is not torn down — deps stay honest); the streak caps at
+  // MAX_POLL_MISSES consecutive permanent misses (absent booking, 401/403) so
+  // an unreachable order can't re-hit the unpaginated list forever; success
+  // (uploaded) stops polling; unchanged state never re-renders.
   useEffect(() => {
     if ((open ?? true) === false || bookingId.length === 0) return;
     let active = true;
+    let misses = 0;
     // Held in an object so `tick()`'s async continuation can clear the
     // interval it started, while the binding itself stays `const`.
     const polling = { id: undefined as number | undefined };
@@ -144,29 +184,56 @@ function PaymentPanel({
         polling.id = undefined;
       }
     };
+    const setProofIfChanged = (next: ProofPhase) => {
+      setProof((prev) => (sameProofPhase(prev, next) ? prev : next));
+    };
     const tick = async () => {
+      // Background tab: no request, no state churn; the next visible tick
+      // resumes the poll.
+      if (document.visibilityState !== "visible") return;
+      let outcome: PollOutcome = "found";
+      let nextPhase: ProofPhase | null = null;
+      let uploaded = false;
       try {
         const res = await fetch("/api/orders", { cache: "no-store" });
-        if (!res.ok) throw new Error(`HTTP ${res.status}`);
-        const data = (await res.json()) as { orders?: OrderProofRow[] };
-        if (!active) return;
-        const match = findOrderProof(data.orders ?? [], bookingId);
-        if (!match) {
-          setProof({ phase: "unavailable" });
-          return;
+        if (res.status === 401 || res.status === 403) {
+          // Auth is gone — the order is permanently unreadable from here.
+          outcome = "miss";
+          nextPhase = { phase: "unavailable" };
+        } else if (!res.ok) {
+          throw new Error(`HTTP ${res.status}`);
+        } else {
+          const data = (await res.json()) as { orders?: OrderProofRow[] };
+          const match = findOrderProof(data.orders ?? [], bookingId);
+          if (!match) {
+            outcome = "miss";
+            nextPhase = { phase: "unavailable" };
+          } else {
+            uploaded = match.uploaded;
+            nextPhase = {
+              phase: "ready",
+              orderId: match.orderId,
+              uploaded: match.uploaded,
+            };
+          }
         }
-        setProof({
-          phase: "ready",
-          orderId: match.orderId,
-          uploaded: match.uploaded,
-        });
-        if (match.uploaded) stopPolling();
       } catch {
-        if (!active) return;
+        // Transient network/5xx blip: neutral for the streak, never toasts.
+        outcome = "transient";
+      }
+      if (!active) return;
+      const streak = reduceMissStreak(misses, outcome);
+      misses = streak.misses;
+      if (nextPhase) {
+        setProofIfChanged(nextPhase);
+      } else {
+        // Transient failure: only drop the skeleton while it is still the
+        // first answer; later failures keep the last known state.
         setProof((prev) =>
           prev.phase === "checking" ? { phase: "unavailable" } : prev,
         );
       }
+      if (streak.giveUp || uploaded) stopPolling();
     };
     setProof({ phase: "checking" });
     void tick();
@@ -230,7 +297,7 @@ function PaymentPanel({
           <div className="font-mono text-[10px] font-bold uppercase tracking-wider text-neutral-500">
             Booking ID
           </div>
-          <div className="flex items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-2">
+          <div className="flex items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-2 dark:border-border dark:bg-card">
             <span className="min-w-0 truncate font-mono text-sm font-black tracking-wider text-neutral-950 dark:text-neutral-50 sm:text-base">
               {bookingId}
             </span>
