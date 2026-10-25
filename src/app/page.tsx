@@ -1,103 +1,72 @@
-import { headers } from "next/headers";
-import Link from "next/link";
-import { redirect } from "next/navigation";
+import { eq } from "drizzle-orm";
+import type { Metadata } from "next";
 
-import { LatestPost } from "@/app/_components/post";
-import { auth } from "@/server/better-auth";
-import { getSession } from "@/server/better-auth/server";
-import { api, HydrateClient } from "@/trpc/server";
+import { db } from "@/server/db";
+import { flashSessions, sessionProducts } from "@/server/db/schema";
+import { StorefrontView } from "./_components/storefront-view";
+import type { StorefrontProduct } from "./_components/product-card";
 
-export default async function Home() {
-  const hello = await api.post.hello({ text: "from tRPC" });
-  const session = await getSession();
+export const metadata: Metadata = {
+  title: "Flash Studio — Flash Sale",
+  description:
+    "Belanja produk flash sale dengan harga spesial selagi stok dan kuota masih ada.",
+};
 
-  if (session) {
-    void api.post.getLatest.prefetch();
-  }
+export const revalidate = 0;
+export const dynamic = "force-dynamic";
 
-  return (
-    <HydrateClient>
-      <main className="flex min-h-screen flex-col items-center justify-center bg-gradient-to-b from-[#2e026d] to-[#15162c] text-white">
-        <div className="container flex flex-col items-center justify-center gap-12 px-4 py-16">
-          <h1 className="text-5xl font-extrabold tracking-tight sm:text-[5rem]">
-            Create <span className="text-[hsl(280,100%,70%)]">T3</span> App
+export default async function HomePage() {
+  const [active] = await db
+    .select()
+    .from(flashSessions)
+    .where(eq(flashSessions.status, "ACTIVE"))
+    .orderBy(flashSessions.createdAt);
+
+  if (!active) {
+    return (
+      <main className="flex min-h-[70dvh] flex-1 items-center justify-center p-6">
+        <div className="max-w-sm rounded-4xl border border-border bg-card p-8 text-center shadow-sm">
+          <h1 className="text-xl font-bold text-foreground">
+            Belum ada Flash Sale aktif
           </h1>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 md:gap-8">
-            <Link
-              className="flex max-w-xs flex-col gap-4 rounded-xl bg-white/10 p-4 hover:bg-white/20"
-              href="https://create.t3.gg/en/usage/first-steps"
-              target="_blank"
-            >
-              <h3 className="text-2xl font-bold">First Steps →</h3>
-              <div className="text-lg">
-                Just the basics - Everything you need to know to set up your
-                database and authentication.
-              </div>
-            </Link>
-            <Link
-              className="flex max-w-xs flex-col gap-4 rounded-xl bg-white/10 p-4 hover:bg-white/20"
-              href="https://create.t3.gg/en/introduction"
-              target="_blank"
-            >
-              <h3 className="text-2xl font-bold">Documentation →</h3>
-              <div className="text-lg">
-                Learn more about Create T3 App, the libraries it uses, and how
-                to deploy it.
-              </div>
-            </Link>
-          </div>
-          <div className="flex flex-col items-center gap-2">
-            <p className="text-2xl text-white">
-              {hello ? hello.greeting : "Loading tRPC query..."}
-            </p>
-
-            <div className="flex flex-col items-center justify-center gap-4">
-              <p className="text-center text-2xl text-white">
-                {session && <span>Logged in as {session.user?.name}</span>}
-              </p>
-              {!session ? (
-                <form>
-                  <button
-                    className="rounded-full bg-white/10 px-10 py-3 font-semibold no-underline transition hover:bg-white/20"
-                    formAction={async () => {
-                      "use server";
-                      const res = await auth.api.signInSocial({
-                        body: {
-                          provider: "github",
-                          callbackURL: "/",
-                        },
-                      });
-                      if (!res.url) {
-                        throw new Error("No URL returned from signInSocial");
-                      }
-                      redirect(res.url);
-                    }}
-                  >
-                    Sign in with Github
-                  </button>
-                </form>
-              ) : (
-                <form>
-                  <button
-                    className="rounded-full bg-white/10 px-10 py-3 font-semibold no-underline transition hover:bg-white/20"
-                    formAction={async () => {
-                      "use server";
-                      await auth.api.signOut({
-                        headers: await headers(),
-                      });
-                      redirect("/");
-                    }}
-                  >
-                    Sign out
-                  </button>
-                </form>
-              )}
-            </div>
-          </div>
-
-          {session?.user && <LatestPost />}
+          <p className="mt-2 text-sm text-muted-foreground">
+            Pantau terus — sesi berikutnya akan segera dibuka oleh tim kami.
+          </p>
         </div>
       </main>
-    </HydrateClient>
+    );
+  }
+
+  const rows = await db
+    .select()
+    .from(sessionProducts)
+    .where(eq(sessionProducts.sessionId, active.id));
+
+  const products: StorefrontProduct[] = rows.map((row) => ({
+    id: row.id,
+    itemId: row.itemId,
+    skuCode: row.skuCode,
+    itemGroupName: row.itemGroupName,
+    originalPrice: row.originalPrice,
+    sessionQuota: row.sessionQuota,
+    claimed: row.claimed,
+    minOrder: row.minOrder,
+    flashPrice: row.flashPrice,
+    category: row.category,
+    availableStock: row.jubelioStock,
+  }));
+
+  return (
+    <StorefrontView
+      session={{
+        id: active.id,
+        name: active.name,
+        sessionName: active.sessionName,
+        startTime: active.startTime?.toISOString() ?? null,
+        endTime: active.endTime?.toISOString() ?? null,
+        status: active.status,
+      }}
+      products={products}
+    />
   );
 }
