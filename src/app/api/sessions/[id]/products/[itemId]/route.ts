@@ -25,7 +25,9 @@ const UpdateProduct = z
     sessionQuota: z.number().int().positive().optional(),
     minOrder: z.number().int().positive().optional(),
     flashPrice: z.number().int().nonnegative().optional(),
-    category: z.string().min(1).optional(),
+    // `null` = "Umum" (uncategorised). Empty strings still fail here; the
+    // roster picker normalises its "Umum" choice to null before sending.
+    category: z.string().trim().min(1).nullable().optional(),
     type: z.enum(PRODUCT_TYPES).optional(),
   })
   .refine(
@@ -87,7 +89,8 @@ export async function GET(
 /**
  * PUT /api/sessions/[id]/products/[itemId] — admin override of quota / min /
  * flash price / category / type for a single product (spec §4.3, G10 camelCase).
- * Body: { sessionQuota?, minOrder?, flashPrice?, category?, type? }.
+ * Body: { sessionQuota?, minOrder?, flashPrice?, category? (null = Umum),
+ * type? }.
  * Only SCHEDULED sessions accept edits (spec §5.9: config frozen once a
  * session leaves SCHEDULED). OWNER-only.
  */
@@ -107,10 +110,24 @@ export async function PUT(
   let body: z.infer<typeof UpdateProduct>;
   try {
     body = UpdateProduct.parse(await request.json());
-  } catch {
+  } catch (err) {
+    // Name the offending field(s) instead of guessing — a too-short string
+    // and a missing field are different problems.
+    const detail =
+      err instanceof z.ZodError
+        ? err.issues
+            .map((issue) =>
+              issue.path.length > 0
+                ? `${issue.path.join(".")}: ${issue.message}`
+                : issue.message,
+            )
+            .join("; ")
+        : "";
     return jsonError(
       400,
-      "Body tidak valid: minimal salah satu dari sessionQuota, minOrder, flashPrice, category, type harus dikirim.",
+      detail
+        ? `Body tidak valid: ${detail}.`
+        : "Body tidak valid: minimal salah satu dari sessionQuota, minOrder, flashPrice, category, type harus dikirim.",
     );
   }
 

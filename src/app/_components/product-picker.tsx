@@ -47,7 +47,8 @@ type RowPatch = {
   sessionQuota: number;
   minOrder: number;
   flashPrice: number;
-  category: string;
+  /** `null` = "Umum" (uncategorised); mirrors the nullable DB column. */
+  category: string | null;
   type: ProductType;
 };
 
@@ -73,6 +74,14 @@ function productLabel(product: SessionProduct) {
   return (
     product.itemGroupName ?? product.skuCode ?? `Item #${product.itemId}`
   );
+}
+
+/**
+ * Read-only category cell text: null AND legacy `""` both display as
+ * "Umum" (storefront D-rule; POST-imported rows store `""`).
+ */
+function categoryText(category: string | null): string {
+  return category === null || category.trim() === "" ? "Umum" : category;
 }
 
 /** Letter-tile thumb frame — mockup D6 (real images excluded). */
@@ -112,6 +121,37 @@ function RosterThumb({
   );
 }
 
+/** Parse a numeric draft; empty/NaN/decimal junk yields `null`. */
+function parseDraft(value: string): number | null {
+  if (value.trim() === "") return null;
+  const n = Number(value);
+  return Number.isInteger(n) ? n : null;
+}
+
+/**
+ * Guard for the per-row Simpan button: every visible numeric draft must be a
+ * finite integer within range before anything is sent. Emptying a cell must
+ * never POST `Number("") === 0` against the route's positive-int schema —
+ * the button just stays disabled until the draft is valid again.
+ */
+function canSaveRow(drafts: {
+  quota: string;
+  minOrder: string;
+  flashPrice: string;
+}): boolean {
+  const quota = parseDraft(drafts.quota);
+  const minOrder = parseDraft(drafts.minOrder);
+  const flashPrice = parseDraft(drafts.flashPrice);
+  return (
+    quota !== null &&
+    quota >= 1 &&
+    minOrder !== null &&
+    minOrder >= 1 &&
+    flashPrice !== null &&
+    flashPrice >= 0
+  );
+}
+
 /**
  * Per-row edit state + save/remove handlers, shared by the desktop table row
  * and the mobile card (Review Focus 4: `canEdit === false` renders no
@@ -143,7 +183,10 @@ function useRowEdit({
         sessionQuota: Number(quota),
         minOrder: Number(minOrder),
         flashPrice: Number(flashPrice),
-        category,
+        // "" is the deliberate "Umum" choice → store null (nullable column,
+        // storefront groups null as Umum). Freshly imported rows carry "" in
+        // the DB; normalising here keeps them saveable without touching POST.
+        category: category.trim() === "" ? null : category,
         type,
       });
     } finally {
@@ -173,7 +216,8 @@ function useRowEdit({
     setType,
     saving,
     removing,
-    canSave: canEdit && !removing,
+    canSave:
+      canEdit && !removing && canSaveRow({ quota, minOrder, flashPrice }),
     canRemove: canEdit && !removing && !saving,
     handleSave,
     handleRemove,
@@ -199,6 +243,7 @@ function CategorySelect({
       disabled={row.saving}
       className={cn(fullWidth && "w-full", cellSelectClass)}
     >
+      {/* "" is a deliberate choice — handleSave maps it to `category: null`. */}
       <option value="">Umum</option>
       {options.map((c) => (
         <option key={c} value={c}>
@@ -272,7 +317,9 @@ function RosterTableRow({
         {canEdit ? (
           <CategorySelect row={row} product={product} options={options} />
         ) : (
-          <span className={readOnlyCellClass}>{product.category ?? "Umum"}</span>
+          <span className={readOnlyCellClass}>
+            {categoryText(product.category)}
+          </span>
         )}
       </td>
       <td className="py-3 px-3">
@@ -508,7 +555,7 @@ function RosterCard({
         <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
           {(
             [
-              ["Kategori", product.category ?? "Umum"],
+              ["Kategori", categoryText(product.category)],
               ["Tipe", PRODUCT_TYPE_LABELS[product.type]],
               ["Kuota Sale", String(product.sessionQuota)],
               ["Terklaim", `${product.claimed}/${product.sessionQuota}`],
@@ -844,4 +891,6 @@ function ProductPicker({
   );
 }
 
-export { ProductPicker };
+// Exported for unit tests — the roster's save guard + read-only category
+// display rule (pure, no React).
+export { ProductPicker, canSaveRow, categoryText };
