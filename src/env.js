@@ -13,6 +13,11 @@ export const env = createEnv({
         : z.string().optional(),
     BETTER_AUTH_GITHUB_CLIENT_ID: z.string(),
     BETTER_AUTH_GITHUB_CLIENT_SECRET: z.string(),
+    // Google OAuth for the customer onboarding flow (spec §4.1). Optional so
+    // the app still boots without them; the social provider is registered only
+    // when both are present.
+    GOOGLE_CLIENT_ID: z.string().optional(),
+    GOOGLE_CLIENT_SECRET: z.string().optional(),
     JUBELIO_HOST: z.string().url(),
     SAFAR_COMPANY_ID: z.coerce.number().default(59325),
     JUBELIO_ACCESS_TOKEN: z.string(),
@@ -49,6 +54,8 @@ export const env = createEnv({
     BETTER_AUTH_GITHUB_CLIENT_ID: process.env.BETTER_AUTH_GITHUB_CLIENT_ID,
     BETTER_AUTH_GITHUB_CLIENT_SECRET:
       process.env.BETTER_AUTH_GITHUB_CLIENT_SECRET,
+    GOOGLE_CLIENT_ID: process.env.GOOGLE_CLIENT_ID,
+    GOOGLE_CLIENT_SECRET: process.env.GOOGLE_CLIENT_SECRET,
     JUBELIO_HOST: process.env.JUBELIO_HOST,
     SAFAR_COMPANY_ID: process.env.SAFAR_COMPANY_ID,
     JUBELIO_ACCESS_TOKEN: process.env.JUBELIO_ACCESS_TOKEN,

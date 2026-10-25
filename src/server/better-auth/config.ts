@@ -1,6 +1,7 @@
 import { betterAuth } from "better-auth";
 import { drizzleAdapter } from "better-auth/adapters/drizzle";
 
+import { env } from "@/env";
 import { db } from "@/server/db";
 
 export const auth = betterAuth({
@@ -14,6 +15,18 @@ export const auth = betterAuth({
   // emailAndPassword: {
   //   enabled: true,
   // },
+  socialProviders: {
+    // Google OAuth for the customer onboarding flow (spec §4.1). Registered
+    // only when both credentials are present so the app still boots otherwise.
+    ...(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET
+      ? {
+          google: {
+            clientId: env.GOOGLE_CLIENT_ID,
+            clientSecret: env.GOOGLE_CLIENT_SECRET,
+          },
+        }
+      : {}),
+  },
   session: {
     // 2h session TTL — matches the Jubelio reference implementation.
     expiresIn: 7200,
@@ -37,14 +50,18 @@ export const auth = betterAuth({
       fullName: { type: "string", required: true, defaultValue: "" },
     },
   },
-  // GitHub social provider removed from active flows — Jubelio login
-  // replaces it. Re-enable here if needed later:
-  // socialProviders: {
-  //   github: {
-  //     clientId: env.BETTER_AUTH_GITHUB_CLIENT_ID,
-  //     clientSecret: env.BETTER_AUTH_GITHUB_CLIENT_SECRET,
-  //   },
-  // },
+  databaseHooks: {
+    user: {
+      create: {
+        // better-auth only creates user rows for Google OAuth customers here
+        // (Jubelio login inserts users directly via Drizzle), so default any
+        // better-auth-created user to the CUSTOMER role.
+        before: async (user) => ({
+          data: { ...user, role: "CUSTOMER" },
+        }),
+      },
+    },
+  },
 });
 
 export type Session = typeof auth.$Infer.Session;

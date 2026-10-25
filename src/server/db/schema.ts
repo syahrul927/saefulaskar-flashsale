@@ -34,7 +34,7 @@ export const posts = createTable(
   ],
 );
 
-export const userRole = pgEnum("user_role", ["STAFF", "OWNER"]);
+export const userRole = pgEnum("user_role", ["STAFF", "OWNER", "CUSTOMER"]);
 
 export const sessionStatus = pgEnum("session_status", [
   "SCHEDULED",
