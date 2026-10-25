@@ -7,8 +7,10 @@ import { env } from "@/env";
 import { getSession } from "@/server/better-auth/server";
 import { buildWaLink, parseBankAccounts } from "@/server/checkout";
 import { db } from "@/server/db";
-import { orderItems, orders } from "@/server/db/schema";
+import { contacts, orderItems, orders } from "@/server/db/schema";
+import { resolveRecipient } from "@/server/recipient";
 import { ProofUploadButton } from "@/app/_components/proof-upload-button";
+import { ReceiptTrigger, type ReceiptOrderData } from "@/app/_components/receipt-dialog";
 
 export const metadata: Metadata = {
   title: "Riwayat Pesanan — Flash Studio",
@@ -43,9 +45,28 @@ export default async function OrdersPage() {
   const session = await getSession();
   if (!session) redirect("/auth/login");
 
+  // Left-join the linked contact: pre-snapshot orders fall back to it for the
+  // receipt's Pembayar rows (`resolveRecipient`), and a deleted contact yields
+  // null join columns which the receipt renders as "—".
   const rows = await db
-    .select()
+    .select({
+      id: orders.id,
+      bookingId: orders.bookingId,
+      status: orders.status,
+      grandTotal: orders.grandTotal,
+      paymentMethod: orders.paymentMethod,
+      transferProofUrl: orders.transferProofUrl,
+      recipientName: orders.recipientName,
+      recipientPhone: orders.recipientPhone,
+      recipientAddress: orders.recipientAddress,
+      createdAt: orders.createdAt,
+      contactRowId: contacts.id,
+      contactName: contacts.contactName,
+      contactPhone: contacts.phone,
+      contactAddress: contacts.sAddress,
+    })
     .from(orders)
+    .leftJoin(contacts, eq(orders.contactId, contacts.id))
     .where(eq(orders.customerId, session.user.id))
     .orderBy(desc(orders.createdAt));
 
@@ -87,6 +108,40 @@ export default async function OrdersPage() {
         <div className="space-y-4">
           {rows.map((order) => {
             const items = itemsByOrder.get(order.id) ?? [];
+            const receipt: ReceiptOrderData = {
+              orderId: order.id,
+              bookingId: order.bookingId,
+              status: order.status,
+              statusLabel: STATUS_LABEL[order.status] ?? order.status,
+              dateLabel: order.createdAt.toLocaleString("id-ID", {
+                dateStyle: "medium",
+                timeStyle: "short",
+              }),
+              paymentMethod: order.paymentMethod,
+              recipient: resolveRecipient({
+                order: {
+                  recipientName: order.recipientName,
+                  recipientPhone: order.recipientPhone,
+                  recipientAddress: order.recipientAddress,
+                },
+                contact:
+                  order.contactRowId === null
+                    ? null
+                    : {
+                        contactName: order.contactName,
+                        phone: order.contactPhone,
+                        sAddress: order.contactAddress,
+                      },
+              }),
+              items: items.map((item) => ({
+                id: item.id,
+                name: item.itemName,
+                qty: item.qty,
+                priceLabel: formatRupiah(item.price),
+                subtotalLabel: formatRupiah(item.subtotal),
+              })),
+              grandTotalLabel: formatRupiah(order.grandTotal),
+            };
             const orderBanks = banks.map((bank) => ({
               ...bank,
               waLink: buildWaLink({
@@ -120,6 +175,7 @@ export default async function OrdersPage() {
                     <Badge variant={STATUS_VARIANT[order.status] ?? "secondary"}>
                       {STATUS_LABEL[order.status] ?? order.status}
                     </Badge>
+                    <ReceiptTrigger order={receipt} />
                   </div>
                 </div>
 
