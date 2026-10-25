@@ -15,6 +15,16 @@ export const env = createEnv({
     BETTER_AUTH_GITHUB_CLIENT_SECRET: z.string(),
     JUBELIO_HOST: z.string().url(),
     SAFAR_COMPANY_ID: z.coerce.number().default(59325),
+    JUBELIO_ACCESS_TOKEN: z.string(),
+    JUBELIO_LOCATION_ID: z.coerce.number(),
+    JUBELIO_BASE_URL: z
+      .string()
+      .url()
+      .default("https://open.jubelio.com/core-api/"),
+    WHATSAPP_NUMBER: z.string(),
+    // JSON array string, parsed at runtime (e.g. BANK_ACCOUNTS = '[{"bank":"BCA",...}]')
+    BANK_ACCOUNTS: z.string(),
+    CRON_SECRET: z.string(),
     DATABASE_URL: z.string().url(),
     NODE_ENV: z
       .enum(["development", "test", "production"])
@@ -41,6 +51,12 @@ export const env = createEnv({
       process.env.BETTER_AUTH_GITHUB_CLIENT_SECRET,
     JUBELIO_HOST: process.env.JUBELIO_HOST,
     SAFAR_COMPANY_ID: process.env.SAFAR_COMPANY_ID,
+    JUBELIO_ACCESS_TOKEN: process.env.JUBELIO_ACCESS_TOKEN,
+    JUBELIO_LOCATION_ID: process.env.JUBELIO_LOCATION_ID,
+    JUBELIO_BASE_URL: process.env.JUBELIO_BASE_URL,
+    WHATSAPP_NUMBER: process.env.WHATSAPP_NUMBER,
+    BANK_ACCOUNTS: process.env.BANK_ACCOUNTS,
+    CRON_SECRET: process.env.CRON_SECRET,
     DATABASE_URL: process.env.DATABASE_URL,
     NODE_ENV: process.env.NODE_ENV,
   },
