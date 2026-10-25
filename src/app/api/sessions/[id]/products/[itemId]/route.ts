@@ -2,7 +2,11 @@ import { and, eq } from "drizzle-orm";
 
 import { getSession } from "@/server/better-auth/server";
 import { db } from "@/server/db";
-import { flashSessions, sessionProducts } from "@/server/db/schema";
+import {
+  flashSessions,
+  PRODUCT_TYPES,
+  sessionProducts,
+} from "@/server/db/schema";
 import {
   createJubelioClient,
   isJubelioAuthError,
@@ -22,13 +26,15 @@ const UpdateProduct = z
     minOrder: z.number().int().positive().optional(),
     flashPrice: z.number().int().nonnegative().optional(),
     category: z.string().min(1).optional(),
+    type: z.enum(PRODUCT_TYPES).optional(),
   })
   .refine(
     (o) =>
       o.sessionQuota !== undefined ||
       o.minOrder !== undefined ||
       o.flashPrice !== undefined ||
-      o.category !== undefined,
+      o.category !== undefined ||
+      o.type !== undefined,
     {
       message: "At least one field to update is required",
     },
@@ -80,8 +86,8 @@ export async function GET(
 
 /**
  * PUT /api/sessions/[id]/products/[itemId] — admin override of quota / min /
- * flash price / category for a single product (spec §4.3, G10 camelCase).
- * Body: { sessionQuota?, minOrder?, flashPrice?, category? }.
+ * flash price / category / type for a single product (spec §4.3, G10 camelCase).
+ * Body: { sessionQuota?, minOrder?, flashPrice?, category?, type? }.
  * Only SCHEDULED sessions accept edits (spec §5.9: config frozen once a
  * session leaves SCHEDULED). OWNER-only.
  */
@@ -104,7 +110,7 @@ export async function PUT(
   } catch {
     return jsonError(
       400,
-      "Invalid body: at least one of sessionQuota, minOrder, flashPrice, category",
+      "Body tidak valid: minimal salah satu dari sessionQuota, minOrder, flashPrice, category, type harus dikirim.",
     );
   }
 
@@ -138,6 +144,7 @@ export async function PUT(
         ? { flashPrice: body.flashPrice }
         : {}),
       ...(body.category !== undefined ? { category: body.category } : {}),
+      ...(body.type !== undefined ? { type: body.type } : {}),
     })
     .where(
       and(

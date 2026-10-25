@@ -1,13 +1,22 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
+import { PackageIcon, TrashIcon } from "@phosphor-icons/react";
+import { cn } from "cn";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
-import { Field, FieldLabel } from "@/components/ui/field";
+import { FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Spinner } from "@/components/ui/spinner";
+import { Panel } from "@/app/_components/panel";
+import { categoryOptions } from "@/app/_components/category-options";
 import { useSessionExpiry } from "@/app/_components/use-session-expiry";
+import {
+  PRODUCT_TYPES,
+  PRODUCT_TYPE_LABELS,
+  type ProductType,
+} from "@/server/db/schema";
 
 export type SessionProduct = {
   id: string;
@@ -20,6 +29,9 @@ export type SessionProduct = {
   minOrder: number;
   flashPrice: number;
   category: string | null;
+  type: ProductType;
+  /** Catalog image URL — never populated yet (mockup D6: letter tiles). */
+  image?: string | null;
   availableStock: number | null;
 };
 
@@ -31,6 +43,14 @@ type SearchResult = {
   minOrder: number;
 };
 
+type RowPatch = {
+  sessionQuota: number;
+  minOrder: number;
+  flashPrice: number;
+  category: string;
+  type: ProductType;
+};
+
 function formatRupiah(value: number) {
   return new Intl.NumberFormat("id-ID", {
     style: "currency",
@@ -39,7 +59,65 @@ function formatRupiah(value: number) {
   }).format(value);
 }
 
-function EditableProductRow({
+/** Shared class strings for the inline-edit cells (design.html:297-335). */
+const cellSelectClass =
+  "rounded-lg border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs text-neutral-800 focus:border-brand-primary focus:outline-none dark:border-border dark:bg-input/30 dark:text-neutral-200";
+const cellInputClass =
+  "rounded-lg border border-neutral-200 bg-neutral-50 px-2 py-1 font-mono text-xs font-bold text-neutral-950 focus:border-brand-primary focus:outline-none dark:border-border dark:bg-input/30 dark:text-neutral-50";
+const cellInputAmberClass =
+  "rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 font-mono text-xs font-black text-amber-950 focus:border-brand-primary focus:outline-none dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100";
+const readOnlyCellClass =
+  "font-mono text-xs text-neutral-800 dark:text-neutral-200";
+
+function productLabel(product: SessionProduct) {
+  return (
+    product.itemGroupName ?? product.skuCode ?? `Item #${product.itemId}`
+  );
+}
+
+/** Letter-tile thumb frame — mockup D6 (real images excluded). */
+function RosterThumb({
+  product,
+  size = "table",
+}: {
+  product: SessionProduct;
+  size?: "table" | "card";
+}) {
+  const frame =
+    size === "table"
+      ? "h-10 w-10 rounded-lg"
+      : "h-12 w-12 rounded-xl";
+  const letter = size === "table" ? "text-base" : "text-lg";
+  if (product.image) {
+    return (
+      // Brief pins plain <img class="object-cover">; no next/image config for
+      // external Jubelio CDNs yet (images are excluded per mockup D6 anyway).
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={product.image}
+        alt=""
+        className={`${frame} shrink-0 border border-neutral-200 bg-neutral-100 object-cover dark:border-border`}
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden="true"
+      className={`flex shrink-0 items-center justify-center ${frame} bg-gradient-to-br from-amber-50 to-amber-200`}
+    >
+      <span className={`${letter} font-black text-amber-700`}>
+        {productLabel(product).charAt(0).toUpperCase()}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * Per-row edit state + save/remove handlers, shared by the desktop table row
+ * and the mobile card (Review Focus 4: `canEdit === false` renders no
+ * controls at all). Preserves the original per-row Simpan guard flow.
+ */
+function useRowEdit({
   product,
   canEdit,
   onSave,
@@ -47,136 +125,444 @@ function EditableProductRow({
 }: {
   product: SessionProduct;
   canEdit: boolean;
-  onSave: (itemId: number, patch: {
-    sessionQuota: number;
-    minOrder: number;
-    flashPrice: number;
-    category: string;
-  }) => Promise<void>;
+  onSave: (itemId: number, patch: RowPatch) => Promise<void>;
   onRemove: (itemId: number) => Promise<void>;
 }) {
   const [quota, setQuota] = useState(String(product.sessionQuota));
   const [minOrder, setMinOrder] = useState(String(product.minOrder));
   const [flashPrice, setFlashPrice] = useState(String(product.flashPrice));
   const [category, setCategory] = useState(product.category ?? "");
+  const [type, setType] = useState<ProductType>(product.type);
   const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
 
-  const label = product.itemGroupName ?? product.skuCode ?? `Item #${product.itemId}`;
+  async function handleSave() {
+    setSaving(true);
+    try {
+      await onSave(product.itemId, {
+        sessionQuota: Number(quota),
+        minOrder: Number(minOrder),
+        flashPrice: Number(flashPrice),
+        category,
+        type,
+      });
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleRemove() {
+    setRemoving(true);
+    try {
+      await onRemove(product.itemId);
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  return {
+    quota,
+    setQuota,
+    minOrder,
+    setMinOrder,
+    flashPrice,
+    setFlashPrice,
+    category,
+    setCategory,
+    type,
+    setType,
+    saving,
+    removing,
+    canSave: canEdit && !removing,
+    canRemove: canEdit && !removing && !saving,
+    handleSave,
+    handleRemove,
+  };
+}
+
+function CategorySelect({
+  row,
+  product,
+  options,
+  fullWidth,
+}: {
+  row: ReturnType<typeof useRowEdit>;
+  product: SessionProduct;
+  options: string[];
+  fullWidth?: boolean;
+}) {
+  return (
+    <select
+      aria-label={`Kategori ${productLabel(product)}`}
+      value={row.category}
+      onChange={(e) => row.setCategory(e.target.value)}
+      disabled={row.saving}
+      className={cn(fullWidth && "w-full", cellSelectClass)}
+    >
+      <option value="">Umum</option>
+      {options.map((c) => (
+        <option key={c} value={c}>
+          {c}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+function TypeSelect({
+  row,
+  product,
+  fullWidth,
+}: {
+  row: ReturnType<typeof useRowEdit>;
+  product: SessionProduct;
+  fullWidth?: boolean;
+}) {
+  return (
+    <select
+      aria-label={`Tipe ${productLabel(product)}`}
+      value={row.type}
+      onChange={(e) => row.setType(e.target.value as ProductType)}
+      disabled={row.saving}
+      className={cn(fullWidth && "w-full", cellSelectClass)}
+    >
+      {PRODUCT_TYPES.map((t) => (
+        <option key={t} value={t}>
+          {PRODUCT_TYPE_LABELS[t]}
+        </option>
+      ))}
+    </select>
+  );
+}
+
+/** Desktop inline-edit roster row (design.html:284-345). */
+function RosterTableRow({
+  product,
+  canEdit,
+  options,
+  onSave,
+  onRemove,
+}: {
+  product: SessionProduct;
+  canEdit: boolean;
+  options: string[];
+  onSave: (itemId: number, patch: RowPatch) => Promise<void>;
+  onRemove: (itemId: number) => Promise<void>;
+}) {
+  const row = useRowEdit({ product, canEdit, onSave, onRemove });
+  const label = productLabel(product);
 
   return (
-    <li className="rounded-2xl border border-border p-4">
+    <tr className="transition hover:bg-neutral-50/80 dark:hover:bg-input/30">
+      <td className="py-3 pl-4 pr-2">
+        <RosterThumb product={product} />
+      </td>
+      <td className="max-w-[240px] py-3 pr-3">
+        <div className="line-clamp-1 font-bold text-neutral-950 dark:text-neutral-50">
+          {label}
+        </div>
+        <div className="font-mono text-[10px] text-neutral-400">
+          SKU:{" "}
+          <span className="font-bold text-neutral-700 dark:text-neutral-300">
+            {product.skuCode ?? "—"}
+          </span>
+        </div>
+      </td>
+      <td className="py-3 px-3">
+        {canEdit ? (
+          <CategorySelect row={row} product={product} options={options} />
+        ) : (
+          <span className={readOnlyCellClass}>{product.category ?? "Umum"}</span>
+        )}
+      </td>
+      <td className="py-3 px-3">
+        {canEdit ? (
+          <TypeSelect row={row} product={product} />
+        ) : (
+          <span className={readOnlyCellClass}>
+            {PRODUCT_TYPE_LABELS[product.type]}
+          </span>
+        )}
+      </td>
+      <td className="py-3 px-3">
+        <span className="font-mono text-emerald-600">
+          {product.availableStock ?? "—"}
+        </span>
+      </td>
+      <td className="py-3 px-3">
+        {canEdit ? (
+          <input
+            type="number"
+            min={1}
+            aria-label={`Kuota Sale ${label}`}
+            value={row.quota}
+            onChange={(e) => row.setQuota(e.target.value)}
+            disabled={row.saving}
+            className={`w-16 ${cellInputClass}`}
+          />
+        ) : (
+          <span className={readOnlyCellClass}>{product.sessionQuota}</span>
+        )}
+      </td>
+      <td className="py-3 px-3">
+        <span className={`${readOnlyCellClass} tabular-nums`}>
+          {product.claimed}/{product.sessionQuota}
+        </span>
+      </td>
+      <td className="py-3 px-3">
+        {canEdit ? (
+          <div className="flex items-center gap-1">
+            <input
+              type="number"
+              min={1}
+              aria-label={`Min. Order ${label}`}
+              value={row.minOrder}
+              onChange={(e) => row.setMinOrder(e.target.value)}
+              disabled={row.saving}
+              className={`w-14 ${cellInputAmberClass}`}
+            />
+            <span className="font-mono text-[10px] text-neutral-400">pcs</span>
+          </div>
+        ) : (
+          <span className={readOnlyCellClass}>{product.minOrder}</span>
+        )}
+      </td>
+      <td className="py-3 px-3">
+        {canEdit ? (
+          <input
+            type="number"
+            min={0}
+            step={10000}
+            aria-label={`Harga Flash ${label}`}
+            value={row.flashPrice}
+            onChange={(e) => row.setFlashPrice(e.target.value)}
+            disabled={row.saving}
+            className={`w-28 ${cellInputClass}`}
+          />
+        ) : (
+          <span className={`${readOnlyCellClass} tabular-nums`}>
+            {product.flashPrice}
+          </span>
+        )}
+      </td>
+      <td className="py-3 pl-2 pr-4 text-right">
+        {canEdit && (
+          <div className="flex items-center justify-end gap-1">
+            <Button
+              variant="ink"
+              size="xs"
+              isLoading={row.saving}
+              disabled={row.saving || !row.canSave}
+              onClick={row.handleSave}
+            >
+              Simpan
+            </Button>
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="text-neutral-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+              isLoading={row.removing}
+              disabled={!row.canRemove}
+              aria-label={`Hapus ${label}`}
+              onClick={row.handleRemove}
+            >
+              <TrashIcon />
+            </Button>
+          </div>
+        )}
+      </td>
+    </tr>
+  );
+}
+
+/** Mobile roster card (design.html:351-416). */
+function RosterCard({
+  product,
+  canEdit,
+  options,
+  onSave,
+  onRemove,
+}: {
+  product: SessionProduct;
+  canEdit: boolean;
+  options: string[];
+  onSave: (itemId: number, patch: RowPatch) => Promise<void>;
+  onRemove: (itemId: number) => Promise<void>;
+}) {
+  const row = useRowEdit({ product, canEdit, onSave, onRemove });
+  const label = productLabel(product);
+
+  return (
+    <div className="space-y-3 p-4">
       <div className="flex items-start justify-between gap-3">
-        <div className="min-w-0">
-          <p className="truncate font-medium text-foreground">{label}</p>
-          <p className="text-xs text-muted-foreground">
-            SKU {product.skuCode ?? "—"} · Harga asli{" "}
-            {formatRupiah(product.originalPrice)} · Tersedia{" "}
-            {product.availableStock ?? "—"} · Terklaim {product.claimed}/
-            {product.sessionQuota}
-          </p>
+        <div className="flex min-w-0 items-center gap-2.5">
+          <RosterThumb product={product} size="card" />
+          <div className="min-w-0">
+            <h4 className="line-clamp-1 text-xs font-bold text-neutral-950 dark:text-neutral-50">
+              {label}
+            </h4>
+            <div className="mt-0.5 font-mono text-[10px] text-neutral-400">
+              SKU:{" "}
+              <span className="font-bold text-neutral-800 dark:text-neutral-200">
+                {product.skuCode ?? "—"}
+              </span>
+            </div>
+            <div className="font-mono text-[10px] text-emerald-700 dark:text-emerald-500">
+              Stok Jubelio:{" "}
+              <strong>{product.availableStock ?? "—"} pcs</strong>
+            </div>
+          </div>
         </div>
         {canEdit && (
           <Button
-            size="sm"
             variant="ghost"
-            disabled={removing || saving}
-            onClick={async () => {
-              setRemoving(true);
-              try {
-                await onRemove(product.itemId);
-              } finally {
-                setRemoving(false);
-              }
-            }}
+            size="icon-xs"
+            className="text-neutral-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+            isLoading={row.removing}
+            disabled={!row.canRemove}
+            aria-label={`Hapus ${label}`}
+            onClick={row.handleRemove}
           >
-            {removing ? <Spinner /> : "Hapus"}
+            <TrashIcon />
           </Button>
         )}
       </div>
 
-      {canEdit && (
-        <div className="mt-3 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Field>
-            <FieldLabel htmlFor={`quota-${product.itemId}`}>Kuota sesi</FieldLabel>
-            <Input
-              id={`quota-${product.itemId}`}
-              type="number"
-              min={1}
-              value={quota}
-              onChange={(e) => setQuota(e.target.value)}
-              disabled={saving}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor={`min-${product.itemId}`}>Min. order</FieldLabel>
-            <Input
-              id={`min-${product.itemId}`}
-              type="number"
-              min={1}
-              value={minOrder}
-              onChange={(e) => setMinOrder(e.target.value)}
-              disabled={saving}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor={`price-${product.itemId}`}>Harga flash</FieldLabel>
-            <Input
-              id={`price-${product.itemId}`}
-              type="number"
-              min={0}
-              value={flashPrice}
-              onChange={(e) => setFlashPrice(e.target.value)}
-              disabled={saving}
-            />
-          </Field>
-          <Field>
-            <FieldLabel htmlFor={`cat-${product.itemId}`}>Kategori</FieldLabel>
-            <Input
-              id={`cat-${product.itemId}`}
-              value={category}
-              onChange={(e) => setCategory(e.target.value)}
-              disabled={saving}
-              placeholder="mis. Elektronik"
-            />
-          </Field>
-        </div>
+      {canEdit ? (
+        <>
+          <div className="grid grid-cols-2 gap-2 text-xs">
+            <div>
+              <span className="block font-mono text-[9px] uppercase text-neutral-500">
+                Kategori
+              </span>
+              <CategorySelect
+                row={row}
+                product={product}
+                options={options}
+                fullWidth
+              />
+            </div>
+            <div>
+              <span className="block font-mono text-[9px] uppercase text-neutral-500">
+                Tipe
+              </span>
+              <TypeSelect row={row} product={product} fullWidth />
+            </div>
+            <div>
+              <span className="block font-mono text-[9px] uppercase text-neutral-500">
+                Kuota Sale
+              </span>
+              <input
+                type="number"
+                min={1}
+                value={row.quota}
+                onChange={(e) => row.setQuota(e.target.value)}
+                disabled={row.saving}
+                aria-label={`Kuota Sale ${label}`}
+                className={`w-full ${cellInputClass}`}
+              />
+            </div>
+            <div>
+              <span className="block font-mono text-[9px] uppercase text-neutral-500">
+                Min. Order
+              </span>
+              <input
+                type="number"
+                min={1}
+                value={row.minOrder}
+                onChange={(e) => row.setMinOrder(e.target.value)}
+                disabled={row.saving}
+                aria-label={`Min. Order ${label}`}
+                className={`w-full ${cellInputAmberClass}`}
+              />
+            </div>
+            <div className="col-span-2">
+              <span className="block font-mono text-[9px] uppercase text-neutral-500">
+                Harga Flash (Rp)
+              </span>
+              <input
+                type="number"
+                min={0}
+                step={10000}
+                value={row.flashPrice}
+                onChange={(e) => row.setFlashPrice(e.target.value)}
+                disabled={row.saving}
+                aria-label={`Harga Flash ${label}`}
+                className={`w-full ${cellInputClass}`}
+              />
+            </div>
+          </div>
+          <div className="pt-1">
+            <Button
+              variant="ink"
+              size="xs"
+              isLoading={row.saving}
+              disabled={row.saving || !row.canSave}
+              onClick={row.handleSave}
+            >
+              Simpan
+            </Button>
+          </div>
+        </>
+      ) : (
+        <dl className="grid grid-cols-2 gap-x-3 gap-y-2 text-xs">
+          {(
+            [
+              ["Kategori", product.category ?? "Umum"],
+              ["Tipe", PRODUCT_TYPE_LABELS[product.type]],
+              ["Kuota Sale", String(product.sessionQuota)],
+              ["Terklaim", `${product.claimed}/${product.sessionQuota}`],
+              ["Min. Order", String(product.minOrder)],
+              ["Harga Flash (Rp)", String(product.flashPrice)],
+            ] as const
+          ).map(([key, value]) => (
+            <div key={key}>
+              <dt className="font-mono text-[9px] uppercase text-neutral-500">
+                {key}
+              </dt>
+              <dd className={`${readOnlyCellClass} font-bold`}>{value}</dd>
+            </div>
+          ))}
+        </dl>
       )}
+    </div>
+  );
+}
 
-      {canEdit && (
-        <div className="mt-3">
-          <Button
-            size="sm"
-            variant="secondary"
-            disabled={saving}
-            onClick={async () => {
-              setSaving(true);
-              try {
-                await onSave(product.itemId, {
-                  sessionQuota: Number(quota),
-                  minOrder: Number(minOrder),
-                  flashPrice: Number(flashPrice),
-                  category,
-                });
-              } finally {
-                setSaving(false);
-              }
-            }}
-          >
-            {saving ? <Spinner /> : null}
-            {saving ? "Menyimpan..." : "Simpan"}
-          </Button>
-        </div>
+function EmptyRoster({
+  canEdit,
+  onImport,
+}: {
+  canEdit: boolean;
+  onImport: () => void;
+}) {
+  return (
+    <div className="flex flex-col items-center gap-3 px-4 py-12 text-center">
+      {/* Brief calls for Phosphor `BoxIcon`; this icon set version has no Box —
+          PackageIcon is the closest box glyph. */}
+      <PackageIcon className="h-12 w-12 text-neutral-300 dark:text-neutral-600" />
+      <p className="text-sm font-medium text-neutral-700 dark:text-neutral-300">
+        Belum ada produk
+      </p>
+      {canEdit ? (
+        <Button variant="brand" onClick={onImport}>
+          Import dari Jubelio
+        </Button>
+      ) : (
+        <p className="text-sm text-neutral-500 dark:text-neutral-400">
+          Belum ada produk dalam sesi ini.
+        </p>
       )}
-    </li>
+    </div>
   );
 }
 
 /**
- * Product picker for a session (spec §4.3). Live-searches the Jubelio catalog,
- * upserts picks via `POST /api/sessions/[id]/products`, and edits/removes rows
- * via `PUT`/`DELETE` on `[id]/products/[itemId]`. Read-only when the session
- * has left SCHEDULED (config frozen, spec §5.9).
+ * Product picker for a session (spec §4.3) + the roster panel. Live-searches
+ * the Jubelio catalog, upserts picks via `POST /api/sessions/[id]/products`,
+ * and edits/removes rows via `PUT`/`DELETE` on `[id]/products/[itemId]`.
+ * Read-only when the session has left SCHEDULED (config frozen, spec §5.9) —
+ * roster cells then render as plain mono text with no controls at all.
  */
 function ProductPicker({
   sessionId,
@@ -194,7 +580,11 @@ function ProductPicker({
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
   const [adding, setAdding] = useState<number | null>(null);
+  const searchSectionRef = useRef<HTMLDivElement | null>(null);
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
   const signOutOnExpiry = useSessionExpiry();
+
+  const categories = categoryOptions(products.map((p) => p.category));
 
   useEffect(() => {
     const query = search.trim();
@@ -269,12 +659,7 @@ function ProductPicker({
     }
   }
 
-  async function save(itemId: number, patch: {
-    sessionQuota: number;
-    minOrder: number;
-    flashPrice: number;
-    category: string;
-  }) {
+  async function save(itemId: number, patch: RowPatch) {
     try {
       const res = await fetch(`/api/sessions/${sessionId}/products/${itemId}`, {
         method: "PUT",
@@ -318,14 +703,23 @@ function ProductPicker({
     }
   }
 
+  function scrollToPicker() {
+    searchSectionRef.current?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+    searchInputRef.current?.focus({ preventScroll: true });
+  }
+
   return (
     <div className="space-y-6">
       {canEdit && (
-        <div>
+        <div ref={searchSectionRef}>
           <FieldLabel htmlFor="product-search">Tambah produk (cari Jubelio)</FieldLabel>
           <div className="relative mt-1.5">
             <Input
               id="product-search"
+              ref={searchInputRef}
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Cari nama produk atau SKU..."
@@ -367,30 +761,85 @@ function ProductPicker({
         </div>
       )}
 
-      <div>
-        <h2 className="text-sm font-medium text-foreground">
-          Produk dalam sesi ({products.length})
-        </h2>
-        {products.length === 0 ? (
-          <p className="mt-2 rounded-2xl border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-            {canEdit
-              ? "Belum ada produk. Cari produk di atas untuk menambahkan."
-              : "Belum ada produk dalam sesi ini."}
+      <Panel title="Roster Produk" count={`${products.length} item siap`}>
+        {canEdit && products.length > 0 && (
+          <p className="border-b border-neutral-100 bg-neutral-50/70 px-4 py-2 text-xs text-neutral-500 dark:border-border dark:bg-input/30 dark:text-neutral-400">
+            Atur Kategori, Tipe, Kuota Sale, dan Min. Order per produk.
           </p>
-        ) : (
-          <ul className="mt-2 space-y-3">
-            {products.map((p) => (
-              <EditableProductRow
-                key={p.itemId}
-                product={p}
-                canEdit={canEdit}
-                onSave={save}
-                onRemove={remove}
-              />
-            ))}
-          </ul>
         )}
-      </div>
+
+        {products.length === 0 ? (
+          <EmptyRoster canEdit={canEdit} onImport={scrollToPicker} />
+        ) : (
+          <>
+            {/* Desktop inline-edit table (design.html:268-348) */}
+            <div className="hidden md:block overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="border-b border-neutral-200 bg-neutral-100/70 font-mono text-[10px] uppercase text-neutral-600 dark:border-border dark:bg-input/30 dark:text-neutral-400">
+                  <tr>
+                    <th scope="col" className="py-3 pl-4 pr-2">
+                      <span className="sr-only">Gambar</span>
+                    </th>
+                    <th scope="col" className="py-3 pr-3">
+                      Produk &amp; SKU
+                    </th>
+                    <th scope="col" className="py-3 px-3">
+                      Kategori
+                    </th>
+                    <th scope="col" className="py-3 px-3">
+                      Tipe
+                    </th>
+                    <th scope="col" className="py-3 px-3">
+                      Stok Jubelio
+                    </th>
+                    <th scope="col" className="py-3 px-3">
+                      Kuota Sale
+                    </th>
+                    <th scope="col" className="py-3 px-3">
+                      Terklaim
+                    </th>
+                    <th scope="col" className="py-3 px-3">
+                      Min. Order
+                    </th>
+                    <th scope="col" className="py-3 px-3">
+                      Harga Flash (Rp)
+                    </th>
+                    <th scope="col" className="py-3 pl-2 pr-4 text-right">
+                      Aksi
+                    </th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-neutral-100 font-medium dark:divide-border">
+                  {products.map((p) => (
+                    <RosterTableRow
+                      key={p.itemId}
+                      product={p}
+                      canEdit={canEdit}
+                      options={categories}
+                      onSave={save}
+                      onRemove={remove}
+                    />
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile card roster (design.html:351-416) */}
+            <div className="md:hidden divide-y divide-neutral-100 dark:divide-border">
+              {products.map((p) => (
+                <RosterCard
+                  key={p.itemId}
+                  product={p}
+                  canEdit={canEdit}
+                  options={categories}
+                  onSave={save}
+                  onRemove={remove}
+                />
+              ))}
+            </div>
+          </>
+        )}
+      </Panel>
     </div>
   );
 }

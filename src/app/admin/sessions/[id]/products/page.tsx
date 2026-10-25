@@ -51,7 +51,10 @@ export default async function SessionProductsPage({
     minOrder: row.minOrder,
     flashPrice: row.flashPrice,
     category: row.category,
-    availableStock: null,
+    type: row.type,
+    // Real Jubelio stock persisted on the row — was hardcoded `null`, which
+    // blanked the roster's stock column (spec D: show actual stock).
+    availableStock: row.jubelioStock,
   }));
 
   const editable = session.status === "SCHEDULED";
