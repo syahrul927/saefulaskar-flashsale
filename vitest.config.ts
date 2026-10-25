@@ -19,6 +19,13 @@ export default defineConfig({
       NODE_ENV: "test",
       JUBELIO_HOST: "https://api2.jubelio.com",
       SAFAR_COMPANY_ID: "59325",
+      JUBELIO_ACCESS_TOKEN: "test-access-token",
+      JUBELIO_LOCATION_ID: "1",
+      JUBELIO_BASE_URL: "https://open.jubelio.com/core-api/",
+      WHATSAPP_NUMBER: "628123456789",
+      BANK_ACCOUNTS:
+        '[{"bank":"BCA","account_number":"123","account_name":"Test"}]',
+      CRON_SECRET: "test-cron-secret",
       DATABASE_URL:
         "postgresql://postgres:password@localhost:5432/saefulaskar-flash-sale",
       BETTER_AUTH_GITHUB_CLIENT_ID: "test-client-id",

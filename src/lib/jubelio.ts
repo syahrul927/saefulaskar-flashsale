@@ -43,6 +43,11 @@ async function request(
   let res = await send(env.JUBELIO_ACCESS_TOKEN);
   if (res.status === 401) {
     // Token may have been swapped in env externally — retry once with the new value.
+    // TODO (Task 10): 401 retry is a no-op with @t3-oss/env-nextjs — the proxy
+    // snapshot at import returns the same stale token. Fix: use a mutable token
+    // store (module-level `let currentToken`) updated by the refresh routine, and
+    // have the retry re-fetch a fresh env token then retry. This is the Jubelio
+    // token refresh pattern per spec §5.7.
     res = await send(env.JUBELIO_ACCESS_TOKEN);
   }
   if (!res.ok) {
@@ -130,6 +135,10 @@ export const jubelioClient = {
 
   /** GET /inventory/items/by-sku/{sku} — live stock re-check at checkout (spec §4.4). */
   async getStockBySku(sku: string): Promise<unknown> {
+    // TODO: location_id for getStockBySku — GET body unreliable; confirm with
+    // Jubelio whether location should be a query param ?location_id= or if the
+    // endpoint returns per-location stock natively. Currently returns all-location
+    // aggregate, which may overstate available stock at checkout.
     return request(`/inventory/items/by-sku/${encodeURIComponent(sku)}`, {
       method: "GET",
     });
