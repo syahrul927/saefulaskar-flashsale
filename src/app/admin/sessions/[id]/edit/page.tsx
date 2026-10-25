@@ -51,15 +51,16 @@ export default async function EditSessionPage({
   return (
     <main className="flex-1 space-y-6 p-4 md:p-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+        <h1 className="font-heading text-lg font-black uppercase tracking-wider text-neutral-950 sm:text-xl dark:text-neutral-50">
           Edit Sesi
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
           Ubah nama atau jadwal sesi yang belum aktif.
         </p>
       </div>
 
-      <div className="max-w-xl rounded-4xl border border-border bg-card p-6 shadow-sm">
+      {/* Same panel as the create flow, seeded with the stored parameters. */}
+      <div className="max-w-xl">
         <SessionForm mode="edit" sessionId={session.id} initial={initial} />
       </div>
     </main>

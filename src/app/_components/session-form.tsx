@@ -4,10 +4,17 @@ import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import { Panel } from "@/app/_components/panel";
 import { Button } from "@/components/ui/button";
 import { Field, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Spinner } from "@/components/ui/spinner";
+
+/** Mockup field labels (`design.html:198-222`): uppercase micro, quiet ink. */
+const FIELD_LABEL_CLASS =
+  "text-[9px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400";
+
+/** Shared input shell; `font-mono` is added only on the temporal fields. */
+const INPUT_CLASS = "h-10 bg-neutral-50 text-sm dark:bg-input/30";
 
 export type SessionFormInitial = {
   name: string;
@@ -26,6 +33,11 @@ export type SessionFormProps = {
  * Create / edit a flash-sale session (spec §4.2). Emits ISO datetime strings
  * (the session routes validate `z.string().datetime()`), shows overlap errors
  * from the API as toasts, and sets `isLoading` while in-flight (G13).
+ *
+ * Presentation follows the mockup's "Live Session Parameters" card
+ * (`design.html:184-229`): the fields sit inside a `Panel` with the brand
+ * gradient bar + dot title, labels are uppercase micro, and only the datetime
+ * inputs are mono — the session name stays proportional.
  */
 function SessionForm({ mode, sessionId, initial }: SessionFormProps) {
   const router = useRouter();
@@ -80,66 +92,73 @@ function SessionForm({ mode, sessionId, initial }: SessionFormProps) {
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <Field>
-        <FieldLabel htmlFor="session-name">Nama sesi</FieldLabel>
-        <Input
-          id="session-name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-          disabled={isLoading}
-          className="h-11"
-          placeholder="Flash sale akhir bulan"
-          required
-        />
-      </Field>
-
-      <div className="grid gap-4 sm:grid-cols-2">
-        <Field>
-          <FieldLabel htmlFor="session-start">Waktu mulai</FieldLabel>
+    <Panel title="Parameter Sesi Live" dot>
+      <form onSubmit={handleSubmit} className="space-y-4 p-4 sm:p-6">
+        <Field className="gap-1.5">
+          <FieldLabel htmlFor="session-name" className={FIELD_LABEL_CLASS}>
+            Nama sesi
+          </FieldLabel>
           <Input
-            id="session-start"
-            type="datetime-local"
-            value={startTime}
-            onChange={(e) => setStartTime(e.target.value)}
+            id="session-name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
             disabled={isLoading}
-            className="h-11"
+            className={`${INPUT_CLASS} font-semibold`}
+            placeholder="Flash sale akhir bulan"
             required
           />
         </Field>
-        <Field>
-          <FieldLabel htmlFor="session-end">Waktu selesai</FieldLabel>
-          <Input
-            id="session-end"
-            type="datetime-local"
-            value={endTime}
-            onChange={(e) => setEndTime(e.target.value)}
-            disabled={isLoading}
-            className="h-11"
-            required
-          />
-        </Field>
-      </div>
 
-      <div className="flex items-center gap-3">
-        <Button type="submit" disabled={isLoading}>
-          {isLoading ? <Spinner /> : null}
-          {isLoading
-            ? "Menyimpan..."
-            : mode === "create"
-              ? "Buat sesi"
-              : "Simpan perubahan"}
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          disabled={isLoading}
-          onClick={() => router.push("/admin")}
-        >
-          Batal
-        </Button>
-      </div>
-    </form>
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field className="gap-1.5">
+            <FieldLabel htmlFor="session-start" className={FIELD_LABEL_CLASS}>
+              Waktu mulai
+            </FieldLabel>
+            <Input
+              id="session-start"
+              type="datetime-local"
+              value={startTime}
+              onChange={(e) => setStartTime(e.target.value)}
+              disabled={isLoading}
+              className={`${INPUT_CLASS} font-mono text-xs tabular-nums`}
+              required
+            />
+          </Field>
+          <Field className="gap-1.5">
+            <FieldLabel htmlFor="session-end" className={FIELD_LABEL_CLASS}>
+              Waktu selesai
+            </FieldLabel>
+            <Input
+              id="session-end"
+              type="datetime-local"
+              value={endTime}
+              onChange={(e) => setEndTime(e.target.value)}
+              disabled={isLoading}
+              className={`${INPUT_CLASS} font-mono text-xs tabular-nums`}
+              required
+            />
+          </Field>
+        </div>
+
+        <div className="flex items-center gap-3 pt-1">
+          <Button type="submit" variant="ink" isLoading={isLoading}>
+            {isLoading
+              ? "Menyimpan..."
+              : mode === "create"
+                ? "Buat sesi"
+                : "Simpan perubahan"}
+          </Button>
+          <Button
+            type="button"
+            variant="outline"
+            disabled={isLoading}
+            onClick={() => router.push("/admin")}
+          >
+            Batal
+          </Button>
+        </div>
+      </form>
+    </Panel>
   );
 }
 

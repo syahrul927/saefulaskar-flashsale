@@ -1,10 +1,16 @@
 import { inArray } from "drizzle-orm";
 import type { Metadata } from "next";
 
-import { Badge } from "@/components/ui/badge";
+import { ConfirmOrderButton } from "@/app/_components/confirm-order-button";
+import { Panel } from "@/app/_components/panel";
+import {
+  isPulseStatus,
+  orderStatusTone,
+  StatusBadge,
+} from "@/app/_components/status-badge";
+import { formatRupiah } from "@/app/admin/format";
 import { db } from "@/server/db";
 import { orderItems, orders } from "@/server/db/schema";
-import { ConfirmOrderButton } from "@/app/_components/confirm-order-button";
 
 export const metadata: Metadata = {
   title: "Pesanan — Flash Studio Admin",
@@ -12,25 +18,14 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-const STATUS_VARIANT: Record<string, "default" | "secondary" | "outline" | "destructive"> = {
-  UNPAID: "secondary",
-  CONFIRMED: "default",
-  SHIPPED: "default",
-  COMPLETED: "outline",
-};
-
-function formatRupiah(value: number) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
-
 /**
- * Admin order list (spec §4.5 Phase 2). UNPAID bookings get the "Konfirmasi
- * Bayar" action; every row shows the transfer screenshot when present.
- * WhatsApp link uses env.WHATSAPP_NUMBER.
+ * Admin order list (spec §4.5 Phase 2), mockup "Transaction Records"
+ * treatment (design.html:606-700): one Panel of divided rows, order identity
+ * in mono, status as a tinted `StatusBadge` (UNPAID pulses because the quota
+ * is held), and every money figure in mono `tabular-nums` so rows scan
+ * vertically. UNPAID bookings keep the "Konfirmasi Bayar" action; every row
+ * shows the transfer screenshot when present. WhatsApp link uses
+ * env.WHATSAPP_NUMBER.
  */
 export default async function AdminOrdersPage() {
   const rows = await db.select().from(orders);
@@ -53,102 +48,100 @@ export default async function AdminOrdersPage() {
   return (
     <main className="flex-1 space-y-6 p-4 md:p-6">
       <div>
-        <h1 className="text-2xl font-bold tracking-tight text-foreground">
+        <h1 className="font-heading text-lg font-black uppercase tracking-wider text-neutral-950 sm:text-xl dark:text-neutral-50">
           Pesanan
         </h1>
-        <p className="mt-1 text-sm text-muted-foreground">
+        <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
           Verifikasi bukti transfer dan konfirmasi pembayaran.
         </p>
       </div>
 
-      {rows.length === 0 ? (
-        <div className="rounded-4xl border border-border bg-card p-10 text-center shadow-sm">
-          <p className="text-sm text-muted-foreground">
+      <Panel title="TRANSAKSI MASUKAN" count={`${rows.length} transaksi`}>
+        {rows.length === 0 ? (
+          <p className="p-10 text-center text-sm text-neutral-500 dark:text-neutral-400">
             Belum ada pesanan masuk.
           </p>
-        </div>
-      ) : (
-        <div className="space-y-3">
-          {rows.map((order) => {
-            const items = itemsByOrder.get(order.id) ?? [];
-            return (
-              <section
-                key={order.id}
-                className="rounded-4xl border border-border bg-card p-5 shadow-sm"
-              >
-                <div className="flex flex-wrap items-center justify-between gap-2">
-                  <div>
-                    <p className="font-mono text-sm font-semibold text-foreground">
-                      {order.bookingId}
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {order.createdAt.toLocaleString("id-ID", {
-                        dateStyle: "medium",
-                        timeStyle: "short",
-                      })}
-                      {order.jubelioSoId ? ` · SO #${order.jubelioSoId}` : ""}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="text-lg font-bold tabular-nums text-foreground">
+        ) : (
+          <ul className="divide-y divide-neutral-100 dark:divide-border">
+            {rows.map((order) => {
+              const items = itemsByOrder.get(order.id) ?? [];
+              return (
+                <li key={order.id} className="p-4 sm:p-5">
+                  <div className="flex flex-wrap items-start justify-between gap-3 border-b border-neutral-100 pb-3 dark:border-border">
+                    <div className="min-w-0">
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="font-mono text-xs font-bold tabular-nums text-neutral-950 dark:text-neutral-50">
+                          {order.bookingId}
+                        </span>
+                        <StatusBadge
+                          tone={orderStatusTone(order.status)}
+                          pulse={isPulseStatus(order.status)}
+                        >
+                          {order.status}
+                        </StatusBadge>
+                      </div>
+                      <p className="mt-1 font-mono text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400">
+                        {order.createdAt.toLocaleString("id-ID", {
+                          dateStyle: "medium",
+                          timeStyle: "short",
+                        })}
+                        {order.jubelioSoId ? ` · SO #${order.jubelioSoId}` : ""}
+                      </p>
+                    </div>
+                    <span className="font-mono text-sm font-bold tabular-nums text-neutral-950 dark:text-neutral-50">
                       {formatRupiah(order.grandTotal)}
                     </span>
-                    <Badge
-                      variant={STATUS_VARIANT[order.status] ?? "secondary"}
-                    >
-                      {order.status}
-                    </Badge>
                   </div>
-                </div>
 
-                <ul className="mt-4 divide-y divide-border rounded-2xl border border-border">
-                  {items.map((item) => (
-                    <li
-                      key={item.id}
-                      className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
-                    >
-                      <div className="min-w-0">
-                        <p className="truncate text-foreground">
-                          {item.itemName}
-                        </p>
-                        <p className="text-xs text-muted-foreground">
-                          {item.qty} × {formatRupiah(item.price)}
-                        </p>
-                      </div>
-                      <span className="shrink-0 tabular-nums text-foreground">
-                        {formatRupiah(item.subtotal)}
+                  <ul className="mt-3 divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-100 bg-neutral-50/60 dark:divide-border dark:border-border dark:bg-input/20">
+                    {items.map((item) => (
+                      <li
+                        key={item.id}
+                        className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
+                      >
+                        <div className="min-w-0">
+                          <p className="truncate text-neutral-950 dark:text-neutral-50">
+                            {item.itemName}
+                          </p>
+                          <p className="font-mono text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400">
+                            {item.qty} × {formatRupiah(item.price)}
+                          </p>
+                        </div>
+                        <span className="shrink-0 font-mono text-xs font-medium tabular-nums text-neutral-950 dark:text-neutral-50">
+                          {formatRupiah(item.subtotal)}
+                        </span>
+                      </li>
+                    ))}
+                  </ul>
+
+                  <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+                    {order.transferProofUrl ? (
+                      <a
+                        className="inline-flex items-center text-sm text-primary underline-offset-4 hover:underline"
+                        href={order.transferProofUrl}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Lihat bukti transfer
+                      </a>
+                    ) : (
+                      <span className="text-sm text-neutral-400 dark:text-neutral-500">
+                        Belum ada bukti transfer
                       </span>
-                    </li>
-                  ))}
-                </ul>
-
-                <div className="mt-4 flex flex-wrap items-center gap-3">
-                  {order.transferProofUrl ? (
-                    <a
-                      className="inline-flex items-center text-sm text-primary underline-offset-4 hover:underline"
-                      href={order.transferProofUrl}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Lihat bukti transfer
-                    </a>
-                  ) : (
-                    <span className="text-sm text-muted-foreground">
-                      Belum ada bukti transfer
-                    </span>
-                  )}
-                  {order.status === "UNPAID" && (
-                    <ConfirmOrderButton
-                      orderId={order.id}
-                      bookingId={order.bookingId}
-                    />
-                  )}
-                </div>
-              </section>
-            );
-          })}
-        </div>
-      )}
+                    )}
+                    {order.status === "UNPAID" && (
+                      <ConfirmOrderButton
+                        orderId={order.id}
+                        bookingId={order.bookingId}
+                      />
+                    )}
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Panel>
     </main>
   );
 }
