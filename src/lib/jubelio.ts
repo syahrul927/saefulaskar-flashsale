@@ -71,6 +71,22 @@ async function request(
 
 /* ---------------------------------- shapes --------------------------------- */
 
+/**
+ * Extract `stock`/`available_stock` from a raw getStockBySku response.
+ * Returns the first numeric value found among the known field names,
+ * or `undefined` if none is present. `undefined` lets callers distinguish
+ * "no stock field in the payload" from a real `0` stock.
+ */
+export function toAvailableStock(raw: unknown): number | undefined {
+  if (typeof raw !== "object" || raw === null) return undefined;
+  const r = raw as Record<string, unknown>;
+  for (const key of ["available_stock", "stock", "availableStock"]) {
+    const v = r[key];
+    if (typeof v === "number") return v;
+  }
+  return undefined;
+}
+
 /** `saveContactRequest` — spec §4.1 (customer onboarding). */
 export type ContactPayload = {
   contact_id: 0;

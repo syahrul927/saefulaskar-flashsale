@@ -3,24 +3,13 @@ import { and, eq } from "drizzle-orm";
 import { getSession } from "@/server/better-auth/server";
 import { db } from "@/server/db";
 import { flashSessions, sessionProducts } from "@/server/db/schema";
-import { jubelioClient } from "@/lib/jubelio";
+import { jubelioClient, toAvailableStock } from "@/lib/jubelio";
 import { z } from "zod";
 
 export const runtime = "nodejs";
 
 function jsonError(status: number, error: string) {
   return Response.json({ error }, { status });
-}
-
-/** Extract `stock`/`available_stock` from a raw getStockBySku response; undefined if absent. */
-function toAvailableStock(raw: unknown): number | undefined {
-  if (typeof raw !== "object" || raw === null) return undefined;
-  const r = raw as Record<string, unknown>;
-  for (const key of ["available_stock", "stock", "availableStock"]) {
-    const v = r[key];
-    if (typeof v === "number") return v;
-  }
-  return undefined;
 }
 
 const UpdateProduct = z
