@@ -852,7 +852,12 @@ function ProductPicker({
         ]),
       });
       const data = (await res.json().catch(() => null)) as
-        | { ok?: boolean; products?: SessionProduct[]; error?: string }
+        | {
+            ok?: boolean;
+            products?: SessionProduct[];
+            skipped?: { itemId: number; skuCode?: string }[];
+            error?: string;
+          }
         | null;
       if (res.status === 401) {
         await signOutOnExpiry();
@@ -862,9 +867,20 @@ function ProductPicker({
         toast.error(data?.error ?? "Gagal menambah produk.");
         return;
       }
+      // Import guard (Task 5): rows the v2 lookup could not number are
+      // skipped server-side and never persisted — name the count, and leave
+      // them addable (they stay out of `products`, so the roster and the
+      // `✓ Ditambah` toggle don't move for them).
+      if (data.skipped?.length) {
+        toast.error(
+          `${data.skipped.length} produk dilewati — stok belum bisa dicek di ERP, coba lagi.`,
+        );
+      }
       const added = data.products ?? [];
-      setProducts((prev) => mergeProductsById(prev, added));
-      toast.success("Produk ditambahkan.");
+      if (added.length > 0) {
+        setProducts((prev) => mergeProductsById(prev, added));
+        toast.success("Produk ditambahkan.");
+      }
     } catch {
       toast.error("Terjadi kesalahan, coba lagi.");
     } finally {
