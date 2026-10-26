@@ -4,12 +4,13 @@ import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 
 import { Badge } from "@/components/ui/badge";
+import { getSession } from "@/server/better-auth/server";
 import { db } from "@/server/db";
 import { flashSessions, sessionProducts } from "@/server/db/schema";
-import {
-  ProductPicker,
-  type SessionProduct,
-} from "@/app/_components/product-picker";
+import { getStockMap } from "@/server/jubelio-catalog";
+import { rosterProducts } from "@/server/roster-products";
+import { createJubelioClient } from "@/lib/jubelio";
+import { ProductPicker } from "@/app/_components/product-picker";
 
 export const metadata: Metadata = {
   title: "Produk Sesi — Flash Studio Admin",
@@ -19,8 +20,10 @@ export const dynamic = "force-dynamic";
 
 /**
  * Products for one session (spec §4.3). Editable while SCHEDULED, read-only
- * after activation (config frozen, spec §5.9). Reads the local rows directly
- * for a fast render; the picker performs live Jubelio lookups on add.
+ * after activation (config frozen, spec §5.9). Local rows carry the config;
+ * stock and thumbnails come from the shared cached v2 map, so the roster can
+ * never show a number the admin dashboard has already moved past (imports use
+ * the same map, guarded by `resolveImportRow`).
  */
 export default async function SessionProductsPage({
   params,
@@ -40,22 +43,17 @@ export default async function SessionProductsPage({
     .from(sessionProducts)
     .where(eq(sessionProducts.sessionId, id));
 
-  const products: SessionProduct[] = rows.map((row) => ({
-    id: row.id,
-    itemId: row.itemId,
-    skuCode: row.skuCode,
-    itemGroupName: row.itemGroupName,
-    originalPrice: row.originalPrice,
-    sessionQuota: row.sessionQuota,
-    claimed: row.claimed,
-    minOrder: row.minOrder,
-    flashPrice: row.flashPrice,
-    category: row.category,
-    type: row.type,
-    // Real Jubelio stock persisted on the row — was hardcoded `null`, which
-    // blanked the roster's stock column (spec D: show actual stock).
-    availableStock: row.jubelioStock,
-  }));
+  // Parity, not persistence: one shared 60 s-TTL v2 fetch feeds the roster the
+  // same `available` + thumbnail the picker search rows and the products API
+  // show, and it beats the `jubelio_stock` snapshot column on every row. A v2
+  // failure degrades to `map = null` — the roster still renders with "—" and
+  // letter tiles, never a stale or fabricated number.
+  const auth = await getSession();
+  const map = auth
+    ? await getStockMap(createJubelioClient(auth.user.token)).catch(() => null)
+    : null;
+
+  const products = rosterProducts(rows, map);
 
   const editable = session.status === "SCHEDULED";
 

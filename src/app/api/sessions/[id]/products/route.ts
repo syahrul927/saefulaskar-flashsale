@@ -90,10 +90,11 @@ export async function GET(
   let products;
   try {
     // One cached v2 fetch replaces the old per-SKU fan-out and keys every row
-    // by `itemId`, so the join below is synchronous. Failure semantics stay as
-    // before for an expired token (401); because live stock IS this endpoint's
-    // purpose, any other v2 failure still answers 502 rather than degrade the
-    // whole list to `null`.
+    // by `itemId`, so the join below is synchronous. An expired token answers
+    // 401 as before; because live stock IS this endpoint's purpose, any other
+    // v2 failure now answers 502 (the old per-row `getStockBySku` path left
+    // the list at 200 with the failed rows degraded to `null`) rather than
+    // silently degrade the whole list.
     const map = await getStockMap(client);
     products = rows.map((row) => ({
       id: row.id,

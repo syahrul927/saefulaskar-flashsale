@@ -324,7 +324,11 @@ export function createJubelioClient(token: string) {
       });
     },
 
-    /** GET /inventory/items/by-sku/{sku} — stock for one SKU (admin picker). */
+    /**
+     * GET /inventory/items/by-sku/{sku} — stock for one SKU. No app callers
+     * remain (the picker and the roster read the cached v2 map instead); kept
+     * per the spec's non-goal of trimming the client surface.
+     */
     async getStockBySku(sku: string): Promise<unknown> {
       return request(token, `/inventory/items/by-sku/${encodeURIComponent(sku)}`, {
         method: "GET",
