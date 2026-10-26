@@ -1,23 +1,14 @@
 /**
- * Rupiah + percent formatting for the admin KPI tiles (design.html:235-253).
- * Kept next to the route that uses them: the storefront already has its own
- * `formatRupiah` copies, and this module adds the compact/percent forms the
- * admin tiles need — nothing here is meant to replace those.
+ * Compact/percent formatting for the admin KPI tiles (design.html:235-253).
+ * `formatRupiah` itself lives in `@/lib/format` since the final-review
+ * consolidation (R7) — one shared id-ID config for every surface; this module
+ * only adds the compact/percent forms the admin tiles need.
  */
 
-const RUPIAH = new Intl.NumberFormat("id-ID", {
-  style: "currency",
-  currency: "IDR",
-  maximumFractionDigits: 0,
-});
+import { formatRupiah } from "@/lib/format";
 
 /** One decimal at most, id-ID separators (`1,2` / `12,5`). */
 const SHORT = new Intl.NumberFormat("id-ID", { maximumFractionDigits: 1 });
-
-/** Full rupiah, e.g. `Rp 1.234.567` — the KPI tile value. */
-export function formatRupiah(value: number): string {
-  return RUPIAH.format(value);
-}
 
 const COMPACT_STEPS = [
   { divisor: 1_000_000_000, suffix: " M" },

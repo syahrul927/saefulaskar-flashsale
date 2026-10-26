@@ -3,8 +3,9 @@ import { describe, expect, it } from "vitest";
 import {
   formatClaimPercent,
   formatCompactRupiah,
-  formatRupiah,
 } from "@/app/admin/format";
+// R7 consolidation: the pinned id-ID config now lives in the shared module.
+import { formatRupiah } from "@/lib/format";
 
 // Intl's id-ID currency format separates "Rp" from the amount with a
 // no-break space, so expectations spell it explicitly instead of typing it.

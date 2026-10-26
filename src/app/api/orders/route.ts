@@ -65,7 +65,7 @@ function errorResponse(error: CheckoutError): Response {
  * the order row (undefined → null) via `buildOrderValues`.
  * Checks: session ACTIVE → DB stock ≥ qty → claimed+qty ≤ quota → qty ≥ minOrder.
  * On pass (one transaction): claimed += qty per product, insert `order` + items.
- * Responds { bookingId, grandTotal, bankAccounts, waLink }.
+ * Responds { bookingId, orderId, grandTotal, bankAccounts, waLink }.
  */
 export async function POST(request: Request) {
   const auth = await getSession();
@@ -120,6 +120,11 @@ export async function POST(request: Request) {
   try {
     const { bookingId } = await nextBookingId(db, new Date());
 
+    // Hoisted out of the transaction so the 201 response can hand back the
+    // order UUID (orderId contract — the PaymentPanel seeds its proof phase
+    // from it instead of polling the order list).
+    let orderId = "";
+
     await db.transaction(async (tx) => {
       for (const line of lines) {
         await tx
@@ -136,6 +141,7 @@ export async function POST(request: Request) {
         })
         .returning();
       if (!order) throw new Error("order insert returned no row");
+      orderId = order.id;
 
       await tx.insert(orderItems).values(
         lines.map((line) => ({
@@ -166,6 +172,7 @@ export async function POST(request: Request) {
       {
         ok: true,
         bookingId,
+        orderId,
         grandTotal,
         bankAccounts,
         waLink: bankAccounts[0]?.waLink ?? null,

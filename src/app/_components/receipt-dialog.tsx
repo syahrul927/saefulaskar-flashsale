@@ -1,8 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CopyIcon, ReceiptIcon } from "@phosphor-icons/react";
-import { toast } from "sonner";
+import { ReceiptIcon } from "@phosphor-icons/react";
 
 import { Button } from "@/components/ui/button";
 import {
@@ -11,6 +10,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { CopyChip } from "@/lib/format";
 import { ProofUploadButton } from "./proof-upload-button";
 import {
   isPulseStatus,
@@ -33,8 +33,9 @@ export type ReceiptRecipient = {
 
 /**
  * One order rendered to display-ready strings on the server. Everything here
- * is JSON-serializable (no `Date`, no functions) — `formatRupiah` and the
- * `id-ID` date live in the page so no client copy of the formatter appears.
+ * is JSON-serializable (no `Date`, no functions) — the page formats money
+ * with the shared `formatRupiah` (`@/lib/format`) and the `id-ID` dates, so
+ * the client never needs the raw values.
  */
 export type ReceiptOrderData = {
   orderId: string;
@@ -70,32 +71,6 @@ function mapRecipientRows(recipient: ReceiptRecipient): {
     phone: orDash(recipient.phone),
     address: orDash(recipient.address),
   };
-}
-
-/** Clipboard write mirroring `payment-panel.tsx` — same "Disalin" toast and
- * the same manual-copy fallback message. */
-async function copyToClipboard(value: string) {
-  try {
-    await navigator.clipboard.writeText(value);
-    toast.success("Disalin");
-  } catch {
-    toast.error("Gagal menyalin — salin manual dari layar ini.");
-  }
-}
-
-function CopyChip({ value, label }: { value: string; label: string }) {
-  return (
-    <Button
-      type="button"
-      size="icon-xs"
-      variant="ghost"
-      aria-label={`Salin ${label}`}
-      className="shrink-0 rounded-lg bg-neutral-100 text-neutral-800 hover:bg-neutral-200 hover:text-neutral-950 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
-      onClick={() => void copyToClipboard(value)}
-    >
-      <CopyIcon weight="bold" className="size-3.5" />
-    </Button>
-  );
 }
 
 /**
@@ -178,7 +153,11 @@ function ReceiptDialog({
                 <span className="truncate font-bold text-neutral-900 dark:text-neutral-100">
                   {order.bookingId}
                 </span>
-                <CopyChip value={order.bookingId} label="Booking ID" />
+                <CopyChip
+                  value={order.bookingId}
+                  label="Booking ID"
+                  size="icon-xs"
+                />
               </span>
             </div>
             <div className="flex items-baseline justify-between gap-3">
@@ -278,10 +257,11 @@ function ReceiptDialog({
 }
 
 /**
- * Per-order client island for the server-rendered transactions list: owns the
- * dialog open state and renders the mockup's dark "Receipt" pill
- * (design.html:757-763) as the trigger. The page passes the order's JSON in
- * as props so no list-wide client island is needed.
+ * Per-order dialog state + the mockup's dark "Receipt" pill trigger
+ * (design.html:757-763). Since Task 15 the customer list IS one client
+ * island (`OrdersList`), which mounts this from every card and passes the
+ * order's serialized JSON straight through — the open state still lives per
+ * row here, so one receipt never re-renders the list.
  */
 function ReceiptTrigger({ order }: { order: ReceiptOrderData }) {
   const [open, setOpen] = useState(false);

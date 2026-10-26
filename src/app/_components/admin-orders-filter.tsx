@@ -62,7 +62,11 @@ function AdminOrdersFilter({ rows }: { rows: AdminOrderRow[] }) {
 
   return (
     <div>
-      <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto border-b border-neutral-100 bg-neutral-50/70 px-4 py-3 dark:border-border dark:bg-neutral-900/40">
+      <div
+        role="group"
+        aria-label="Filter status"
+        className="no-scrollbar flex items-center gap-1.5 overflow-x-auto border-b border-neutral-100 bg-neutral-50/70 px-4 py-3 dark:border-border dark:bg-neutral-900/40"
+      >
         {TABS.map((t) => (
           <FilterPill
             key={t}
@@ -77,7 +81,9 @@ function AdminOrdersFilter({ rows }: { rows: AdminOrderRow[] }) {
 
       {visible.length === 0 ? (
         <p className="p-10 text-center text-sm text-neutral-500 dark:text-neutral-400">
-          Tidak ada pesanan {tab}
+          {/* Chips are raw-enum labels — interpolating `tab` here once
+              rendered "Tidak ada pesanan ALL"; plain copy instead (R2). */}
+          Tidak ada pesanan
         </p>
       ) : (
         <ul className="divide-y divide-neutral-100 dark:divide-border">
@@ -140,7 +146,7 @@ function AdminOrdersFilter({ rows }: { rows: AdminOrderRow[] }) {
                     Lihat bukti transfer
                   </a>
                 ) : (
-                  <span className="text-sm text-neutral-400 dark:text-neutral-500">
+                  <span className="text-sm text-neutral-500 dark:text-neutral-400">
                     Belum ada bukti transfer
                   </span>
                 )}

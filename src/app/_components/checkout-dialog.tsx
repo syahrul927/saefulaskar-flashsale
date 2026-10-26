@@ -14,16 +14,9 @@ import {
 import { Field, FieldError, FieldLabel } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Textarea } from "@/components/ui/textarea";
+import { formatRupiah } from "@/lib/format";
 import type { RecipientDefaults } from "@/server/recipient";
 import { useCartContext } from "./cart-context";
-
-function formatRupiah(value: number) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
 
 export type CheckoutBankAccount = {
   bank: string;
@@ -34,9 +27,12 @@ export type CheckoutBankAccount = {
 
 /** The `POST /api/orders` success payload — CartDrawer keeps it as
  * `checkoutResult` and feeds it to `PaymentPanel` (Task 13). Per-account
- * `waLink`s ride on `bankAccounts`; the drawer hands the first one over. */
+ * `waLink`s ride on `bankAccounts`; the drawer hands the first one over.
+ * `orderId` is the created order's UUID (orderId contract) — the panel seeds
+ * its proof phase from it, so the order-list poll never starts. */
 export type CheckoutResult = {
   bookingId: string;
+  orderId: string;
   grandTotal: number;
   bankAccounts: CheckoutBankAccount[];
 };
@@ -135,6 +131,7 @@ function CheckoutDialog({
         ok?: boolean;
         error?: string;
         bookingId?: string;
+        orderId?: string;
         grandTotal?: number;
         bankAccounts?: CheckoutBankAccount[];
       };
@@ -146,6 +143,7 @@ function CheckoutDialog({
 
       onSuccess({
         bookingId: data.bookingId ?? "",
+        orderId: data.orderId ?? "",
         grandTotal: data.grandTotal ?? 0,
         bankAccounts: data.bankAccounts ?? [],
       });

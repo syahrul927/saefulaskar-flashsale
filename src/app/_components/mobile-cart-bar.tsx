@@ -3,15 +3,8 @@
 import { ShoppingCartIcon } from "@phosphor-icons/react";
 
 import { Button } from "@/components/ui/button";
+import { formatRupiah } from "@/lib/format";
 import { useCartContext } from "./cart-context";
-
-function formatRupiah(value: number) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
 
 /**
  * Fixed bottom bar (mobile only) — ink pill with the running subtotal in mono

@@ -138,7 +138,7 @@ function TransactionCard({
             tone={orderStatusTone(row.status)}
             pulse={isPulseStatus(row.status)}
           >
-            {row.status}
+            {row.statusLabel.toUpperCase()}
           </StatusBadge>
         </div>
         <span className="font-mono text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400">
@@ -274,7 +274,11 @@ function OrdersList({
   return (
     <div className="space-y-5">
       {/* Pills (design.html:612-628) — filter loaded data, no refetch. */}
-      <div className="no-scrollbar flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0">
+      <div
+        role="group"
+        aria-label="Filter status"
+        className="no-scrollbar flex items-center gap-1.5 overflow-x-auto pb-1 sm:pb-0"
+      >
         {TABS.map(({ id, label }) => (
           <FilterPill
             key={id}
@@ -311,6 +315,8 @@ function OrdersList({
           waLink={selected.waLink}
           open
           onDone={() => setPaymentOrderId(null)}
+          initialOrderId={selected.orderId}
+          initialUploaded={!!selected.transferProofUrl}
         />
       )}
     </div>

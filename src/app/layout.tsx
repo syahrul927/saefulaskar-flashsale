@@ -22,7 +22,9 @@ const urbanist = Urbanist({
 
 const jetbrains = JetBrains_Mono({
   subsets: ["latin"],
-  weight: ["400", "500", "700"],
+  // 600 is a real weight now — cart-drawer/mono plates use `font-semibold`
+  // (final review R4; before this the semibold was synthesized).
+  weight: ["400", "500", "600", "700"],
   variable: "--font-jetbrains-mono",
 });
 

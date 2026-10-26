@@ -4,6 +4,7 @@ import {
   findOrderProof,
   reduceMissStreak,
   sameProofPhase,
+  seedInitialProof,
   type OrderProofRow,
 } from "@/app/_components/payment-panel";
 
@@ -58,6 +59,29 @@ describe("reduceMissStreak", () => {
     ({ misses } = reduceMissStreak(misses, "transient"));
     const final = reduceMissStreak(misses, "miss");
     expect(final).toEqual({ misses: 2, giveUp: false });
+  });
+});
+
+describe("seedInitialProof", () => {
+  it("seeds a ready phase from the initial props so the list poll never starts", () => {
+    expect(seedInitialProof("order-9", true)).toEqual({
+      phase: "ready",
+      orderId: "order-9",
+      uploaded: true,
+    });
+  });
+
+  it("treats a missing initialUploaded as not uploaded", () => {
+    expect(seedInitialProof("order-9", undefined)).toEqual({
+      phase: "ready",
+      orderId: "order-9",
+      uploaded: false,
+    });
+  });
+
+  it("returns null without a usable initialOrderId — the bounded poll stays the fallback", () => {
+    expect(seedInitialProof(undefined, undefined)).toBeNull();
+    expect(seedInitialProof("", true)).toBeNull();
   });
 });
 

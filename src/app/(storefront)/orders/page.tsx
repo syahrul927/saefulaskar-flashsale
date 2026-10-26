@@ -7,6 +7,7 @@ import { getSession } from "@/server/better-auth/server";
 import { buildWaLink, parseBankAccounts } from "@/server/checkout";
 import { db } from "@/server/db";
 import { contacts, orderItems, orders } from "@/server/db/schema";
+import { formatRupiah } from "@/lib/format";
 import { resolveRecipient } from "@/server/recipient";
 import { OrdersList, type TransactionRow } from "@/app/_components/orders-list";
 import type { ReceiptOrderData } from "@/app/_components/receipt-dialog";
@@ -18,23 +19,16 @@ export const metadata: Metadata = {
 export const revalidate = 0;
 export const dynamic = "force-dynamic";
 
-/** Bahasa status labels — the receipt's `statusLabel` (Task 14) and nothing
- *  else displays them now: list badges show the raw enum, the established
- *  `StatusBadge` precedent. */
+/** Bahasa status labels — the receipt's `statusLabel` (Task 14), uppercased
+ *  onto the customer list badges too (final review I-1: the pill above says
+ *  "BELUM BAYAR", so the card badge can't shout the raw enum beside it).
+ *  Admin surfaces keep raw-enum labels — the documented admin precedent. */
 const STATUS_LABEL: Record<string, string> = {
   UNPAID: "Belum Bayar",
   CONFIRMED: "Dikonfirmasi",
   SHIPPED: "Dikirim",
   COMPLETED: "Selesai",
 };
-
-function formatRupiah(value: number) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
 
 /**
  * Transactions page. All queries stay server-side (orders + items + the

@@ -13,20 +13,13 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer";
 import type { RecipientDefaults } from "@/server/recipient";
+import { formatRupiah } from "@/lib/format";
 import { useCartContext } from "./cart-context";
 import {
   CheckoutDialog,
   type CheckoutResult,
 } from "./checkout-dialog";
 import { PaymentPanel } from "./payment-panel";
-
-function formatRupiah(value: number) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
 
 /**
  * Cart review drawer — mockup "CUSTOMER CART" transplant (design.html:883-980):
@@ -150,6 +143,8 @@ function CartDrawer({
               bankAccounts={checkoutResult.bankAccounts}
               waLink={checkoutResult.bankAccounts[0]?.waLink ?? ""}
               onDone={closeDrawer}
+              initialOrderId={checkoutResult.orderId}
+              initialUploaded={false}
             />
           ) : (
             <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

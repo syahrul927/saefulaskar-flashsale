@@ -2,6 +2,7 @@
 
 import { useRef, useState } from "react";
 import { UploadIcon } from "@phosphor-icons/react";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -15,9 +16,17 @@ import { Spinner } from "@/components/ui/spinner";
  * full-width, grey fill, small semibold label); upload/fetch behaviour is
  * unchanged. Stacks full-width in `PaymentPanel` footers and wraps to its own
  * line inside the orders-page action row.
+ *
+ * Success also triggers `router.refresh()` (final review I-3): the uploaded
+ * proof lives on the server row, so without a re-render of the RSC data the
+ * orders card badge and the receipt's proof line would keep claiming "no
+ * proof". A client RSC refresh keeps component state (the drawer stays open,
+ * dialogs survive), and with the panel's list poll now usually absent
+ * (orderId contract) this refresh is what flips the badge.
  */
 function ProofUploadButton({ orderId }: { orderId: string }) {
   const inputRef = useRef<HTMLInputElement>(null);
+  const router = useRouter();
   const [uploading, setUploading] = useState(false);
 
   const handleFile = async (file: File | undefined) => {
@@ -38,6 +47,7 @@ function ProofUploadButton({ orderId }: { orderId: string }) {
         return;
       }
       toast.success("Bukti transfer terkirim!");
+      router.refresh();
     } catch {
       toast.error("Terjadi kesalahan, coba lagi.");
     } finally {

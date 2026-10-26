@@ -51,6 +51,8 @@ function AdminNav({ className }: { className?: string }) {
               key={href}
               href={href}
               aria-current={active ? "page" : undefined}
+              /* Labels collapse below `sm` — keep an accessible name. */
+              aria-label={label}
               className={cn(
                 "flex items-center gap-1.5 rounded-lg px-2.5 py-1 transition sm:px-3.5 sm:py-1.5",
                 active

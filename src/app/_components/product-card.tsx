@@ -4,6 +4,7 @@ import { PlusIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
+import { formatRupiah } from "@/lib/format";
 import { PRODUCT_TYPE_LABELS, type ProductType } from "@/server/db/schema";
 import { pillIdFor } from "./category-pills";
 import { StatusBadge } from "./status-badge";
@@ -27,14 +28,6 @@ export type StorefrontProduct = {
 type ProductCardProps = {
   product: StorefrontProduct;
 };
-
-function formatRupiah(value: number) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
 
 /**
  * Customer product card — mockup transplant (design.html:519-598).

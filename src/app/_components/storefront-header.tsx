@@ -10,17 +10,10 @@ import {
 import { cn } from "cn";
 
 import { Button } from "@/components/ui/button";
+import { formatRupiah } from "@/lib/format";
 import { AdminLogo } from "./admin-logo";
 import { StatusBadge } from "./status-badge";
 import { useCartContext } from "./cart-context";
-
-function formatRupiah(value: number) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
 
 type TabItem = {
   href: string;

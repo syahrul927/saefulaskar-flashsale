@@ -6,7 +6,7 @@ import {
   type AdminOrderRow,
 } from "@/app/_components/admin-orders-filter";
 import { Panel } from "@/app/_components/panel";
-import { formatRupiah } from "@/app/admin/format";
+import { formatRupiah } from "@/lib/format";
 import { db } from "@/server/db";
 import { orderItems, orders } from "@/server/db/schema";
 

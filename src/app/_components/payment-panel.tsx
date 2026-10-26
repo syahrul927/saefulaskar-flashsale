@@ -3,11 +3,9 @@
 import { useEffect, useState } from "react";
 import {
   CheckIcon,
-  CopyIcon,
   WarningCircleIcon,
   WhatsappLogoIcon,
 } from "@phosphor-icons/react";
-import { toast } from "sonner";
 import { cn } from "cn";
 
 import { Button } from "@/components/ui/button";
@@ -18,17 +16,10 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
+import { CopyChip, formatRupiah } from "@/lib/format";
 import type { BankAccount } from "@/server/checkout";
 import { ProofUploadButton } from "./proof-upload-button";
 import { StatusBadge } from "./status-badge";
-
-function formatRupiah(value: number) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
 
 /** Cadence for the proof-status poll (ms). This only gates the status chip
  * and the upload control — the panel itself shows NO timer (D7). */
@@ -92,6 +83,26 @@ type ProofPhase =
   | { phase: "ready"; orderId: string; uploaded: boolean }
   | { phase: "unavailable" };
 
+/**
+ * Pure seeding decision (Task orderId contract, I-2): when the caller already
+ * knows which order row the panel talks about (`initialOrderId` from the POST
+ * response or the serialized list row), the proof phase starts `ready`
+ * immediately — `uploaded` mirrors `initialUploaded` — and the list poll must
+ * NEVER start. Returns `null` without a usable id, which keeps the bounded
+ * `GET /api/orders` poll as the fallback path.
+ */
+export function seedInitialProof(
+  initialOrderId: string | undefined,
+  initialUploaded: boolean | undefined,
+): ProofPhase | null {
+  if (initialOrderId === undefined || initialOrderId.length === 0) return null;
+  return {
+    phase: "ready",
+    orderId: initialOrderId,
+    uploaded: initialUploaded ?? false,
+  };
+}
+
 /** Equality across the union — drives the "skip unchanged state" bail-out
  * so a steady poll tick never re-renders the panel. */
 export function sameProofPhase(a: ProofPhase, b: ProofPhase): boolean {
@@ -100,32 +111,6 @@ export function sameProofPhase(a: ProofPhase, b: ProofPhase): boolean {
     return a.orderId === b.orderId && a.uploaded === b.uploaded;
   }
   return true;
-}
-
-/** Clipboard write + the verbatim "Disalin" toast. A missing/insecure
- * `navigator.clipboard` throws into the catch, which is the fallback path. */
-async function copyToClipboard(value: string) {
-  try {
-    await navigator.clipboard.writeText(value);
-    toast.success("Disalin");
-  } catch {
-    toast.error("Gagal menyalin — salin manual dari layar ini.");
-  }
-}
-
-function CopyChip({ value, label }: { value: string; label: string }) {
-  return (
-    <Button
-      type="button"
-      size="icon-sm"
-      variant="ghost"
-      aria-label={`Salin ${label}`}
-      className="shrink-0 rounded-lg bg-neutral-100 text-neutral-800 hover:bg-neutral-200 hover:text-neutral-950 dark:bg-neutral-800 dark:text-neutral-200 dark:hover:bg-neutral-700"
-      onClick={() => void copyToClipboard(value)}
-    >
-      <CopyIcon weight="bold" className="size-3.5" />
-    </Button>
-  );
 }
 
 export type PaymentPanelProps = {
@@ -141,6 +126,16 @@ export type PaymentPanelProps = {
    * checkout view inside the cart drawer.
    */
   open?: boolean;
+  /**
+   * Known order UUID (the POST response or the serialized list row). When
+   * present, the proof phase seeds `ready` from `seedInitialProof` and the
+   * `GET /api/orders` poll never starts; when absent, the bounded poll stays
+   * the fallback. See I-2 of the final-review brief.
+   */
+  initialOrderId?: string;
+  /** Whether the order row already carries a transfer proof. Only consulted
+   * together with `initialOrderId`. */
+  initialUploaded?: boolean;
 };
 
 /**
@@ -159,20 +154,30 @@ function PaymentPanel({
   waLink,
   onDone,
   open,
+  initialOrderId,
+  initialUploaded,
 }: PaymentPanelProps) {
   const isDialog = open !== undefined;
-  const [proof, setProof] = useState<ProofPhase>({ phase: "checking" });
+  const [proof, setProof] = useState<ProofPhase>(
+    () =>
+      seedInitialProof(initialOrderId, initialUploaded) ?? {
+        phase: "checking",
+      },
+  );
 
-  // Proof status comes from polling the order list — the POST response never
-  // returns the order UUID that `/api/orders/[id]/upload-proof` requires, so
-  // the panel resolves bookingId → order row and mirrors `transferProofUrl`.
-  // Bounded lifecycle: ticks are skipped while the tab is hidden (the
-  // interval itself is not torn down — deps stay honest); the streak caps at
-  // MAX_POLL_MISSES consecutive permanent misses (absent booking, 401/403) so
-  // an unreachable order can't re-hit the unpaginated list forever; success
-  // (uploaded) stops polling; unchanged state never re-renders.
+  // Fallback proof status — used ONLY when no `initialOrderId` was handed in
+  // (an older drawer session whose POST predates the orderId contract): the
+  // panel resolves bookingId → order row by polling the order list and
+  // mirrors `transferProofUrl`. With `initialOrderId` the phase above is
+  // already `ready` and this effect never starts. Bounded lifecycle: ticks are
+  // skipped while the tab is hidden (the interval itself is not torn down —
+  // deps stay honest); the streak caps at MAX_POLL_MISSES consecutive
+  // permanent misses (absent booking, 401/403) so an unreachable order can't
+  // re-hit the unpaginated list forever; success (uploaded) stops polling;
+  // unchanged state never re-renders.
   useEffect(() => {
     if ((open ?? true) === false || bookingId.length === 0) return;
+    if (seedInitialProof(initialOrderId, initialUploaded)) return;
     let active = true;
     let misses = 0;
     // Held in an object so `tick()`'s async continuation can clear the
@@ -242,7 +247,7 @@ function PaymentPanel({
       active = false;
       stopPolling();
     };
-  }, [open, bookingId]);
+  }, [open, bookingId, initialOrderId, initialUploaded]);
 
   const root = (
     <div className="flex min-h-0 flex-1 flex-col overflow-hidden">

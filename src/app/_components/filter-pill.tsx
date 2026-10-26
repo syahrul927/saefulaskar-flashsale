@@ -35,7 +35,9 @@ function FilterPill({
       onClick={onClick}
       aria-pressed={active}
       className={cn(
-        "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg px-3 py-1.5 font-mono text-xs transition",
+        // Base carries a transparent border so switching to the emphasis
+        // (unpaid) treatment never adds 2px and squashes the row (R6).
+        "flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-lg border border-transparent px-3 py-1.5 font-mono text-xs transition",
         active
           ? "bg-neutral-950 font-bold text-white dark:bg-neutral-50 dark:text-neutral-900"
           : emphatic

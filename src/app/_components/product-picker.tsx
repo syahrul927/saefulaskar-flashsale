@@ -20,6 +20,7 @@ import { Panel } from "@/app/_components/panel";
 import { categoryOptions } from "@/app/_components/category-options";
 import { StatusBadge } from "@/app/_components/status-badge";
 import { useSessionExpiry } from "@/app/_components/use-session-expiry";
+import { formatRupiah } from "@/lib/format";
 import {
   PRODUCT_TYPES,
   PRODUCT_TYPE_LABELS,
@@ -63,14 +64,6 @@ type RowPatch = {
   category: string | null;
   type: ProductType;
 };
-
-function formatRupiah(value: number) {
-  return new Intl.NumberFormat("id-ID", {
-    style: "currency",
-    currency: "IDR",
-    maximumFractionDigits: 0,
-  }).format(value);
-}
 
 /** Shared class strings for the inline-edit cells (design.html:297-335). */
 const cellSelectClass =
@@ -670,6 +663,10 @@ function ProductPicker({
   const [search, setSearch] = useState("");
   const [results, setResults] = useState<SearchResult[]>([]);
   const [searching, setSearching] = useState(false);
+  /** Last search failed (ERP down / non-OK response) — the empty plate must
+   * read as "pencarian gagal", not "produk tidak ditemukan" (final review
+   * I-4). Cleared by the next successful search. */
+  const [searchErrored, setSearchErrored] = useState(false);
   /** Item currently in-flight on an add/remove POST-DELETE (single-flight). */
   const [busyItem, setBusyItem] = useState<number | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -705,10 +702,19 @@ function ProductPicker({
             await signOutOnExpiry();
             return;
           }
+          // Non-OK is an ERP failure, not an empty catalogue — surface it and
+          // switch the plate to the error copy instead of asserting
+          // "not found" on silence (final review I-4).
+          if (!res.ok) throw new Error(`HTTP ${res.status}`);
           const data = (await res.json().catch(() => [])) as SearchResult[];
           setResults(Array.isArray(data) ? data : []);
+          setSearchErrored(false);
         } catch {
-          if (!cancelled) setResults([]);
+          if (!cancelled) {
+            setResults([]);
+            setSearchErrored(true);
+            toast.error("Gagal mencari produk ERP — coba lagi.");
+          }
         } finally {
           if (!cancelled) setSearching(false);
         }
@@ -781,8 +787,16 @@ function ProductPicker({
         return;
       }
       if (data.product) {
+        // PUT returns the raw drizzle row WITHOUT `availableStock` (that is
+        // computed per-row on GET); replacing the whole row would blank the
+        // stock cell to "—" for a SKU whose stock the client already had
+        // (final review I-5) — keep the previous value.
         setProducts((prev) =>
-          prev.map((p) => (p.itemId === itemId ? data.product! : p)),
+          prev.map((p) =>
+            p.itemId === itemId
+              ? { ...data.product!, availableStock: p.availableStock }
+              : p,
+          ),
         );
       }
       toast.success("Produk disimpan.");
@@ -850,7 +864,8 @@ function ProductPicker({
                 />
               </div>
               <span className="shrink-0 whitespace-nowrap font-mono text-xs text-neutral-500 dark:text-neutral-400">
-                {results.length} SKU
+                {searchErrored && search.trim() !== "" ? "—" : results.length}{" "}
+                SKU
               </span>
             </div>
 
@@ -866,11 +881,29 @@ function ProductPicker({
                 </p>
               )}
 
-              {!searching && search.trim() !== "" && results.length === 0 && (
-                <p className="py-8 text-center text-xs text-neutral-500 dark:text-neutral-400">
-                  Produk tidak ditemukan. Coba kata kunci lain.
-                </p>
-              )}
+              {/* Search failure plate (final review I-4) — same shell as the
+                  not-found copy, but it says the ERP is unreachable, not
+                  that the catalogue has no match. */}
+              {!searching &&
+                searchErrored &&
+                search.trim() !== "" &&
+                results.length === 0 && (
+                  <p className="py-8 text-center text-xs text-neutral-500 dark:text-neutral-400">
+                    Pencarian gagal — periksa koneksi ERP.
+                    <span className="mt-1 block text-neutral-400 dark:text-neutral-500">
+                      Ubah kata kunci lalu cari lagi untuk mencoba ulang.
+                    </span>
+                  </p>
+                )}
+
+              {!searching &&
+                !searchErrored &&
+                search.trim() !== "" &&
+                results.length === 0 && (
+                  <p className="py-8 text-center text-xs text-neutral-500 dark:text-neutral-400">
+                    Produk tidak ditemukan. Coba kata kunci lain.
+                  </p>
+                )}
 
               {!searching &&
                 results.map((r) => {

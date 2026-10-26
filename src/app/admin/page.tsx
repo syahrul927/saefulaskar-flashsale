@@ -12,8 +12,8 @@ import {
 import {
   formatClaimPercent,
   formatCompactRupiah,
-  formatRupiah,
 } from "@/app/admin/format";
+import { formatRupiah } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { db } from "@/server/db";
 import { flashSessions } from "@/server/db/schema";
