@@ -3,8 +3,10 @@ import { describe, expect, it } from "vitest";
 import {
   canSaveRow,
   categoryText,
+  filterCatalog,
   mergeProductsById,
   selectedItemIds,
+  type SearchResult,
   type SessionProduct,
 } from "@/app/_components/product-picker";
 
@@ -107,5 +109,58 @@ describe("mergeProductsById", () => {
   it("leaves the roster untouched for an empty incoming list", () => {
     const prev = [rosterRow(1)];
     expect(mergeProductsById(prev, [])).toEqual(prev);
+  });
+});
+
+function catalogRow(
+  itemId: number,
+  itemGroupName: string,
+  skuCode: string,
+): SearchResult {
+  return {
+    itemId,
+    skuCode,
+    itemGroupName,
+    price: 1000,
+    minOrder: 1,
+    stock: null,
+  };
+}
+
+const CATALOG: SearchResult[] = [
+  catalogRow(1, "Kuangyu Dream - SLA", "[SLA]UA000044N"),
+  catalogRow(2, "Sepeda Listrik X1", "SKU-SPD-X1"),
+  catalogRow(3, "Helm Standar", "SKU-HELM-01"),
+];
+
+describe("filterCatalog", () => {
+  it("matches item names case-insensitively", () => {
+    expect(filterCatalog(CATALOG, "sepeda").map((r) => r.itemId)).toEqual([2]);
+  });
+
+  it("matches SKU substrings, including bracketed codes", () => {
+    expect(filterCatalog(CATALOG, "sla").map((r) => r.itemId)).toEqual([1]);
+    expect(filterCatalog(CATALOG, "helm-01").map((r) => r.itemId)).toEqual([3]);
+  });
+
+  it("returns the whole catalog for empty or whitespace queries", () => {
+    expect(filterCatalog(CATALOG, "")).toHaveLength(3);
+    expect(filterCatalog(CATALOG, "   ")).toHaveLength(3);
+  });
+
+  it("caps results at the limit (default 100)", () => {
+    const big = Array.from({ length: 150 }, (_, i) =>
+      catalogRow(i, `Produk ${i}`, `SKU-${i}`),
+    );
+    expect(filterCatalog(big, "produk")).toHaveLength(100);
+    expect(filterCatalog(big, "produk", 5)).toHaveLength(5);
+  });
+
+  it("never matches on price or stock digits", () => {
+    expect(filterCatalog(CATALOG, "1000")).toEqual([]);
+  });
+
+  it("trims surrounding whitespace before matching", () => {
+    expect(filterCatalog(CATALOG, "  helm  ").map((r) => r.itemId)).toEqual([3]);
   });
 });

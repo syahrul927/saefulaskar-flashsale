@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Panel } from "@/app/_components/panel";
 import { categoryOptions } from "@/app/_components/category-options";
 import { StatusBadge } from "@/app/_components/status-badge";
+import { useDebouncedValue } from "@/app/_components/use-debounced-value";
 import { useSessionExpiry } from "@/app/_components/use-session-expiry";
 import { formatRupiah } from "@/lib/format";
 import {
@@ -45,16 +46,45 @@ export type SessionProduct = {
 };
 
 /** Mirrors `PickerRow` from `/api/jubelio/products` (route `toPickerRows`). */
-type SearchResult = {
+export type SearchResult = {
   itemId: number;
   skuCode: string;
   itemGroupName: string;
   /** Normal (catalog) price — rendered struck in the picker rows. */
   price: number;
   minOrder: number;
-  /** Real-time stock; `null` when the master API omits it. */
+  /**
+   * Always `null` this round — Jubelio has no working stock source (spec:
+   * pending the partner's Jubelio-dev answer). Stock stays in the contract
+   * so a source can be re-added without touching the route or the roster.
+   */
   stock: number | null;
 };
+
+/**
+ * Client-side catalog filter — the upstream masters endpoint rejects every
+ * query param (spec probe 2026-10-26), so search matches name/SKU
+ * substrings locally against the cached full catalog. Case-insensitive,
+ * whitespace-trimmed; empty query returns the whole list. Results are capped
+ * (`cap = 100`) because the dialog renders plain divs, not a virtualized
+ * list. Exported for unit tests.
+ */
+export function filterCatalog(
+  rows: SearchResult[],
+  query: string,
+  cap = 100,
+): SearchResult[] {
+  const q = query.trim().toLowerCase();
+  const matched =
+    q === ""
+      ? rows
+      : rows.filter(
+          (r) =>
+            r.itemGroupName.toLowerCase().includes(q) ||
+            r.skuCode.toLowerCase().includes(q),
+        );
+  return matched.slice(0, cap);
+}
 
 type RowPatch = {
   sessionQuota: number;
@@ -626,8 +656,8 @@ function EmptyRoster({
         Belum ada produk
       </p>
       {canEdit ? (
-        <Button variant="brand" onClick={onImport}>
-          Import dari Jubelio
+        <Button variant="ink" onClick={onImport}>
+          Pilih Produk Jubelio
         </Button>
       ) : (
         <p className="text-sm text-neutral-500 dark:text-neutral-400">
@@ -661,12 +691,15 @@ function ProductPicker({
   const [products, setProducts] = useState<SessionProduct[]>(initialProducts);
   const [pickerOpen, setPickerOpen] = useState(false);
   const [search, setSearch] = useState("");
-  const [results, setResults] = useState<SearchResult[]>([]);
-  const [searching, setSearching] = useState(false);
-  /** Last search failed (ERP down / non-OK response) — the empty plate must
-   * read as "pencarian gagal", not "produk tidak ditemukan" (final review
-   * I-4). Cleared by the next successful search. */
-  const [searchErrored, setSearchErrored] = useState(false);
+  /** The full catalog loads once per mount — the route serves a 60 s server
+   * cache (spec: upstream rejects query params, so search is client-side).
+   * `null` = not loaded yet. */
+  const [catalog, setCatalog] = useState<SearchResult[] | null>(null);
+  const [loadingCatalog, setLoadingCatalog] = useState(false);
+  /** Catalog load failed (ERP down / non-OK response) — the plate must read
+   * as "gagal memuat", not "produk tidak ditemukan" (final review I-4).
+   * Cleared by the next successful load. */
+  const [loadErrored, setLoadErrored] = useState(false);
   /** Item currently in-flight on an add/remove POST-DELETE (single-flight). */
   const [busyItem, setBusyItem] = useState<number | null>(null);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
@@ -681,50 +714,48 @@ function ProductPicker({
     if (pickerOpen) searchInputRef.current?.focus({ preventScroll: true });
   }, [pickerOpen]);
 
+  // Load the catalog the first time the dialog opens. A failed load leaves
+  // `catalog` null, so closing and reopening the dialog retries.
   useEffect(() => {
-    if (!pickerOpen) return;
-    const query = search.trim();
-    if (query === "") {
-      setResults([]);
-      setSearching(false);
-      return;
-    }
-    setSearching(true);
-    let cancelled = false;
-    const handle = setTimeout(() => {
-      void (async () => {
-        try {
-          const res = await fetch(
-            `/api/jubelio/products?search=${encodeURIComponent(query)}`,
-          );
-          if (cancelled) return;
-          if (res.status === 401) {
-            await signOutOnExpiry();
-            return;
-          }
-          // Non-OK is an ERP failure, not an empty catalogue — surface it and
-          // switch the plate to the error copy instead of asserting
-          // "not found" on silence (final review I-4).
-          if (!res.ok) throw new Error(`HTTP ${res.status}`);
-          const data = (await res.json().catch(() => [])) as SearchResult[];
-          setResults(Array.isArray(data) ? data : []);
-          setSearchErrored(false);
-        } catch {
-          if (!cancelled) {
-            setResults([]);
-            setSearchErrored(true);
-            toast.error("Gagal mencari produk ERP — coba lagi.");
-          }
-        } finally {
-          if (!cancelled) setSearching(false);
+    if (!pickerOpen || catalog !== null || loadingCatalog) return;
+    setLoadingCatalog(true);
+    void (async () => {
+      try {
+        const res = await fetch("/api/jubelio/products");
+        if (res.status === 401) {
+          await signOutOnExpiry();
+          return;
         }
-      })();
-    }, 300);
-    return () => {
-      cancelled = true;
-      clearTimeout(handle);
-    };
-  }, [search, signOutOnExpiry, pickerOpen]);
+        // Non-OK is an ERP failure, not an empty catalogue — surface the real
+        // upstream message (spec: error honesty) instead of asserting
+        // "not found" on silence (final review I-4).
+        if (!res.ok) {
+          const data = (await res.json().catch(() => null)) as
+            | { error?: string }
+            | null;
+          throw new Error(data?.error ?? `HTTP ${res.status}`);
+        }
+        const data = (await res.json().catch(() => [])) as SearchResult[];
+        setCatalog(Array.isArray(data) ? data : []);
+        setLoadErrored(false);
+      } catch (e) {
+        setLoadErrored(true);
+        toast.error(
+          e instanceof Error && e.message
+            ? e.message
+            : "Gagal memuat katalog ERP — coba lagi.",
+        );
+      } finally {
+        setLoadingCatalog(false);
+      }
+    })();
+  }, [pickerOpen, catalog, loadingCatalog, signOutOnExpiry]);
+
+  const debouncedSearch = useDebouncedValue(search, 300);
+  const results = useMemo(
+    () => (catalog ? filterCatalog(catalog, debouncedSearch) : []),
+    [catalog, debouncedSearch],
+  );
 
   async function add(product: SearchResult) {
     setBusyItem(product.itemId);
@@ -833,7 +864,7 @@ function ProductPicker({
       {canEdit && (
         <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
           <DialogTrigger render={<Button variant="ink" />}>
-            + Pilih Produk Jubelio
+            Pilih Produk Jubelio
           </DialogTrigger>
           <DialogContent className="flex max-h-[85vh] w-full max-w-3xl flex-col gap-0 overflow-hidden rounded-2xl border border-neutral-200 bg-white p-0 dark:border-border dark:bg-card sm:max-w-3xl">
             <DialogHeader className="border-b border-neutral-200 bg-neutral-50 p-4 pr-14 dark:border-border dark:bg-input/30 sm:p-5 sm:pr-14">
@@ -847,7 +878,7 @@ function ProductPicker({
                 </DialogTitle>
               </div>
               <p className="text-xs text-neutral-500 dark:text-neutral-400">
-                Cek stok real-time dari seluruh gudang yang terhubung.
+                Katalog produk disinkron langsung dari Jubelio ERP.
               </p>
             </DialogHeader>
 
@@ -864,40 +895,35 @@ function ProductPicker({
                 />
               </div>
               <span className="shrink-0 whitespace-nowrap font-mono text-xs text-neutral-500 dark:text-neutral-400">
-                {searchErrored && search.trim() !== "" ? "—" : results.length}{" "}
+                {loadErrored && catalog === null
+                  ? "—"
+                  : catalog
+                    ? `${results.length}/${catalog.length}`
+                    : "…"}{" "}
                 SKU
               </span>
             </div>
 
             <div className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-neutral-50/50 p-3 dark:bg-input/20 sm:p-4">
-              {searching &&
+              {loadingCatalog &&
                 [0, 1, 2, 3].map((i) => (
                   <Skeleton key={i} className="h-16 rounded-xl" />
                 ))}
 
-              {!searching && search.trim() === "" && (
-                <p className="py-8 text-center text-xs text-neutral-500 dark:text-neutral-400">
-                  Ketik untuk mencari katalog Jubelio.
-                </p>
-              )}
-
               {/* Search failure plate (final review I-4) — same shell as the
                   not-found copy, but it says the ERP is unreachable, not
                   that the catalogue has no match. */}
-              {!searching &&
-                searchErrored &&
-                search.trim() !== "" &&
-                results.length === 0 && (
+              {!loadingCatalog && loadErrored && catalog === null && (
                   <p className="py-8 text-center text-xs text-neutral-500 dark:text-neutral-400">
-                    Pencarian gagal — periksa koneksi ERP.
+                    Gagal memuat katalog — periksa koneksi ERP.
                     <span className="mt-1 block text-neutral-400 dark:text-neutral-500">
-                      Ubah kata kunci lalu cari lagi untuk mencoba ulang.
+                      Tutup lalu buka picker untuk mencoba lagi.
                     </span>
                   </p>
                 )}
 
-              {!searching &&
-                !searchErrored &&
+              {!loadingCatalog &&
+                !loadErrored &&
                 search.trim() !== "" &&
                 results.length === 0 && (
                   <p className="py-8 text-center text-xs text-neutral-500 dark:text-neutral-400">
@@ -905,7 +931,7 @@ function ProductPicker({
                   </p>
                 )}
 
-              {!searching &&
+              {!loadingCatalog &&
                 results.map((r) => {
                   const label = r.itemGroupName || r.skuCode;
                   const isAdded = selected.has(r.itemId);
@@ -931,12 +957,6 @@ function ProductPicker({
                             <StatusBadge tone="neutral">
                               {r.skuCode || "—"}
                             </StatusBadge>
-                            <span>
-                              stok{" "}
-                              <b className="font-mono font-bold text-emerald-600 dark:text-emerald-500">
-                                {r.stock ?? "—"}
-                              </b>
-                            </span>
                             <span className="text-neutral-400 line-through dark:text-neutral-500">
                               {formatRupiah(r.price)}
                             </span>
