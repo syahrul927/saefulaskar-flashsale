@@ -5,7 +5,11 @@ import {
   isJubelioAuthError,
   JubelioError,
 } from "@/lib/jubelio";
-import { getCatalogRows } from "@/server/jubelio-catalog";
+import {
+  getCatalogRows,
+  getStockMap,
+  mergeStockIntoRows,
+} from "@/server/jubelio-catalog";
 
 export const runtime = "nodejs";
 
@@ -14,10 +18,15 @@ function jsonError(status: number, error: string) {
 }
 
 /**
- * GET /api/jubelio/products — the full masters catalog as picker rows,
- * served through the 60 s catalog cache. Query params are ignored: upstream
- * rejects them all and the picker filters client-side (spec probe 2026-10-26).
- * OWNER-only. Errors carry the real upstream status/message — no blanket 502.
+ * GET /api/jubelio/products — the full masters catalog as picker rows with
+ * v2 stock/thumbnails joined per SKU, served through the 60 s catalog caches.
+ * Query params are ignored: upstream rejects them all and the picker filters
+ * client-side (spec probe 2026-10-26). OWNER-only.
+ *
+ * The two feeds settle independently: a v2 failure NEVER fails the route —
+ * rows degrade to `stock: null, image: null` (plate honesty, spec constraint
+ * "v2 must not sink the catalog"). Only the masters feed owns the error
+ * contract: real upstream status/message, no blanket 502.
  */
 export async function GET() {
   const auth = await getSession();
@@ -25,10 +34,18 @@ export async function GET() {
   if (auth.user.role !== "OWNER") return jsonError(403, "Forbidden");
 
   try {
-    const rows = await getCatalogRows(
-      createJubelioClient(auth.user.token),
+    const client = createJubelioClient(auth.user.token);
+    const [rowsRes, mapRes] = await Promise.allSettled([
+      getCatalogRows(client),
+      getStockMap(client),
+    ]);
+    if (rowsRes.status === "rejected") throw rowsRes.reason; // existing catch: auth/4xx/502 contract
+    return Response.json(
+      mergeStockIntoRows(
+        rowsRes.value,
+        mapRes.status === "fulfilled" ? mapRes.value : null,
+      ),
     );
-    return Response.json(rows);
   } catch (e) {
     if (isJubelioAuthError(e)) return jsonError(401, "SESSION_EXPIRED");
     if (e instanceof JubelioError) return jsonError(e.status, e.message);

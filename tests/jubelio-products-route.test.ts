@@ -5,9 +5,18 @@ import { JubelioError, toPickerRows } from "@/lib/jubelio";
 // The route's collaborators are seams: this file pins the ROUTE's error
 // contract (spec constraint "route error propagation", review focus #1),
 // while `@/lib/jubelio` stays real so `JubelioError` identity matches the
-// route's `instanceof` checks.
+// route's `instanceof` checks. `mergeStockIntoRows` also stays real — the
+// v2-join assertions below pin the route's COMPOSITION (fetch, settle,
+// merge), which a mocked merge could not show.
 vi.mock("@/server/better-auth/server", () => ({ getSession: vi.fn() }));
-vi.mock("@/server/jubelio-catalog", () => ({ getCatalogRows: vi.fn() }));
+vi.mock("@/server/jubelio-catalog", async (importOriginal) => {
+  const actual = await importOriginal<Record<string, unknown>>();
+  return {
+    ...actual,
+    getCatalogRows: vi.fn(),
+    getStockMap: vi.fn(),
+  };
+});
 vi.mock("@/lib/jubelio", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
   return { ...actual, createJubelioClient: vi.fn(() => ({})) };
@@ -15,7 +24,7 @@ vi.mock("@/lib/jubelio", async (importOriginal) => {
 
 import { GET } from "@/app/api/jubelio/products/route";
 import { getSession } from "@/server/better-auth/server";
-import { getCatalogRows } from "@/server/jubelio-catalog";
+import { getCatalogRows, getStockMap } from "@/server/jubelio-catalog";
 
 /**
  * Masters item copied from the live probe 2026-10-26 (spec "Verified field
@@ -157,9 +166,25 @@ describe("toPickerRows", () => {
 describe("GET /api/jubelio/products (route error contract)", () => {
   const owner = { user: { role: "OWNER", token: "tok" } };
 
+  /** A masters row as `getCatalogRows` returns it: stock/image start null. */
+  const mastersRow = (overrides: Record<string, unknown> = {}) => ({
+    itemId: 1,
+    skuCode: "SKU-1",
+    itemGroupName: "Kuangyu Dream - SLA",
+    price: 3700000,
+    minOrder: 1,
+    stock: null,
+    image: null,
+    ...overrides,
+  });
+
   beforeEach(() => {
     vi.mocked(getSession).mockReset();
     vi.mocked(getCatalogRows).mockReset();
+    vi.mocked(getStockMap).mockReset();
+    // Default: v2 is healthy but has nothing to join — tests that care
+    // about joined values override this.
+    vi.mocked(getStockMap).mockResolvedValue(new Map());
   });
 
   it("401 Unauthorized without a session", async () => {
@@ -179,10 +204,56 @@ describe("GET /api/jubelio/products (route error contract)", () => {
 
   it("200 with the cached catalog rows", async () => {
     vi.mocked(getSession).mockResolvedValue(owner as never);
-    vi.mocked(getCatalogRows).mockResolvedValue([{ itemId: 1 }] as never);
+    vi.mocked(getCatalogRows).mockResolvedValue([mastersRow()] as never);
     const res = await GET();
     expect(res.status).toBe(200);
-    expect(await res.json()).toEqual([{ itemId: 1 }]);
+    expect(await res.json()).toEqual([mastersRow()]);
+  });
+
+  it("200 with v2-joined stock + image on every row", async () => {
+    vi.mocked(getSession).mockResolvedValue(owner as never);
+    vi.mocked(getCatalogRows).mockResolvedValue([
+      mastersRow(),
+      mastersRow({ itemId: 2, skuCode: "SKU-2" }),
+    ] as never);
+    vi.mocked(getStockMap).mockResolvedValue(
+      new Map([[1, { available: 12, image: "u" }]]),
+    );
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>[];
+    expect(body[0]).toMatchObject({ stock: 12, image: "u" });
+    // A SKU absent from the v2 payload keeps the null pair — never 0.
+    expect(body[1]).toMatchObject({ stock: null, image: null });
+    // One client instance feeds both catalog reads (shared fetcher budget).
+    expect(vi.mocked(getStockMap).mock.calls[0]?.[0]).toBe(
+      vi.mocked(getCatalogRows).mock.calls[0]?.[0],
+    );
+  });
+
+  it("v2-only failure still 200: rows keep null stock/image (plate honesty)", async () => {
+    vi.mocked(getSession).mockResolvedValue(owner as never);
+    vi.mocked(getCatalogRows).mockResolvedValue([mastersRow()] as never);
+    vi.mocked(getStockMap).mockRejectedValue(
+      new JubelioError(500, "UPSTREAM", "inventory v2 down"),
+    );
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>[];
+    expect(body[0]).toMatchObject({ stock: null, image: null });
+  });
+
+  it("masters failure keeps the error contract (401 SESSION_EXPIRED pin still authoritative)", async () => {
+    vi.mocked(getSession).mockResolvedValue(owner as never);
+    vi.mocked(getStockMap).mockResolvedValue(
+      new Map([[1, { available: 12, image: "u" }]]),
+    );
+    vi.mocked(getCatalogRows).mockRejectedValue(
+      new JubelioError(401, "OLD_TOKEN", "unauthorized"),
+    );
+    const res = await GET();
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "SESSION_EXPIRED" });
   });
 
   it("401 SESSION_EXPIRED on an expired token (the client's sign-out contract)", async () => {
