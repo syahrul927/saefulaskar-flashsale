@@ -378,6 +378,7 @@ function PaymentPanel({
             render={
               <a href={waLink} target="_blank" rel="noreferrer" />
             }
+            nativeButton={false}
           >
             <WhatsappLogoIcon weight="fill" />
             Kirim Bukti via WhatsApp

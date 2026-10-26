@@ -64,7 +64,7 @@ function SessionActions({
           <Button size="sm" disabled={busy !== null} onClick={() => run("activate", "POST")}>
             {busy === "activate" ? "Mengaktifkan..." : "Aktifkan"}
           </Button>
-          <Button size="sm" variant="outline" render={<Link href={`/admin/sessions/${sessionId}/edit`} />}>
+          <Button size="sm" variant="outline" nativeButton={false} render={<Link href={`/admin/sessions/${sessionId}/edit`} />}>
             Edit
           </Button>
           <Button size="sm" variant="ghost" disabled={busy !== null} onClick={handleDelete}>

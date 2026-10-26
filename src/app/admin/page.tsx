@@ -149,7 +149,7 @@ export default async function AdminSessionsPage() {
             Kelola jadwal flash sale, atur status, dan pilih produk.
           </p>
         </div>
-        <Button variant="ink" render={<Link href="/admin/sessions/new" />}>
+        <Button variant="ink" nativeButton={false} render={<Link href="/admin/sessions/new" />}>
           Sesi Baru
         </Button>
       </div>
@@ -192,6 +192,7 @@ export default async function AdminSessionsPage() {
                   <Button
                     size="sm"
                     variant="outline"
+                    nativeButton={false}
                     render={<Link href={`/admin/sessions/${s.id}/products`} />}
                   >
                     Produk

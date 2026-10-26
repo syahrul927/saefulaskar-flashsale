@@ -69,6 +69,7 @@ function NoOrdersPlate() {
         variant="ink"
         className="mt-4"
         render={<Link href="/" />}
+        nativeButton={false}
       >
         Lihat Produk Flash
       </Button>
@@ -95,6 +96,7 @@ function NoMatchPlate({ label }: { label: string }) {
         variant="brand"
         className="mt-4"
         render={<Link href="/" />}
+        nativeButton={false}
       >
         Lihat Produk Flash
       </Button>
