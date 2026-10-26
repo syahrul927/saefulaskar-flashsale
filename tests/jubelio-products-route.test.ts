@@ -256,6 +256,58 @@ describe("GET /api/jubelio/products (route error contract)", () => {
     expect(await res.json()).toEqual({ error: "SESSION_EXPIRED" });
   });
 
+  it("masters failure surfaces without waiting on the v2 read (no shared settle barrier)", async () => {
+    vi.mocked(getSession).mockResolvedValue(owner as never);
+    vi.mocked(getCatalogRows).mockRejectedValue(
+      new JubelioError(401, "OLD_TOKEN", "unauthorized"),
+    );
+    // A stalled/hanging /inventory/v2/ must not delay the 401: a
+    // Promise.allSettled barrier would sit here until the slow feed settles.
+    let stockSettled = false;
+    vi.mocked(getStockMap).mockImplementation(
+      () =>
+        new Promise((resolve) => {
+          setTimeout(() => {
+            stockSettled = true;
+            resolve(new Map());
+          }, 20);
+        }),
+    );
+    const res = await GET();
+    expect(res.status).toBe(401);
+    expect(await res.json()).toEqual({ error: "SESSION_EXPIRED" });
+    expect(stockSettled).toBe(false);
+  });
+
+  it("v2 rejecting with an AUTH-shaped 401 still serves 200 null plate — masters owns the auth contract", async () => {
+    vi.mocked(getSession).mockResolvedValue(owner as never);
+    vi.mocked(getCatalogRows).mockResolvedValue([mastersRow()] as never);
+    // The one input class where refactoring back to a Promise.all that
+    // rethrows any rejection would silently turn a healthy catalog into 401.
+    vi.mocked(getStockMap).mockRejectedValue(
+      new JubelioError(401, "OLD_TOKEN", "unauthorized"),
+    );
+    const res = await GET();
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>[];
+    expect(body[0]).toMatchObject({ stock: null, image: null });
+  });
+
+  it("both feeds reject: the masters contract still wins and the v2 rejection stays handled", async () => {
+    vi.mocked(getSession).mockResolvedValue(owner as never);
+    vi.mocked(getCatalogRows).mockRejectedValue(new Error("socket hangup"));
+    vi.mocked(getStockMap).mockRejectedValue(
+      new JubelioError(500, "UPSTREAM", "inventory v2 down"),
+    );
+    const res = await GET();
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({
+      error: "Gagal memuat produk, coba lagi",
+    });
+    // (If the v2 rejection went unhandled, the vitest run itself would
+    // flag an unhandledRejection for this file.)
+  });
+
   it("401 SESSION_EXPIRED on an expired token (the client's sign-out contract)", async () => {
     vi.mocked(getSession).mockResolvedValue(owner as never);
     vi.mocked(getCatalogRows).mockRejectedValue(

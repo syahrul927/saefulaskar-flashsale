@@ -23,10 +23,11 @@ function jsonError(status: number, error: string) {
  * Query params are ignored: upstream rejects them all and the picker filters
  * client-side (spec probe 2026-10-26). OWNER-only.
  *
- * The two feeds settle independently: a v2 failure NEVER fails the route —
- * rows degrade to `stock: null, image: null` (plate honesty, spec constraint
- * "v2 must not sink the catalog"). Only the masters feed owns the error
- * contract: real upstream status/message, no blanket 502.
+ * The two feeds are independent: a v2 failure NEVER fails the route — rows
+ * degrade to `stock: null, image: null` (plate honesty, spec constraint "v2
+ * must not sink the catalog"). Only the masters feed owns the error contract:
+ * real upstream status/message, no blanket 502 — and masters surfaces
+ * immediately, without waiting on the v2 read to settle.
  */
 export async function GET() {
   const auth = await getSession();
@@ -35,17 +36,15 @@ export async function GET() {
 
   try {
     const client = createJubelioClient(auth.user.token);
-    const [rowsRes, mapRes] = await Promise.allSettled([
-      getCatalogRows(client),
-      getStockMap(client),
-    ]);
-    if (rowsRes.status === "rejected") throw rowsRes.reason; // existing catch: auth/4xx/502 contract
-    return Response.json(
-      mergeStockIntoRows(
-        rowsRes.value,
-        mapRes.status === "fulfilled" ? mapRes.value : null,
-      ),
-    );
+    // Start the v2 read now, but only await it AFTER masters resolves: a
+    // stalled /inventory/v2/ must not delay an expired-token 401 or any
+    // other upstream error (the ruling replaces the shared-settle shape).
+    // `.catch` is attached at creation, so even when masters throws first
+    // the v2 rejection is never left unhandled.
+    const mapPromise = getStockMap(client).catch(() => null);
+    const rows = await getCatalogRows(client); // rejects straight into the existing catch
+    const map = await mapPromise; // v2-only failure → null map → 200 with null plate
+    return Response.json(mergeStockIntoRows(rows, map));
   } catch (e) {
     if (isJubelioAuthError(e)) return jsonError(401, "SESSION_EXPIRED");
     if (e instanceof JubelioError) return jsonError(e.status, e.message);
