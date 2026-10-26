@@ -1,3 +1,4 @@
+import { desc } from "drizzle-orm";
 import type { Metadata } from "next";
 import Link from "next/link";
 
@@ -132,7 +133,9 @@ function KpiRow({ kpis }: { kpis: SessionKpis }) {
  */
 export default async function AdminSessionsPage() {
   const [rows, kpis] = await Promise.all([
-    db.select().from(flashSessions),
+    // Newest first (spec decision 3): the session an admin cares about is
+    // the one they just created, not whatever the DB returns unordered.
+    db.select().from(flashSessions).orderBy(desc(flashSessions.createdAt)),
     getSessionKpis(db),
   ]);
 

@@ -74,3 +74,22 @@ describe("statusCounts", () => {
     });
   });
 });
+
+describe("resolveInitialTab (admin deep link)", () => {
+  it("accepts exact status tabs", async () => {
+    const { resolveInitialTab } = await import(
+      "@/app/_components/admin-orders-filter"
+    );
+    expect(resolveInitialTab("UNPAID")).toBe("UNPAID");
+    expect(resolveInitialTab("COMPLETED")).toBe("COMPLETED");
+  });
+
+  it("falls back to ALL for garbage, empty, or missing values", async () => {
+    const { resolveInitialTab } = await import(
+      "@/app/_components/admin-orders-filter"
+    );
+    expect(resolveInitialTab("DROP TABLE")).toBe("ALL");
+    expect(resolveInitialTab("")).toBe("ALL");
+    expect(resolveInitialTab(undefined)).toBe("ALL");
+  });
+});

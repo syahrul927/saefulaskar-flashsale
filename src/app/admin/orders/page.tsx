@@ -1,8 +1,9 @@
-import { inArray } from "drizzle-orm";
+import { desc, inArray } from "drizzle-orm";
 import type { Metadata } from "next";
 
 import {
   AdminOrdersFilter,
+  resolveInitialTab,
   type AdminOrderRow,
 } from "@/app/_components/admin-orders-filter";
 import { Panel } from "@/app/_components/panel";
@@ -27,8 +28,22 @@ export const dynamic = "force-dynamic";
  * rows instantly. UNPAID bookings keep the "Konfirmasi Bayar" action; every
  * row shows the transfer screenshot when present.
  */
-export default async function AdminOrdersPage() {
-  const rows = await db.select().from(orders);
+export default async function AdminOrdersPage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  // Newest first (spec decision 3): the latest order is the one an admin
+  // scrolled for. `?status=` deep link (decision 4) lands the KPI tile click
+  // on the matching tab; anything outside the tab set falls back to ALL.
+  const raw = (await searchParams).status;
+  const initialTab = resolveInitialTab(
+    typeof raw === "string" ? raw : undefined,
+  );
+  const rows = await db
+    .select()
+    .from(orders)
+    .orderBy(desc(orders.createdAt));
 
   const allItems =
     rows.length === 0
@@ -81,7 +96,7 @@ export default async function AdminOrdersPage() {
             Belum ada pesanan masuk.
           </p>
         ) : (
-          <AdminOrdersFilter rows={adminRows} />
+          <AdminOrdersFilter rows={adminRows} initialTab={initialTab} />
         )}
       </Panel>
     </main>

@@ -47,6 +47,18 @@ const TABS: readonly ("ALL" | OrderStatus)[] = [
 type AdminTab = (typeof TABS)[number];
 
 /**
+ * Deep-link contract (spec decision 4): the console's "Perlu Konfirmasi" KPI
+ * tile links to `/admin/orders?status=UNPAID`, so the page reads `?status=`
+ * and hands the value here. Anything outside the tab set — garbage, array,
+ * empty — falls back to "ALL" instead of a dead tab. Exported for unit tests.
+ */
+function resolveInitialTab(raw: string | undefined): AdminTab {
+  return raw && (TABS as readonly string[]).includes(raw)
+    ? (raw as AdminTab)
+    : "ALL";
+}
+
+/**
  * Admin orders chips + rows (fold for Task 15): the same `FilterPill`
  * treatment as the customer transactions list (design.html:606-628 doubles
  * for admin in the mockup's single role switcher). Filtering is instant over
@@ -55,8 +67,14 @@ type AdminTab = (typeof TABS)[number];
  * are deliberately not widened for this; the admin fold needs `ALL` +
  * `COMPLETED` too, so the one-line visibility filter lives here.
  */
-function AdminOrdersFilter({ rows }: { rows: AdminOrderRow[] }) {
-  const [tab, setTab] = useState<AdminTab>("ALL");
+function AdminOrdersFilter({
+  rows,
+  initialTab = "ALL",
+}: {
+  rows: AdminOrderRow[];
+  initialTab?: AdminTab;
+}) {
+  const [tab, setTab] = useState<AdminTab>(initialTab);
 
   const visible = tab === "ALL" ? rows : rows.filter((r) => r.status === tab);
 
@@ -165,4 +183,4 @@ function AdminOrdersFilter({ rows }: { rows: AdminOrderRow[] }) {
   );
 }
 
-export { AdminOrdersFilter };
+export { AdminOrdersFilter, resolveInitialTab, type AdminTab };
