@@ -7,8 +7,6 @@ import { getStockMap, type StockMap } from "@/server/jubelio-catalog";
 import {
   createJubelioClient,
   isJubelioAuthError,
-  toAvailableStock,
-  type JubelioClient,
   type StockEntry,
 } from "@/lib/jubelio";
 import { z } from "zod";
@@ -53,20 +51,6 @@ export function resolveImportRow(
   return null;
 }
 
-async function liveStock(
-  client: JubelioClient,
-  sku: string | null,
-): Promise<number | null> {
-  if (!sku) return null;
-  try {
-    const raw = await client.getStockBySku(sku);
-    return toAvailableStock(raw) ?? null;
-  } catch (e) {
-    if (isJubelioAuthError(e)) throw e; // surface session expiry to the route
-    return null;
-  }
-}
-
 const ProductInput = z.object({
   itemId: z.number().int().positive(),
   skuCode: z.string().min(1).optional(),
@@ -76,7 +60,8 @@ const ProductInput = z.object({
 
 /**
  * GET /api/sessions/[id]/products — all session products, each with a live
- * Jubelio `availableStock` (`null` when the lookup fails or there's no SKU).
+ * Jubelio `availableStock` taken from the cached v2 stock map (raw ERP
+ * `available`; `null` on a map miss — unknown is never shown as `0`).
  * OWNER-only, matches the admin guard of the sibling session routes.
  */
 export async function GET(
@@ -104,21 +89,25 @@ export async function GET(
 
   let products;
   try {
-    products = await Promise.all(
-      rows.map(async (row) => ({
-        id: row.id,
-        itemId: row.itemId,
-        skuCode: row.skuCode,
-        itemGroupName: row.itemGroupName,
-        originalPrice: row.originalPrice,
-        sessionQuota: row.sessionQuota,
-        claimed: row.claimed,
-        minOrder: row.minOrder,
-        flashPrice: row.flashPrice,
-        category: row.category,
-        availableStock: await liveStock(client, row.skuCode),
-      })),
-    );
+    // One cached v2 fetch replaces the old per-SKU fan-out and keys every row
+    // by `itemId`, so the join below is synchronous. Failure semantics stay as
+    // before for an expired token (401); because live stock IS this endpoint's
+    // purpose, any other v2 failure still answers 502 rather than degrade the
+    // whole list to `null`.
+    const map = await getStockMap(client);
+    products = rows.map((row) => ({
+      id: row.id,
+      itemId: row.itemId,
+      skuCode: row.skuCode,
+      itemGroupName: row.itemGroupName,
+      originalPrice: row.originalPrice,
+      sessionQuota: row.sessionQuota,
+      claimed: row.claimed,
+      minOrder: row.minOrder,
+      flashPrice: row.flashPrice,
+      category: row.category,
+      availableStock: map.get(row.itemId)?.available ?? null,
+    }));
   } catch (e) {
     if (isJubelioAuthError(e)) return jsonError(401, "SESSION_EXPIRED");
     return jsonError(502, "Gagal memuat stok, coba lagi");
