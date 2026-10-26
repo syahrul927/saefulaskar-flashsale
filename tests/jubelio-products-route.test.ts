@@ -232,6 +232,10 @@ describe("GET /api/jubelio/products (route error contract)", () => {
   });
 
   it("v2-only failure still 200: rows keep null stock/image (plate honesty)", async () => {
+    // The swallow is intentional, but it must not be silent — a null plate is
+    // indistinguishable from "the catalog genuinely has no stock" unless the
+    // cause is logged (repo convention, cf. `contacts: … failed`, e`).
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.mocked(getSession).mockResolvedValue(owner as never);
     vi.mocked(getCatalogRows).mockResolvedValue([mastersRow()] as never);
     vi.mocked(getStockMap).mockRejectedValue(
@@ -241,6 +245,11 @@ describe("GET /api/jubelio/products (route error contract)", () => {
     expect(res.status).toBe(200);
     const body = (await res.json()) as Record<string, unknown>[];
     expect(body[0]).toMatchObject({ stock: null, image: null });
+    expect(errorSpy).toHaveBeenCalledWith(
+      "jubelio-products: getStockMap failed, serving null stock/image",
+      expect.any(JubelioError),
+    );
+    errorSpy.mockRestore();
   });
 
   it("masters failure keeps the error contract (401 SESSION_EXPIRED pin still authoritative)", async () => {

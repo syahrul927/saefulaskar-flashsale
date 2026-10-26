@@ -29,6 +29,7 @@ const state = vi.hoisted(() => ({
   }[],
   inserted: [] as Record<string, unknown>[],
   echoSeq: 0,
+  insertFails: false,
 }));
 
 vi.mock("@/server/db", async () => {
@@ -54,6 +55,11 @@ vi.mock("@/server/db", async () => {
           onConflictDoUpdate: () => ({
             returning: () => {
               if (table === sessionProducts) state.inserted.push(v);
+              // `insertFails` models a genuine db outage — the only thing the
+              // POST's second `catch` can now be reached by.
+              if (state.insertFails) {
+                return Promise.reject(new Error("db connection lost"));
+              }
               return Promise.resolve([
                 { id: `p-${++state.echoSeq}`, ...v },
               ]);
@@ -115,6 +121,7 @@ describe("POST /api/sessions/[id]/products", () => {
     state.existingRows = [];
     state.inserted = [];
     state.echoSeq = 0;
+    state.insertFails = false;
     vi.mocked(getSession).mockReset();
     vi.mocked(getSession).mockResolvedValue(owner as never);
     vi.mocked(getStockMap).mockReset();
@@ -152,6 +159,10 @@ describe("POST /api/sessions/[id]/products", () => {
   });
 
   it("Review Focus 3 — v2 down: 201, ok:true, products empty, every new item skipped, zero inserts", async () => {
+    // The degradation stays silent-free: an admin whose import "succeeded with
+    // 0 products" must be diagnosable from the server log (repo convention
+    // `console.error("<context>: <what failed>", e)`).
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.mocked(getStockMap).mockRejectedValue(
       new JubelioError(500, "UPSTREAM", "inventory v2 down"),
     );
@@ -167,6 +178,29 @@ describe("POST /api/sessions/[id]/products", () => {
     });
     // Skipped rows NEVER persist — no insert reached drizzle at all.
     expect(state.inserted).toEqual([]);
+    expect(errorSpy).toHaveBeenCalledWith(
+      "session-products: getStockMap failed, skipping rows without a number",
+      expect.any(JubelioError),
+    );
+    errorSpy.mockRestore();
+  });
+
+  it("db failure: 502 unchanged and the dropped error is logged", async () => {
+    const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
+    vi.mocked(getStockMap).mockResolvedValue(
+      new Map([[1, { available: 5000, image: null }]]),
+    );
+    state.insertFails = true;
+    const res = await POST(postRequest([item(1)]), params);
+    expect(res.status).toBe(502);
+    expect(await res.json()).toEqual({
+      error: "Gagal memuat stok, coba lagi",
+    });
+    expect(errorSpy).toHaveBeenCalledWith(
+      "session-products: db write failed",
+      expect.any(Error),
+    );
+    errorSpy.mockRestore();
   });
 
   it("skips ONLY the no-number rows; numbered rows insert (negatives stored raw, quota floors at 0)", async () => {

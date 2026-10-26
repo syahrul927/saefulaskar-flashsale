@@ -41,7 +41,15 @@ export async function GET() {
     // other upstream error (the ruling replaces the shared-settle shape).
     // `.catch` is attached at creation, so even when masters throws first
     // the v2 rejection is never left unhandled.
-    const mapPromise = getStockMap(client).catch(() => null);
+    const mapPromise = getStockMap(client).catch((e) => {
+      // Degradation is intentional, silence is not: a null plate must be
+      // distinguishable from "the catalog genuinely has no stock".
+      console.error(
+        "jubelio-products: getStockMap failed, serving null stock/image",
+        e,
+      );
+      return null;
+    });
     const rows = await getCatalogRows(client); // rejects straight into the existing catch
     const map = await mapPromise; // v2-only failure → null map → 200 with null plate
     return Response.json(mergeStockIntoRows(rows, map));

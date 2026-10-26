@@ -50,7 +50,15 @@ export default async function SessionProductsPage({
   // letter tiles, never a stale or fabricated number.
   const auth = await getSession();
   const map = auth
-    ? await getStockMap(createJubelioClient(auth.user.token)).catch(() => null)
+    ? await getStockMap(createJubelioClient(auth.user.token)).catch((e) => {
+        // Still render "—"/letter tiles, but leave a trace — otherwise a v2
+        // outage is indistinguishable from a genuinely unstocked catalog.
+        console.error(
+          "roster: getStockMap failed, serving null stock/image",
+          e,
+        );
+        return null;
+      })
     : null;
 
   const products = rosterProducts(rows, map);

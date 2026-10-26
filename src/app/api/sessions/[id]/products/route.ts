@@ -143,6 +143,13 @@ export async function POST(
   } catch (e) {
     if (isJubelioAuthError(e)) return jsonError(401, "SESSION_EXPIRED");
     map = null;
+    // The 201 `ok:true` with everything skipped is the ruling, not a bug —
+    // but the reason has to reach the server log, or the operator sees a
+    // successful import that imported nothing.
+    console.error(
+      "session-products: getStockMap failed, skipping rows without a number",
+      e,
+    );
   }
 
   // One batched read of the rows already in this session, so the update path
@@ -220,9 +227,10 @@ export async function POST(
             .returning(),
         ),
     ).then((results) => results.flat());
-  } catch {
+  } catch (e) {
     // Genuine db failures only — stock is no longer fetched inside this loop,
     // so upstream trouble is fully handled by the `map`/skip path above.
+    console.error("session-products: db write failed", e);
     return jsonError(502, "Gagal memuat stok, coba lagi");
   }
 
