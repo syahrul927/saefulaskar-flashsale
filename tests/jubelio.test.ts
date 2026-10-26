@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
-import { createJubelioClient, JubelioError } from "@/lib/jubelio";
+import { createJubelioClient, JubelioError, toStockMap } from "@/lib/jubelio";
 import { env } from "@/env";
 
 // Canonical base URL after the join fix: base ends with "/", paths start with "/".
@@ -12,6 +12,33 @@ const JSON_HEADERS = { "Content-Type": "application/json" };
 
 function jsonResponse(body: unknown, status = 200) {
   return { ok: status >= 200 && status < 300, status, json: async () => body };
+}
+
+/**
+ * SKU-level `/inventory/v2/` row copied from the live probe 2026-10-26
+ * (spec "Verified live"): `total_stocks.{on_hand,on_order,reserved,
+ * available}` + CDN `thumbnail`; no sell price (masters stays the price
+ * source). Defaults match the 2685 / "[SLA]UA000044N" masters probe row.
+ */
+function v2Row(
+  overrides: Partial<{
+    item_id: unknown;
+    item_code: unknown;
+    item_name: unknown;
+    is_bundle: unknown;
+    thumbnail: unknown;
+    total_stocks: unknown;
+  }> = {},
+) {
+  return {
+    item_id: 2685,
+    item_code: "[SLA]UA000044N",
+    item_name: "Kuangyu Dream - SLA",
+    is_bundle: false,
+    thumbnail: "https://cdn.example/thumb.jpg",
+    total_stocks: { on_hand: 12, on_order: 0, reserved: 0, available: 12 },
+    ...overrides,
+  };
 }
 
 afterEach(() => {
@@ -91,6 +118,79 @@ describe("createJubelioClient", () => {
     expect((init.body as string)).toBe(JSON.stringify({ location_id: env.JUBELIO_LOCATION_ID }));
   });
 
+  it("GETs /inventory/v2/ with pagination params and Bearer header", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await client.listStockV2();
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${API}/inventory/v2/?page=1&page_size=2000`);
+    expect(init.method).toBe("GET");
+    expect(init.headers).toEqual({
+      Authorization: `Bearer ${TOKEN}`,
+      ...JSON_HEADERS,
+    });
+  });
+
+  it("stalls are bounded: every request carries a 15 s AbortSignal that turns a hung fetch into a rejection", async () => {
+    // Final review I-1: `request()` passed no `signal`, so a half-open TCP or
+    // a slow gateway on the 2.3 MB `/inventory/v2/` page never REJECTED — the
+    // picker route's `await mapPromise`, the roster SSR and the import POST
+    // just sat there. The plate-honesty degradation paths are already pinned
+    // and fire on rejection; all a stall was missing was the rejection.
+    const controller = new AbortController();
+    const timeouts: number[] = [];
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms: number) => {
+      timeouts.push(ms);
+      return controller.signal;
+    });
+    // A stall modelled faithfully: the promise settles only when the signal
+    // fires, exactly like undici's abort steps.
+    const fetchMock = vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          const signal = init?.signal;
+          signal?.addEventListener("abort", () => {
+            // undici's timeout reason is a `TimeoutError` DOMException — an
+            // Error subclass, hence this shape.
+            const reason: Error = signal.reason as Error;
+            reject(reason);
+          });
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const pending = client.listStockV2();
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.signal).toBe(controller.signal);
+    // One constant, applied to every call: 15 s (v2 cold read ≈ 1.7 s).
+    expect(timeouts).toEqual([15_000]);
+
+    controller.abort(
+      new DOMException("The operation was aborted due to timeout", "TimeoutError"),
+    );
+    await expect(pending).rejects.toBeInstanceOf(DOMException);
+    await expect(pending).rejects.toMatchObject({ name: "TimeoutError" });
+  });
+
+  it("attaches an abort signal to every endpoint, GET and POST alike", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await client.listProducts();
+    await client.listStock();
+    await client.listStockV2();
+    await client.getStockBySku("AB/1");
+    await client.listSalesOrders();
+    await client.listInvoices();
+
+    for (const [, init] of fetchMock.mock.calls as [string, RequestInit][]) {
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+    }
+  });
+
   it("escapes sku in getStockBySku path", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ item_id: 1 }));
     vi.stubGlobal("fetch", fetchMock);
@@ -166,6 +266,86 @@ describe("createJubelioClient", () => {
       expect.objectContaining({ method: "GET" }),
     );
     expect(invoices).toEqual([]);
+  });
+});
+
+describe("toStockMap", () => {
+  it("maps the {data:[…]} envelope keyed by item_id", () => {
+    const map = toStockMap({
+      data: [
+        v2Row({
+          item_id: 2685,
+          total_stocks: { available: 12 },
+          thumbnail: "https://cdn/thumb.jpg",
+        }),
+      ],
+    });
+    expect(map.get(2685)).toEqual({
+      available: 12,
+      image: "https://cdn/thumb.jpg",
+    });
+  });
+
+  it("tolerates a bare array payload", () => {
+    const map = toStockMap([v2Row({ item_id: 7 })]);
+    expect(map.size).toBe(1);
+    expect(map.get(7)).toEqual({
+      available: 12,
+      image: "https://cdn.example/thumb.jpg",
+    });
+  });
+
+  it("passes negative available through raw", () => {
+    // Live probe 2026-10-26: 4 of 1775 SKUs are negative (min −14) — the
+    // ERP oversells; parity means showing the number untouched.
+    const map = toStockMap({
+      data: [v2Row({ item_id: 9, total_stocks: { available: -14 } })],
+    });
+    expect(map.get(9)?.available).toBe(-14);
+  });
+
+  it("keeps rows with absent/null/non-string thumbnail as image: null", () => {
+    const map = toStockMap({
+      data: [
+        v2Row({ item_id: 1, thumbnail: undefined }),
+        v2Row({ item_id: 2, thumbnail: null }),
+        v2Row({ item_id: 3, thumbnail: 404 }), // non-string → null
+        { item_id: 4, total_stocks: { available: 1 } }, // key absent entirely
+      ],
+    });
+    expect(map.size).toBe(4);
+    expect(map.get(1)?.image).toBeNull();
+    expect(map.get(2)?.image).toBeNull();
+    expect(map.get(3)?.image).toBeNull();
+    expect(map.get(4)?.image).toBeNull();
+  });
+
+  it("skips junk rows: missing/non-numeric item_id, absent total_stocks, non-numeric available", () => {
+    const map = toStockMap({
+      data: [
+        { item_id: "abc", total_stocks: { available: 5 } },
+        { total_stocks: { available: 5 } },
+        { item_id: 7 },
+        { item_id: 8, total_stocks: { available: "lots" } },
+        { item_id: 9, total_stocks: { available: "NaN" } },
+        { item_id: 10, total_stocks: null },
+        null,
+        "string",
+      ],
+    });
+    expect([...map.keys()]).toEqual([]);
+    expect(toStockMap(null).size).toBe(0);
+    expect(toStockMap({ data: "nope" }).size).toBe(0);
+  });
+
+  it("accepts a numeric-string available (decimal-string tolerance like prices)", () => {
+    const map = toStockMap({
+      data: [v2Row({ item_id: 5, total_stocks: { available: "14.0000" } })],
+    });
+    expect(map.get(5)).toEqual({
+      available: 14,
+      image: "https://cdn.example/thumb.jpg",
+    });
   });
 });
 

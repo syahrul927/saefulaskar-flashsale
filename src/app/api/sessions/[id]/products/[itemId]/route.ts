@@ -7,11 +7,8 @@ import {
   PRODUCT_TYPES,
   sessionProducts,
 } from "@/server/db/schema";
-import {
-  createJubelioClient,
-  isJubelioAuthError,
-  toAvailableStock,
-} from "@/lib/jubelio";
+import { getStockMap } from "@/server/jubelio-catalog";
+import { createJubelioClient, isJubelioAuthError } from "@/lib/jubelio";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -44,7 +41,9 @@ const UpdateProduct = z
 
 /**
  * GET /api/sessions/[id]/products/[itemId] — single session product with live
- * Jubelio `availableStock` (`null` on lookup failure or missing SKU). OWNER-only.
+ * Jubelio `availableStock` read from the cached v2 stock map (raw ERP
+ * `available`; `null` on a map miss or a non-auth upstream failure — unknown
+ * is never shown as `0`). OWNER-only.
  */
 export async function GET(
   _request: Request,
@@ -70,17 +69,17 @@ export async function GET(
     );
   if (!row) return jsonError(404, "Session product not found");
 
+  // Same cached v2 map the picker and the list GET read, keyed on `itemId` —
+  // one TTL'd fetch instead of a by-SKU call. Failure semantics are unchanged:
+  // an expired token is 401 SESSION_EXPIRED, anything else degrades to
+  // `availableStock: null` (a v2 outage never fails this route).
   let availableStock: number | null = null;
-  if (row.skuCode) {
-    try {
-      const raw = await createJubelioClient(auth.user.token).getStockBySku(
-        row.skuCode,
-      );
-      availableStock = toAvailableStock(raw) ?? null;
-    } catch (e) {
-      if (isJubelioAuthError(e)) return jsonError(401, "SESSION_EXPIRED");
-      availableStock = null;
-    }
+  try {
+    const map = await getStockMap(createJubelioClient(auth.user.token));
+    availableStock = map.get(itemId)?.available ?? null;
+  } catch (e) {
+    if (isJubelioAuthError(e)) return jsonError(401, "SESSION_EXPIRED");
+    availableStock = null;
   }
 
   return Response.json({ ok: true, product: { ...row, availableStock } });

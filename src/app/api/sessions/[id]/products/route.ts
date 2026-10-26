@@ -1,14 +1,11 @@
-import { eq } from "drizzle-orm";
+import { and, eq, inArray } from "drizzle-orm";
 
 import { getSession } from "@/server/better-auth/server";
 import { db } from "@/server/db";
 import { flashSessions, sessionProducts } from "@/server/db/schema";
-import {
-  createJubelioClient,
-  isJubelioAuthError,
-  toAvailableStock,
-  type JubelioClient,
-} from "@/lib/jubelio";
+import { getStockMap, type StockMap } from "@/server/jubelio-catalog";
+import { resolveImportRow } from "@/server/jubelio-import";
+import { createJubelioClient, isJubelioAuthError } from "@/lib/jubelio";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -17,19 +14,9 @@ function jsonError(status: number, error: string) {
   return Response.json({ error }, { status });
 }
 
-async function liveStock(
-  client: JubelioClient,
-  sku: string | null,
-): Promise<number | null> {
-  if (!sku) return null;
-  try {
-    const raw = await client.getStockBySku(sku);
-    return toAvailableStock(raw) ?? null;
-  } catch (e) {
-    if (isJubelioAuthError(e)) throw e; // surface session expiry to the route
-    return null;
-  }
-}
+// `resolveImportRow` (the POST guard's pure decision, tested in
+// `session-products-post.test.ts`) lives in `@/server/jubelio-import`: Next's
+// route contract allows only HTTP handlers + config exports on `route.ts`.
 
 const ProductInput = z.object({
   itemId: z.number().int().positive(),
@@ -40,7 +27,8 @@ const ProductInput = z.object({
 
 /**
  * GET /api/sessions/[id]/products — all session products, each with a live
- * Jubelio `availableStock` (`null` when the lookup fails or there's no SKU).
+ * Jubelio `availableStock` taken from the cached v2 stock map (raw ERP
+ * `available`; `null` on a map miss — unknown is never shown as `0`).
  * OWNER-only, matches the admin guard of the sibling session routes.
  */
 export async function GET(
@@ -68,21 +56,26 @@ export async function GET(
 
   let products;
   try {
-    products = await Promise.all(
-      rows.map(async (row) => ({
-        id: row.id,
-        itemId: row.itemId,
-        skuCode: row.skuCode,
-        itemGroupName: row.itemGroupName,
-        originalPrice: row.originalPrice,
-        sessionQuota: row.sessionQuota,
-        claimed: row.claimed,
-        minOrder: row.minOrder,
-        flashPrice: row.flashPrice,
-        category: row.category,
-        availableStock: await liveStock(client, row.skuCode),
-      })),
-    );
+    // One cached v2 fetch replaces the old per-SKU fan-out and keys every row
+    // by `itemId`, so the join below is synchronous. An expired token answers
+    // 401 as before; because live stock IS this endpoint's purpose, any other
+    // v2 failure now answers 502 (the old per-row `getStockBySku` path left
+    // the list at 200 with the failed rows degraded to `null`) rather than
+    // silently degrade the whole list.
+    const map = await getStockMap(client);
+    products = rows.map((row) => ({
+      id: row.id,
+      itemId: row.itemId,
+      skuCode: row.skuCode,
+      itemGroupName: row.itemGroupName,
+      originalPrice: row.originalPrice,
+      sessionQuota: row.sessionQuota,
+      claimed: row.claimed,
+      minOrder: row.minOrder,
+      flashPrice: row.flashPrice,
+      category: row.category,
+      availableStock: map.get(row.itemId)?.available ?? null,
+    }));
   } catch (e) {
     if (isJubelioAuthError(e)) return jsonError(401, "SESSION_EXPIRED");
     return jsonError(502, "Gagal memuat stok, coba lagi");
@@ -92,14 +85,19 @@ export async function GET(
 }
 
 /**
- * POST /api/sessions/[id]/products — upsert picked products (spec §4.3).
- * Body: [{ itemId, skuCode, itemGroupName, originalPrice }].
- * For each item: live stock lookup (null on failure), then defaults
- * `sessionQuota = min(20, stock ?? 0)`, `flashPrice = originalPrice`,
- * `minOrder = 1`, `claimed = 0`, `category = ""`. Rows are keyed on the
- * unique `(sessionId, itemId)` pair — re-picking an existing item updates it
- * instead of duplicating. Only SCHEDULED sessions accept products (spec §5.9:
- * config frozen once a session leaves SCHEDULED). OWNER-only.
+ * POST /api/sessions/[id]/products — upsert picked products (spec §4.3),
+ * guarded by the v2 import source. Body: [{ itemId, skuCode, itemGroupName,
+ * originalPrice }].
+ * Stock comes from the cached v2 map (`getStockMap`) instead of a per-SKU
+ * `getStockBySku` fan-out: numbered rows import with raw `available` and a
+ * floored quota (`resolveImportRow`); a no-number re-add keeps the row's
+ * previous stock/quota; a no-number NEW row is skipped and reported in
+ * `skipped` — never inserted with 0. A v2 outage skips all new rows but still
+ * answers 201 `ok:true` (only an expired token is 401). Defaults unchanged:
+ * `flashPrice = originalPrice`, `minOrder = 1`, `claimed = 0`, `category = ""`
+ * — a re-add with a number resets quota to the derived value (one truth per
+ * pipeline). Rows are keyed on the unique `(sessionId, itemId)` pair. Only
+ * SCHEDULED sessions accept products (spec §5.9). OWNER-only.
  */
 export async function POST(
   request: Request,
@@ -134,48 +132,112 @@ export async function POST(
 
   const client = createJubelioClient(auth.user.token);
 
+  // One cached v2 fetch replaces the old per-SKU `getStockBySku` fan-out. The
+  // auth contract is unchanged (expired token → 401 SESSION_EXPIRED); any
+  // other upstream failure degrades to `map = null` — NO 502 (partner
+  // ruling): every lookup then misses, so new rows are skipped below and
+  // existing rows keep their stored numbers (Review Focus 3).
+  let map: StockMap | null;
+  try {
+    map = await getStockMap(client);
+  } catch (e) {
+    if (isJubelioAuthError(e)) return jsonError(401, "SESSION_EXPIRED");
+    map = null;
+    // The 201 `ok:true` with everything skipped is the ruling, not a bug —
+    // but the reason has to reach the server log, or the operator sees a
+    // successful import that imported nothing.
+    console.error(
+      "session-products: getStockMap failed, skipping rows without a number",
+      e,
+    );
+  }
+
+  // One batched read of the rows already in this session, so the update path
+  // (rule 2) has its previous stock/quota to fall back on.
+  const existingRows = await db
+    .select({
+      itemId: sessionProducts.itemId,
+      jubelioStock: sessionProducts.jubelioStock,
+      sessionQuota: sessionProducts.sessionQuota,
+    })
+    .from(sessionProducts)
+    .where(
+      and(
+        eq(sessionProducts.sessionId, id),
+        inArray(
+          sessionProducts.itemId,
+          items.map((input) => input.itemId),
+        ),
+      ),
+    );
+  const existingByItem = new Map(
+    existingRows.map((row) => [row.itemId, row]),
+  );
+
+  const skipped: { itemId: number; skuCode: string; itemGroupName: string }[] =
+    [];
+  const pending = items.map((input) => {
+    const resolved = resolveImportRow(
+      map?.get(input.itemId),
+      existingByItem.get(input.itemId),
+    );
+    if (resolved) return { input, resolved };
+    skipped.push({
+      itemId: input.itemId,
+      skuCode: input.skuCode ?? "",
+      itemGroupName: input.itemGroupName ?? "",
+    });
+    return null;
+  });
+
   let created;
   try {
     created = await Promise.all(
-      items.map(async (input) => {
-        const availableStock = await liveStock(client, input.skuCode ?? null);
-        const sessionQuota = Math.min(20, availableStock ?? 0);
-        const jubelioStock = availableStock ?? 0;
-        return db
-          .insert(sessionProducts)
-          .values({
-            sessionId: id,
-            itemId: input.itemId,
-            skuCode: input.skuCode ?? "",
-            itemGroupName: input.itemGroupName ?? "",
-            originalPrice: input.originalPrice,
-            sessionQuota,
-            jubelioStock,
-            flashPrice: input.originalPrice,
-            minOrder: 1,
-            claimed: 0,
-            category: "",
-          })
-          .onConflictDoUpdate({
-            target: [sessionProducts.sessionId, sessionProducts.itemId],
-            set: {
+      pending
+        .filter((row) => row !== null)
+        .map(({ input, resolved }) =>
+          db
+            .insert(sessionProducts)
+            .values({
+              sessionId: id,
+              itemId: input.itemId,
               skuCode: input.skuCode ?? "",
               itemGroupName: input.itemGroupName ?? "",
               originalPrice: input.originalPrice,
-              sessionQuota,
-              jubelioStock,
+              sessionQuota: resolved.sessionQuota,
+              jubelioStock: resolved.jubelioStock,
               flashPrice: input.originalPrice,
               minOrder: 1,
+              claimed: 0,
               category: "",
-            },
-          })
-          .returning();
-      }),
+            })
+            .onConflictDoUpdate({
+              target: [sessionProducts.sessionId, sessionProducts.itemId],
+              set: {
+                skuCode: input.skuCode ?? "",
+                itemGroupName: input.itemGroupName ?? "",
+                originalPrice: input.originalPrice,
+                sessionQuota: resolved.sessionQuota,
+                jubelioStock: resolved.jubelioStock,
+                flashPrice: input.originalPrice,
+                minOrder: 1,
+                category: "",
+              },
+            })
+            .returning(),
+        ),
     ).then((results) => results.flat());
   } catch (e) {
-    if (isJubelioAuthError(e)) return jsonError(401, "SESSION_EXPIRED");
+    // Genuine db failures only — stock is no longer fetched inside this loop,
+    // so upstream trouble is fully handled by the `map`/skip path above.
+    console.error("session-products: db write failed", e);
     return jsonError(502, "Gagal memuat stok, coba lagi");
   }
 
-  return Response.json({ ok: true, products: created }, { status: 201 });
+  // ADDITIVE: `{ ok, products }` stays exactly as before for consumers;
+  // `skipped` names the blocked rows (`[]` on the happy path).
+  return Response.json(
+    { ok: true, products: created, skipped },
+    { status: 201 },
+  );
 }

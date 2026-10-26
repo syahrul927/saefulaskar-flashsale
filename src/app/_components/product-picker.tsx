@@ -40,8 +40,13 @@ export type SessionProduct = {
   flashPrice: number;
   category: string | null;
   type: ProductType;
-  /** Catalog image URL — never populated yet (mockup D6: letter tiles). */
+  /**
+   * v2 thumbnail URL, joined live from the stock map on the roster page
+   * (`rosterProducts`) and preserved by the picker's add/save merges.
+   * Missing data (null/absent) renders the mockup D6 letter tile instead.
+   */
   image?: string | null;
+  /** Raw ERP stock from the same live v2 join; `null` renders "—". */
   availableStock: number | null;
 };
 
@@ -54,11 +59,14 @@ export type SearchResult = {
   price: number;
   minOrder: number;
   /**
-   * Always `null` this round — Jubelio has no working stock source (spec:
-   * pending the partner's Jubelio-dev answer). Stock stays in the contract
-   * so a source can be re-added without touching the route or the roster.
+   * ERP availability per SKU, merged server-side from the v2 inventory
+   * cache (`mergeStockIntoRows`). Raw parity: negative figures (live min
+   * −14) display untouched; `null` means the SKU is absent from the v2
+   * payload and renders `—`.
    */
   stock: number | null;
+  /** v2 `thumbnail` URL; `null` → letter tile (`SearchThumb`). */
+  image: string | null;
 };
 
 /**
@@ -142,7 +150,10 @@ function categoryText(category: string | null): string {
   return category === null || category.trim() === "" ? "Umum" : category;
 }
 
-/** Letter-tile thumb frame — mockup D6 (real images excluded). */
+/**
+ * Roster thumb: the live v2 image when the join has one, else the mockup D6
+ * letter tile as the missing-data fallback.
+ */
 function RosterThumb({
   product,
   size = "table",
@@ -157,8 +168,8 @@ function RosterThumb({
   const letter = size === "table" ? "text-base" : "text-lg";
   if (product.image) {
     return (
-      // Brief pins plain <img class="object-cover">; no next/image config for
-      // external Jubelio CDNs yet (images are excluded per mockup D6 anyway).
+      // Brief pins plain <img class="object-cover">; no next/image config
+      // exists for external Jubelio CDN hosts yet.
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={product.image}
@@ -174,6 +185,41 @@ function RosterThumb({
     >
       <span className={`${letter} font-black text-amber-700`}>
         {productLabel(product).charAt(0).toUpperCase()}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * Search-row thumb: real v2 thumbnail when present, otherwise the mockup D6
+ * letter tile. Same <img>-else-tile idiom as `RosterThumb`, sized to the
+ * picker row's 44px frame.
+ */
+function SearchThumb({
+  image,
+  label,
+}: {
+  image: string | null;
+  label: string;
+}) {
+  if (image) {
+    return (
+      // Plain <img>: no next/image config for external Jubelio CDN hosts yet.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={image}
+        alt=""
+        className="h-11 w-11 shrink-0 rounded-lg border border-neutral-200 bg-neutral-100 object-cover dark:border-border"
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden="true"
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-50 to-amber-200 dark:from-amber-950/40 dark:to-amber-900/30"
+    >
+      <span className="text-base font-black text-amber-700 dark:text-amber-400">
+        {label.charAt(0).toUpperCase()}
       </span>
     </span>
   );
@@ -225,16 +271,33 @@ function selectedItemIds(
  * Merge freshly added/updated products into the roster keyed by `itemId`:
  * existing rows are replaced in place, new rows append. Re-POSTing the same
  * item never duplicates a roster row.
+ *
+ * POST/PUT answer with raw drizzle rows that carry neither `image` nor the
+ * computed `availableStock` (both are v2-map joins done on GET), so a plain
+ * replace would revert a row's thumbnail to a letter tile and its stock to
+ * `—` until the next reload. Live fields survive the merge instead: the
+ * picked catalog row (`live`, what the admin just saw) wins, then the row
+ * being replaced, else `null` renders the letter-tile/`—` fallbacks.
  */
 function mergeProductsById(
   prev: readonly SessionProduct[],
   incoming: readonly SessionProduct[],
+  live: readonly SearchResult[] = [],
 ): SessionProduct[] {
+  const liveByItem = new Map(live.map((r) => [r.itemId, r]));
   const next = [...prev];
   for (const p of incoming) {
     const idx = next.findIndex((x) => x.itemId === p.itemId);
-    if (idx === -1) next.push(p);
-    else next[idx] = p;
+    const existing = idx === -1 ? undefined : next[idx];
+    const patch = liveByItem.get(p.itemId);
+    const row: SessionProduct = {
+      ...p,
+      image: p.image ?? patch?.image ?? existing?.image ?? null,
+      availableStock:
+        p.availableStock ?? patch?.stock ?? existing?.availableStock ?? null,
+    };
+    if (idx === -1) next.push(row);
+    else next[idx] = row;
   }
   return next;
 }
@@ -814,7 +877,12 @@ function ProductPicker({
         ]),
       });
       const data = (await res.json().catch(() => null)) as
-        | { ok?: boolean; products?: SessionProduct[]; error?: string }
+        | {
+            ok?: boolean;
+            products?: SessionProduct[];
+            skipped?: { itemId: number; skuCode?: string }[];
+            error?: string;
+          }
         | null;
       if (res.status === 401) {
         await signOutOnExpiry();
@@ -824,9 +892,24 @@ function ProductPicker({
         toast.error(data?.error ?? "Gagal menambah produk.");
         return;
       }
+      // Import guard (Task 5): rows the v2 lookup could not number are
+      // skipped server-side and never persisted — name the count, and leave
+      // them addable (they stay out of `products`, so the roster and the
+      // `✓ Ditambah` toggle don't move for them).
+      if (data.skipped?.length) {
+        toast.error(
+          `${data.skipped.length} produk dilewati — stok belum bisa dicek di ERP, coba lagi.`,
+        );
+      }
       const added = data.products ?? [];
-      setProducts((prev) => mergeProductsById(prev, added));
-      toast.success("Produk ditambahkan.");
+      if (added.length > 0) {
+        // POST answers with raw drizzle rows (no v2 join) — pass the picked
+        // catalog row so the merged roster row shows the same thumbnail and
+        // stock the admin just saw in the search list, not a letter tile +
+        // "—" until the next reload.
+        setProducts((prev) => mergeProductsById(prev, added, [product]));
+        toast.success("Produk ditambahkan.");
+      }
     } catch {
       toast.error("Terjadi kesalahan, coba lagi.");
     } finally {
@@ -859,17 +942,12 @@ function ProductPicker({
         return;
       }
       if (data.product) {
-        // PUT returns the raw drizzle row WITHOUT `availableStock` (that is
-        // computed per-row on GET); replacing the whole row would blank the
-        // stock cell to "—" for a SKU whose stock the client already had
-        // (final review I-5) — keep the previous value.
-        setProducts((prev) =>
-          prev.map((p) =>
-            p.itemId === itemId
-              ? { ...data.product!, availableStock: p.availableStock }
-              : p,
-          ),
-        );
+        // PUT returns the raw drizzle row WITHOUT `availableStock` or `image`
+        // (both are v2-map joins done on GET); replacing the whole row would
+        // blank the stock cell to "—" and revert the thumbnail to a letter
+        // tile for a row whose values the client already had (final review
+        // I-5 + Task 7 review) — mergeProductsById carries both over.
+        setProducts((prev) => mergeProductsById(prev, [data.product!]));
       }
       toast.success("Produk disimpan.");
     } catch {
@@ -982,14 +1060,7 @@ function ProductPicker({
                       className="flex items-center justify-between gap-2 rounded-xl border border-neutral-200 bg-white p-2.5 transition hover:border-neutral-300 dark:border-border dark:bg-card sm:gap-3 sm:p-3"
                     >
                       <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
-                        <span
-                          aria-hidden="true"
-                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-50 to-amber-200 dark:from-amber-950/40 dark:to-amber-900/30"
-                        >
-                          <span className="text-base font-black text-amber-700 dark:text-amber-400">
-                            {label.charAt(0).toUpperCase()}
-                          </span>
-                        </span>
+                        <SearchThumb image={r.image} label={label} />
                         <div className="min-w-0">
                           <div className="truncate text-xs font-bold text-neutral-950 dark:text-neutral-50">
                             {label}
@@ -1000,6 +1071,9 @@ function ProductPicker({
                             </StatusBadge>
                             <span className="text-neutral-400 line-through dark:text-neutral-500">
                               {formatRupiah(r.price)}
+                            </span>
+                            <span className="font-mono tabular-nums">
+                              Stok {r.stock ?? "—"}
                             </span>
                           </div>
                         </div>
