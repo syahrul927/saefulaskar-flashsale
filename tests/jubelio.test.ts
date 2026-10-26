@@ -133,6 +133,64 @@ describe("createJubelioClient", () => {
     });
   });
 
+  it("stalls are bounded: every request carries a 15 s AbortSignal that turns a hung fetch into a rejection", async () => {
+    // Final review I-1: `request()` passed no `signal`, so a half-open TCP or
+    // a slow gateway on the 2.3 MB `/inventory/v2/` page never REJECTED — the
+    // picker route's `await mapPromise`, the roster SSR and the import POST
+    // just sat there. The plate-honesty degradation paths are already pinned
+    // and fire on rejection; all a stall was missing was the rejection.
+    const controller = new AbortController();
+    const timeouts: number[] = [];
+    vi.spyOn(AbortSignal, "timeout").mockImplementation((ms: number) => {
+      timeouts.push(ms);
+      return controller.signal;
+    });
+    // A stall modelled faithfully: the promise settles only when the signal
+    // fires, exactly like undici's abort steps.
+    const fetchMock = vi.fn(
+      (_url: string, init?: RequestInit) =>
+        new Promise<Response>((_resolve, reject) => {
+          const signal = init?.signal;
+          signal?.addEventListener("abort", () => {
+            // undici's timeout reason is a `TimeoutError` DOMException — an
+            // Error subclass, hence this shape.
+            const reason: Error = signal.reason as Error;
+            reject(reason);
+          });
+        }),
+    );
+    vi.stubGlobal("fetch", fetchMock);
+
+    const pending = client.listStockV2();
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(init.signal).toBe(controller.signal);
+    // One constant, applied to every call: 15 s (v2 cold read ≈ 1.7 s).
+    expect(timeouts).toEqual([15_000]);
+
+    controller.abort(
+      new DOMException("The operation was aborted due to timeout", "TimeoutError"),
+    );
+    await expect(pending).rejects.toBeInstanceOf(DOMException);
+    await expect(pending).rejects.toMatchObject({ name: "TimeoutError" });
+  });
+
+  it("attaches an abort signal to every endpoint, GET and POST alike", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ data: [] }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    await client.listProducts();
+    await client.listStock();
+    await client.listStockV2();
+    await client.getStockBySku("AB/1");
+    await client.listSalesOrders();
+    await client.listInvoices();
+
+    for (const [, init] of fetchMock.mock.calls as [string, RequestInit][]) {
+      expect(init.signal).toBeInstanceOf(AbortSignal);
+    }
+  });
+
   it("escapes sku in getStockBySku path", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ item_id: 1 }));
     vi.stubGlobal("fetch", fetchMock);

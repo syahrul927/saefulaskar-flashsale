@@ -37,6 +37,20 @@ export function isJubelioAuthError(e: unknown): boolean {
 
 type Json = Record<string, unknown>;
 
+/**
+ * Hard ceiling on every upstream call, applied in `request()` so no endpoint
+ * can be left unbounded. Without a signal, a stalled read — half-open TCP or
+ * a slow gateway on the ~2.3 MB `/inventory/v2/` page — never REJECTED, and
+ * the three surfaces that await this client (picker products route
+ * `await mapPromise`, roster SSR `getStockMap`, import POST) sat forever
+ * instead of degrading. The rejection side of that contract is already pinned
+ * (`toStockMap`/`mergeStockIntoRows` → "—"/letter tiles); 15 s is what makes
+ * it reachable. Chosen as headroom, not a slow-path compromise: the v2
+ * cold read measures ≈1.7 s live (probe 2026-10-26). One constant, no
+ * per-call override plumbing.
+ */
+const REQUEST_TIMEOUT_MS = 15_000;
+
 async function request(
   token: string,
   path: string,
@@ -53,6 +67,7 @@ async function request(
       "Content-Type": "application/json",
     },
     body: options.body === undefined ? undefined : JSON.stringify(options.body),
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
 
   if (!res.ok) {
