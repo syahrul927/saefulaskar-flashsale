@@ -6,7 +6,9 @@ import {
   gte,
   inArray,
   isNotNull,
+  isNull,
   lt,
+  or,
   sum,
 } from "drizzle-orm";
 
@@ -124,6 +126,12 @@ export async function getGlobalKpis(
         ),
       ),
     getPrimaryActiveSession(db),
+    // Nothing auto-transitions SCHEDULED → ACTIVE (spec non-goal), so a sale
+    // whose start time passed keeps the status forever; without a lower
+    // bound it would sort first and the tile would promise "berikutnya"
+    // for a sale that already went by (final review I-2). Rows with no
+    // startTime stay — they genuinely are unrun, and the tile's "—" guard
+    // renders them honestly.
     db
       .select({
         id: flashSessions.id,
@@ -131,7 +139,15 @@ export async function getGlobalKpis(
         startTime: flashSessions.startTime,
       })
       .from(flashSessions)
-      .where(eq(flashSessions.status, "SCHEDULED"))
+      .where(
+        and(
+          eq(flashSessions.status, "SCHEDULED"),
+          or(
+            isNull(flashSessions.startTime),
+            gte(flashSessions.startTime, now),
+          ),
+        ),
+      )
       .orderBy(asc(flashSessions.startTime))
       .limit(1),
     db
