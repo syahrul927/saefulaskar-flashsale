@@ -169,6 +169,42 @@ describe("createJubelioClient", () => {
   });
 });
 
+describe("request error bodies (Review Focus #1)", () => {
+  const client = createJubelioClient(TOKEN);
+
+  it("keeps the fallback message when upstream answers with a non-JSON body", async () => {
+    // Gateway HTML on a 500 — `res.json()` throws inside the error branch;
+    // request() must swallow it and still carry the real status.
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: false,
+      status: 500,
+      json: async () => {
+        throw new SyntaxError("Unexpected token < in JSON");
+      },
+    }));
+
+    await expect(client.listProducts()).rejects.toMatchObject({
+      name: "JubelioError",
+      status: 500,
+      message: "Jubelio request failed: 500",
+    });
+  });
+
+  it("prefers the upstream JSON message on a structured error", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue({
+      ok: false,
+      status: 400,
+      json: async () => ({ code: "BAD_QUERY", message: "param not allowed" }),
+    }));
+
+    await expect(client.listProducts()).rejects.toMatchObject({
+      status: 400,
+      code: "BAD_QUERY",
+      message: "param not allowed",
+    });
+  });
+});
+
 describe("JubelioError", () => {
   it("keeps status/code and sets name", () => {
     const err = new JubelioError(401, "OLD_TOKEN", "unauthorized");

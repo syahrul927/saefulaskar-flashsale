@@ -111,6 +111,8 @@ export type PickerRow = {
 type RawVariant = {
   item_id?: unknown;
   item_code?: unknown;
+  /** Per-SKU label; present on every live variant (probe 2026-10-26). */
+  item_name?: unknown;
   sell_price?: unknown;
 };
 
@@ -157,30 +159,49 @@ function parseVariants(raw: unknown): RawVariant[] {
 /**
  * Pure reshaper used by `GET /api/jubelio/products`: the live masters
  * response (`{ data: [...] }` envelope or bare array) → camelCase picker
- * rows. Identity fields (`item_id`, `item_code`) come from `variants[0]`;
- * there is no top-level equivalent (spec: verified live 2026-10-26). Junk or
- * absent `variants` yields the fallback row (`itemId 0`, empty strings),
- * never a throw; `minOrder` is constant `1` (masters carries no `min`);
- * `stock` is constant `null` (no working upstream source). Exported for
- * unit tests.
+ * rows, ONE ROW PER VARIANT. Identity (`item_id`, `item_code`) exists only
+ * inside `variants[]`; a live probe (2026-10-26, final review I-4) showed
+ * 328 of 573 items carry >1 variant — 1752 SKUs where a `variants[0]`
+ * mapping would show 573 and make the rest unimportable. Per-variant
+ * `item_name`/`sell_price` win over the item-level defaults (each SKU has
+ * its own price); junk or absent `variants` yields the fallback row
+ * (`itemId 0`, empty strings), never a throw; `minOrder` is constant `1`
+ * (masters carries no `min`); `stock` is constant `null` (no working
+ * upstream source). Exported for unit tests.
  */
 export function toPickerRows(raw: unknown): PickerRow[] {
   const items = Array.isArray(raw)
     ? raw
     : ((raw as { data?: unknown } | null)?.data ?? []);
   if (!Array.isArray(items)) return [];
-  return items.map((item) => {
+  const rows: PickerRow[] = [];
+  for (const item of items) {
     const p = (item ?? {}) as RawMaster;
-    const variant = parseVariants(p.variants)[0] ?? {};
-    return {
-      itemId: num(variant.item_id) ?? 0,
-      skuCode: str(variant.item_code) ?? "",
-      itemGroupName: str(p.item_name) ?? "",
-      price: numberValue(p.sell_price) ?? numberValue(variant.sell_price) ?? 0,
-      minOrder: 1,
-      stock: null,
-    };
-  });
+    const variants = parseVariants(p.variants);
+    if (variants.length === 0) {
+      rows.push({
+        itemId: 0,
+        skuCode: "",
+        itemGroupName: str(p.item_name) ?? "",
+        price: numberValue(p.sell_price) ?? 0,
+        minOrder: 1,
+        stock: null,
+      });
+      continue;
+    }
+    for (const variant of variants) {
+      rows.push({
+        itemId: num(variant.item_id) ?? 0,
+        skuCode: str(variant.item_code) ?? "",
+        itemGroupName: str(variant.item_name) ?? str(p.item_name) ?? "",
+        price:
+          numberValue(variant.sell_price) ?? numberValue(p.sell_price) ?? 0,
+        minOrder: 1,
+        stock: null,
+      });
+    }
+  }
+  return rows;
 }
 
 /** `saveContactRequest` — spec §4.1 (customer onboarding). */
