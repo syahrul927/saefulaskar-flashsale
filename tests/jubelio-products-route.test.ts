@@ -50,6 +50,7 @@ describe("toPickerRows", () => {
         price: 3700000,
         minOrder: 1,
         stock: null,
+        image: null,
       },
     ]);
   });
@@ -83,6 +84,7 @@ describe("toPickerRows", () => {
       price: 3700000,
       minOrder: 1,
       stock: null,
+      image: null,
     };
     expect(toPickerRows({ data: [mastersItem({ variants: "[]" })] })[0]).toEqual(
       fallback,

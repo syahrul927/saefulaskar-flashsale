@@ -100,11 +100,14 @@ export type PickerRow = {
   price: number;
   minOrder: number;
   /**
-   * Always `null` this round — no upstream stock source works (spec:
-   * pending partner/Jubelio-dev answer; `all-stocks/` 500s/400s, `by-sku`
-   * quantities are null). Column dropped from the picker UI.
+   * ERP availability per SKU — v2 `total_stocks.available`, merged
+   * server-side by `/api/jubelio/products` from `toStockMap` (masters
+   * itself has no stock field). `null` when the SKU is absent from the v2
+   * payload; `toPickerRows` alone always emits `null`.
    */
   stock: number | null;
+  /** v2 `thumbnail` URL, merged server-side; `null` → letter tile. */
+  image: string | null;
 };
 
 /** One entry of the masters item's `variants` JSON string. */
@@ -166,8 +169,9 @@ function parseVariants(raw: unknown): RawVariant[] {
  * `item_name`/`sell_price` win over the item-level defaults (each SKU has
  * its own price); junk or absent `variants` yields the fallback row
  * (`itemId 0`, empty strings), never a throw; `minOrder` is constant `1`
- * (masters carries no `min`); `stock` is constant `null` (no working
- * upstream source). Exported for unit tests.
+ * (masters carries no `min`); `stock`/`image` emit `null` here — masters
+ * has neither; the route merges them from the v2 payload (`toStockMap`).
+ * Exported for unit tests.
  */
 export function toPickerRows(raw: unknown): PickerRow[] {
   const items = Array.isArray(raw)
@@ -186,6 +190,7 @@ export function toPickerRows(raw: unknown): PickerRow[] {
         price: numberValue(p.sell_price) ?? 0,
         minOrder: 1,
         stock: null,
+        image: null,
       });
       continue;
     }
@@ -198,10 +203,61 @@ export function toPickerRows(raw: unknown): PickerRow[] {
           numberValue(variant.sell_price) ?? numberValue(p.sell_price) ?? 0,
         minOrder: 1,
         stock: null,
+        image: null,
       });
     }
   }
   return rows;
+}
+
+/** One `/inventory/v2/` SKU row joined onto a `PickerRow` by `item_id`. */
+export type StockEntry = {
+  available: number;
+  image: string | null;
+};
+
+/** One SKU-level entry of the v2 `/inventory/v2/` response. */
+type RawStockRow = {
+  item_id?: unknown;
+  thumbnail?: unknown;
+  total_stocks?: unknown;
+};
+
+/**
+ * Pure reshaper for the v2 stock endpoint: the live `/inventory/v2/`
+ * response (`{ data: [...] }` envelope or bare array, tolerated exactly
+ * like `toPickerRows`) → `item_id → StockEntry`. Rows are SKU-level with
+ * `total_stocks.{on_hand,on_order,reserved,available}` and a CDN
+ * `thumbnail` (live probe 2026-10-26: 1775 rows in one `page_size=2000`
+ * request). `available` accepts numbers and decimal strings via the same
+ * `numberValue` coercion as prices, rejects `NaN`/non-finite, and passes
+ * negatives through untouched (4 SKUs exist, min −14 — parity means the
+ * raw ERP number). Absent or non-string `thumbnail` → `image: null`
+ * (letter tile). Junk rows — non-numeric/missing `item_id`, absent
+ * `total_stocks`, non-numeric `available`, non-object entries — are
+ * skipped, never a throw. Duplicate `item_id`s: last write wins.
+ * Exported for unit tests.
+ */
+export function toStockMap(raw: unknown): Map<number, StockEntry> {
+  const items = Array.isArray(raw)
+    ? raw
+    : ((raw as { data?: unknown } | null)?.data ?? []);
+  const map = new Map<number, StockEntry>();
+  if (!Array.isArray(items)) return map;
+  for (const item of items) {
+    if (typeof item !== "object" || item === null) continue;
+    const r = item as RawStockRow;
+    const itemId = num(r.item_id);
+    if (itemId === undefined || !Number.isFinite(itemId)) continue;
+    const stocks = r.total_stocks;
+    if (typeof stocks !== "object" || stocks === null) continue;
+    const available = numberValue(
+      (stocks as { available?: unknown }).available,
+    );
+    if (available === undefined) continue;
+    map.set(itemId, { available, image: str(r.thumbnail) ?? null });
+  }
+  return map;
 }
 
 /** `saveContactRequest` — spec §4.1 (customer onboarding). */
@@ -269,6 +325,18 @@ export function createJubelioClient(token: string) {
       return request(token, "/inventory/items/all-stocks/", {
         method: "POST",
         body: { location_id: env.JUBELIO_LOCATION_ID },
+      });
+    },
+
+    /**
+     * GET /inventory/v2/?page=1&page_size=2000 — the dashboard's own stock
+     * endpoint: SKU-level `total_stocks` + `thumbnail` for the WHOLE catalog
+     * in one request (live probe 2026-10-26: 1775 rows; unlike masters, v2
+     * accepts query params). No pagination loop needed.
+     */
+    async listStockV2(): Promise<unknown> {
+      return request(token, "/inventory/v2/?page=1&page_size=2000", {
+        method: "GET",
       });
     },
 
