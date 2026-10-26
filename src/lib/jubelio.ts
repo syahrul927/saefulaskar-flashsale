@@ -42,7 +42,10 @@ async function request(
   path: string,
   options: { method: "GET" | "POST"; body?: Json },
 ): Promise<unknown> {
-  const url = `${env.JUBELIO_BASE_URL}${path}`;
+  // Join explicitly: the default `JUBELIO_BASE_URL` ends with `/` and every
+  // path starts with `/`, and naive concatenation produced `core-api//…` →
+  // 404 (spec: verified live 2026-10-26).
+  const url = `${env.JUBELIO_BASE_URL.replace(/\/+$/, "")}/${path.replace(/^\/+/, "")}`;
   const res = await fetch(url, {
     method: options.method,
     headers: {
@@ -96,17 +99,27 @@ export type PickerRow = {
   itemGroupName: string;
   price: number;
   minOrder: number;
-  /** Real-time stock — the Jubelio master API may omit it → `null`. */
+  /**
+   * Always `null` this round — no upstream stock source works (spec:
+   * pending partner/Jubelio-dev answer; `all-stocks/` 500s/400s, `by-sku`
+   * quantities are null). Column dropped from the picker UI.
+   */
   stock: number | null;
 };
 
-type RawMaster = {
+/** One entry of the masters item's `variants` JSON string. */
+type RawVariant = {
   item_id?: unknown;
-  sku_code?: unknown;
-  item_group_name?: unknown;
-  price?: unknown;
-  min?: unknown;
-  stock?: unknown;
+  item_code?: unknown;
+  sell_price?: unknown;
+};
+
+type RawMaster = {
+  item_name?: unknown;
+  /** Decimal string ("3700000.0000") in the live payload. */
+  sell_price?: unknown;
+  /** JSON-encoded string of `RawVariant[]` (may already be an array). */
+  variants?: unknown;
 };
 
 function num(v: unknown): number | undefined {
@@ -117,23 +130,55 @@ function str(v: unknown): string | undefined {
   return typeof v === "string" ? v : undefined;
 }
 
+/** Numeric field tolerant of the decimal-string prices upstream sends. */
+function numberValue(v: unknown): number | undefined {
+  if (typeof v === "number") return Number.isFinite(v) ? v : undefined;
+  if (typeof v === "string") {
+    const n = Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  }
+  return undefined;
+}
+
+/** Masters `variants` arrives as a JSON-encoded string; tolerate arrays too. */
+function parseVariants(raw: unknown): RawVariant[] {
+  if (Array.isArray(raw)) return raw as RawVariant[];
+  if (typeof raw === "string") {
+    try {
+      const parsed: unknown = JSON.parse(raw);
+      return Array.isArray(parsed) ? (parsed as RawVariant[]) : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
 /**
- * Pure reshaper used by `GET /api/jubelio/products`: raw master items →
- * camelCase picker rows. Non-array input yields `[]`; a missing or
- * non-numeric `stock` stays `null` so the UI shows an em dash, never a
- * fake `0`. Exported for unit tests.
+ * Pure reshaper used by `GET /api/jubelio/products`: the live masters
+ * response (`{ data: [...] }` envelope or bare array) → camelCase picker
+ * rows. Identity fields (`item_id`, `item_code`) come from `variants[0]`;
+ * there is no top-level equivalent (spec: verified live 2026-10-26). Junk or
+ * absent `variants` yields the fallback row (`itemId 0`, empty strings),
+ * never a throw; `minOrder` is constant `1` (masters carries no `min`);
+ * `stock` is constant `null` (no working upstream source). Exported for
+ * unit tests.
  */
-export function toPickerRows(rows: unknown): PickerRow[] {
-  if (!Array.isArray(rows)) return [];
-  return rows.map((item) => {
+export function toPickerRows(raw: unknown): PickerRow[] {
+  const items = Array.isArray(raw)
+    ? raw
+    : ((raw as { data?: unknown } | null)?.data ?? []);
+  if (!Array.isArray(items)) return [];
+  return items.map((item) => {
     const p = (item ?? {}) as RawMaster;
+    const variant = parseVariants(p.variants)[0] ?? {};
     return {
-      itemId: num(p.item_id) ?? 0,
-      skuCode: str(p.sku_code) ?? "",
-      itemGroupName: str(p.item_group_name) ?? "",
-      price: num(p.price) ?? 0,
-      minOrder: num(p.min) ?? 1,
-      stock: num(p.stock) ?? null,
+      itemId: num(variant.item_id) ?? 0,
+      skuCode: str(variant.item_code) ?? "",
+      itemGroupName: str(p.item_name) ?? "",
+      price: numberValue(p.sell_price) ?? numberValue(variant.sell_price) ?? 0,
+      minOrder: 1,
+      stock: null,
     };
   });
 }
@@ -189,11 +234,13 @@ export type JubelioClient = ReturnType<typeof createJubelioClient>;
 
 export function createJubelioClient(token: string) {
   return {
-    /** GET /inventory/items/masters — browse/search the product catalog. */
-    async listProducts(search?: string): Promise<unknown> {
-      const q =
-        search === undefined ? "" : `?search=${encodeURIComponent(search)}`;
-      return request(token, `/inventory/items/masters${q}`, { method: "GET" });
+    /**
+     * GET /inventory/items/masters — the FULL catalog, no query params.
+     * Upstream rejects every param (search, pagination — spec probe
+     * 2026-10-26), so filtering happens client-side on the mapped rows.
+     */
+    async listProducts(): Promise<unknown> {
+      return request(token, "/inventory/items/masters", { method: "GET" });
     },
 
     /** POST /inventory/items/all-stocks/ — all products + stock for this location. */
