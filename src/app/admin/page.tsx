@@ -2,14 +2,17 @@ import { desc } from "drizzle-orm";
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { KpiRow } from "@/app/_components/kpi-tiles";
+import { KpiRow, KpiTile } from "@/app/_components/kpi-tiles";
 import { Panel } from "@/app/_components/panel";
 import { SessionActions } from "@/app/_components/session-actions";
 import {
   sessionStatusTone,
   StatusBadge,
 } from "@/app/_components/status-badge";
+import { formatClaimPercent } from "@/app/admin/format";
+import { formatRupiah } from "@/lib/format";
 import { Button } from "@/components/ui/button";
+import { formatGmvDelta, getGlobalKpis } from "@/server/console-kpi";
 import { db } from "@/server/db";
 import { flashSessions } from "@/server/db/schema";
 import { getSessionKpis } from "@/server/session-query";
@@ -35,14 +38,39 @@ function formatRange(start: Date | null, end: Date | null): string {
  * start.
  */
 export default async function AdminSessionsPage() {
-  const [rows, kpis] = await Promise.all([
+  const [rows, kpis, global] = await Promise.all([
     // Newest first (spec decision 3): the session an admin cares about is
     // the one they just created, not whatever the DB returns unordered.
     db.select().from(flashSessions).orderBy(desc(flashSessions.createdAt)),
     getSessionKpis(db),
+    getGlobalKpis(db),
   ]);
 
   const paused = rows.some((r) => r.status === "PAUSED");
+
+  // Tile 3's copy + deep link: prefer the ACTIVE session, else the next
+  // SCHEDULED one. `formatRange` is deliberately NOT reused here — it
+  // collapses to "—" whenever either bound is null, and SCHEDULED sessions
+  // may have no startTime yet (review-focus pin: must not crash the copy).
+  const when = global.nextScheduled?.startTime
+    ? global.nextScheduled.startTime.toLocaleString("id-ID", {
+        dateStyle: "medium",
+        timeStyle: "short",
+      })
+    : "—";
+  const sessionTile = global.activeSession
+    ? {
+        value: global.activeSession.name,
+        hint: "sedang berlangsung",
+        href: `/admin/sessions/${global.activeSession.id}/products`,
+      }
+    : global.nextScheduled
+      ? {
+          value: "Tidak ada",
+          hint: `berikutnya: ${global.nextScheduled.name} · ${when}`,
+          href: `/admin/sessions/${global.nextScheduled.id}/products`,
+        }
+      : { value: "Tidak ada", hint: "belum ada sesi terjadwal", href: undefined };
 
   return (
     <main className="flex-1 space-y-6 p-4 md:p-6">
@@ -59,6 +87,45 @@ export default async function AdminSessionsPage() {
           Sesi Baru
         </Button>
       </div>
+
+      {/* Global summary (spec decision 5) — cross-session numbers first,
+          then the live session's own metrics below. */}
+      <section aria-label="Ringkasan" className="space-y-2">
+        <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
+          Ringkasan
+        </p>
+
+        <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
+          <KpiTile
+            label="PERLU KONFIRMASI"
+            value={String(global.unpaidWithProof)}
+            hint={`${global.unpaidWithProof} dari ${global.unpaidTotal} belum bayar`}
+            // Brand colour only when there is work to do; at 0 the default
+            // ink wins so exactly one text-colour class lands (KpiTile rule).
+            valueClassName={
+              global.unpaidWithProof > 0 ? "text-brand-primary" : undefined
+            }
+            href="/admin/orders?status=UNPAID"
+          />
+          <KpiTile
+            label="GMV HARI INI"
+            value={formatRupiah(global.gmvToday)}
+            hint={formatGmvDelta(global.gmvToday, global.gmvYesterday)}
+            valueClassName="text-emerald-600"
+          />
+          <KpiTile
+            label="SESI AKTIF"
+            value={sessionTile.value}
+            hint={sessionTile.hint}
+            href={sessionTile.href}
+          />
+          <KpiTile
+            label="KLAIM vs KUOTA"
+            value={`${global.totalClaimed}/${global.totalQuota}`}
+            hint={formatClaimPercent(global.totalClaimed, global.totalQuota)}
+          />
+        </div>
+      </section>
 
       {kpis && <KpiRow kpis={kpis} />}
 
