@@ -5,9 +5,11 @@ import Link from "next/link";
 import { KpiRow, KpiTile } from "@/app/_components/kpi-tiles";
 import { Panel } from "@/app/_components/panel";
 import { SessionActions } from "@/app/_components/session-actions";
+import { SessionListFilter } from "@/app/_components/session-list-filter";
 import {
   sessionStatusTone,
   StatusBadge,
+  type SessionStatus,
 } from "@/app/_components/status-badge";
 import { formatClaimPercent } from "@/app/admin/format";
 import { formatRupiah } from "@/lib/format";
@@ -28,6 +30,52 @@ function formatRange(start: Date | null, end: Date | null): string {
   const fmt = (d: Date) =>
     d.toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" });
   return `${fmt(start)} — ${fmt(end)}`;
+}
+
+/**
+ * One session row — server-rendered, handed to the client filter island as a
+ * ReactNode prop (same pattern as the admin orders list). Markup unchanged
+ * from the pre-filter inline version.
+ */
+function SessionListItem({
+  s,
+}: {
+  s: typeof flashSessions.$inferSelect;
+}) {
+  return (
+    <li className="p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <h4 className="truncate font-semibold text-neutral-950 dark:text-neutral-50">
+              {s.name}
+            </h4>
+            <StatusBadge
+              tone={sessionStatusTone(s.status)}
+              pulse={s.status === "ACTIVE"}
+            >
+              {s.status}
+            </StatusBadge>
+          </div>
+          <p className="mt-1 font-mono text-xs tabular-nums text-neutral-500 dark:text-neutral-400">
+            {formatRange(s.startTime, s.endTime)}
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant="outline"
+          nativeButton={false}
+          render={<Link href={`/admin/sessions/${s.id}/products`} />}
+        >
+          Produk
+        </Button>
+      </div>
+
+      <div className="mt-4">
+        <SessionActions sessionId={s.id} status={s.status} />
+      </div>
+    </li>
+  );
 }
 
 /**
@@ -142,42 +190,21 @@ export default async function AdminSessionsPage() {
             Belum ada sesi. Mulai dengan &ldquo;Sesi Baru&rdquo;.
           </p>
         ) : (
-          <ul className="divide-y divide-neutral-100 dark:divide-border">
-            {rows.map((s) => (
-              <li key={s.id} className="p-4 sm:p-5">
-                <div className="flex flex-wrap items-start justify-between gap-3">
-                  <div className="min-w-0">
-                    <div className="flex flex-wrap items-center gap-2">
-                      <h4 className="truncate font-semibold text-neutral-950 dark:text-neutral-50">
-                        {s.name}
-                      </h4>
-                      <StatusBadge
-                        tone={sessionStatusTone(s.status)}
-                        pulse={s.status === "ACTIVE"}
-                      >
-                        {s.status}
-                      </StatusBadge>
-                    </div>
-                    <p className="mt-1 font-mono text-xs tabular-nums text-neutral-500 dark:text-neutral-400">
-                      {formatRange(s.startTime, s.endTime)}
-                    </p>
-                  </div>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    nativeButton={false}
-                    render={<Link href={`/admin/sessions/${s.id}/products`} />}
-                  >
-                    Produk
-                  </Button>
-                </div>
-
-                <div className="mt-4">
-                  <SessionActions sessionId={s.id} status={s.status} />
-                </div>
-              </li>
-            ))}
-          </ul>
+          <SessionListFilter
+            rows={rows.map((s) => ({
+              id: s.id,
+              status: s.status,
+              node: <SessionListItem key={s.id} s={s} />,
+            }))}
+            counts={rows.reduce<Record<"ALL" | SessionStatus, number>>(
+              (acc, s) => {
+                acc.ALL += 1;
+                acc[s.status] += 1;
+                return acc;
+              },
+              { ALL: 0, SCHEDULED: 0, ACTIVE: 0, PAUSED: 0, ENDED: 0 },
+            )}
+          />
         )}
       </Panel>
     </main>
