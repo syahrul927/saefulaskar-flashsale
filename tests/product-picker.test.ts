@@ -117,6 +117,7 @@ function catalogRow(
   itemId: number,
   itemGroupName: string,
   skuCode: string,
+  overrides: Partial<SearchResult> = {},
 ): SearchResult {
   return {
     itemId,
@@ -125,6 +126,8 @@ function catalogRow(
     price: 1000,
     minOrder: 1,
     stock: null,
+    image: null,
+    ...overrides,
   };
 }
 
@@ -191,6 +194,23 @@ describe("filterCatalog", () => {
 
   it("never matches on price or stock digits", () => {
     expect(filterCatalog(CATALOG, "1000")).toEqual([]);
+  });
+
+  it("ignores the new v2 fields — stock numbers and image URLs never match", () => {
+    // Task 4 puts `image` on every row and makes `stock` real; matching is
+    // still name/SKU-only, so a raw ERP figure like -14 or a CDN fragment
+    // must not surface rows.
+    const withV2 = [
+      catalogRow(1, "Sepeda Listrik X1", "SKU-SPD-X1", {
+        stock: -14,
+        image: "https://cdn.jubelio.example/img/sku-spd-x1.jpg",
+      }),
+      catalogRow(2, "Helm Standar", "SKU-HELM-01", { stock: 1775 }),
+    ];
+    expect(filterCatalog(withV2, "-14")).toEqual([]);
+    expect(filterCatalog(withV2, "1775")).toEqual([]);
+    expect(filterCatalog(withV2, "jubelio.example")).toEqual([]);
+    expect(filterCatalog(withV2, "x1").map((r) => r.itemId)).toEqual([1]);
   });
 
   it("trims surrounding whitespace before matching", () => {

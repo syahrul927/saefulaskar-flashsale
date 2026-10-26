@@ -54,11 +54,14 @@ export type SearchResult = {
   price: number;
   minOrder: number;
   /**
-   * Always `null` this round — Jubelio has no working stock source (spec:
-   * pending the partner's Jubelio-dev answer). Stock stays in the contract
-   * so a source can be re-added without touching the route or the roster.
+   * ERP availability per SKU, merged server-side from the v2 inventory
+   * cache (`mergeStockIntoRows`). Raw parity: negative figures (live min
+   * −14) display untouched; `null` means the SKU is absent from the v2
+   * payload and renders `—`.
    */
   stock: number | null;
+  /** v2 `thumbnail` URL; `null` → letter tile (`SearchThumb`). */
+  image: string | null;
 };
 
 /**
@@ -174,6 +177,41 @@ function RosterThumb({
     >
       <span className={`${letter} font-black text-amber-700`}>
         {productLabel(product).charAt(0).toUpperCase()}
+      </span>
+    </span>
+  );
+}
+
+/**
+ * Search-row thumb: real v2 thumbnail when present, otherwise the mockup D6
+ * letter tile. Same <img>-else-tile idiom as `RosterThumb`, sized to the
+ * picker row's 44px frame.
+ */
+function SearchThumb({
+  image,
+  label,
+}: {
+  image: string | null;
+  label: string;
+}) {
+  if (image) {
+    return (
+      // Plain <img>: no next/image config for external Jubelio CDN hosts yet.
+      // eslint-disable-next-line @next/next/no-img-element
+      <img
+        src={image}
+        alt=""
+        className="h-11 w-11 shrink-0 rounded-lg border border-neutral-200 bg-neutral-100 object-cover dark:border-border"
+      />
+    );
+  }
+  return (
+    <span
+      aria-hidden="true"
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-50 to-amber-200 dark:from-amber-950/40 dark:to-amber-900/30"
+    >
+      <span className="text-base font-black text-amber-700 dark:text-amber-400">
+        {label.charAt(0).toUpperCase()}
       </span>
     </span>
   );
@@ -982,14 +1020,7 @@ function ProductPicker({
                       className="flex items-center justify-between gap-2 rounded-xl border border-neutral-200 bg-white p-2.5 transition hover:border-neutral-300 dark:border-border dark:bg-card sm:gap-3 sm:p-3"
                     >
                       <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
-                        <span
-                          aria-hidden="true"
-                          className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-50 to-amber-200 dark:from-amber-950/40 dark:to-amber-900/30"
-                        >
-                          <span className="text-base font-black text-amber-700 dark:text-amber-400">
-                            {label.charAt(0).toUpperCase()}
-                          </span>
-                        </span>
+                        <SearchThumb image={r.image} label={label} />
                         <div className="min-w-0">
                           <div className="truncate text-xs font-bold text-neutral-950 dark:text-neutral-50">
                             {label}
@@ -1000,6 +1031,9 @@ function ProductPicker({
                             </StatusBadge>
                             <span className="text-neutral-400 line-through dark:text-neutral-500">
                               {formatRupiah(r.price)}
+                            </span>
+                            <span className="font-mono tabular-nums">
+                              Stok {r.stock ?? "—"}
                             </span>
                           </div>
                         </div>
