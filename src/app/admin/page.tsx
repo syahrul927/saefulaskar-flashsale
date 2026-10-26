@@ -2,23 +2,17 @@ import { desc } from "drizzle-orm";
 import type { Metadata } from "next";
 import Link from "next/link";
 
-import { cn } from "cn";
-
+import { KpiRow } from "@/app/_components/kpi-tiles";
 import { Panel } from "@/app/_components/panel";
 import { SessionActions } from "@/app/_components/session-actions";
 import {
   sessionStatusTone,
   StatusBadge,
 } from "@/app/_components/status-badge";
-import {
-  formatClaimPercent,
-  formatCompactRupiah,
-} from "@/app/admin/format";
-import { formatRupiah } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { db } from "@/server/db";
 import { flashSessions } from "@/server/db/schema";
-import { getSessionKpis, type SessionKpis } from "@/server/session-query";
+import { getSessionKpis } from "@/server/session-query";
 
 export const metadata: Metadata = {
   title: "Konsol — Flash Studio Admin",
@@ -31,97 +25,6 @@ function formatRange(start: Date | null, end: Date | null): string {
   const fmt = (d: Date) =>
     d.toLocaleString("id-ID", { dateStyle: "medium", timeStyle: "short" });
   return `${fmt(start)} — ${fmt(end)}`;
-}
-
-/** KPI tile shell — design.html:235-253. */
-function KpiTile({
-  label,
-  value,
-  unit,
-  hint,
-  valueClassName,
-}: {
-  label: string;
-  value: string;
-  /** Suffix sitting on the value line, e.g. `SKU` / `unit`. */
-  unit?: string;
-  /** Small mono line under the value: quota share or compact rupiah. */
-  hint?: string;
-  /** Colour override for the value (reserved = brand, GMV = emerald). */
-  valueClassName?: string;
-}) {
-  return (
-    <div className="rounded-xl border border-neutral-100 bg-neutral-50 p-3 dark:border-border dark:bg-muted">
-      <span className="block text-[8px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-        {label}
-      </span>
-      <span
-        title={value}
-        className={cn(
-          "mt-1 flex min-w-0 items-baseline gap-1 font-mono text-lg font-bold tabular-nums",
-          // Default wins when the caller passes no colour, so exactly one
-          // text-colour class lands on the value line.
-          valueClassName ?? "text-neutral-950 dark:text-neutral-50",
-        )}
-      >
-        <span className="min-w-0 truncate">{value}</span>
-        {unit && (
-          <span className="shrink-0 text-[10px] font-medium text-neutral-500 dark:text-neutral-400">
-            {unit}
-          </span>
-        )}
-      </span>
-      {hint && (
-        <span className="mt-0.5 block font-mono text-[10px] tabular-nums text-neutral-500 dark:text-neutral-400">
-          {hint}
-        </span>
-      )}
-    </div>
-  );
-}
-
-/**
- * KPI tiles for the live sale. Numbers come from `getSessionKpis`, which only
- * answers for the primary ACTIVE session — so the row is hidden entirely when
- * nothing is running, rather than showing a wall of zeros.
- */
-function KpiRow({ kpis }: { kpis: SessionKpis }) {
-  return (
-    <section aria-label="KPI sesi aktif" className="space-y-2">
-      <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-neutral-500 dark:text-neutral-400">
-        Metrik Sesi Aktif
-      </p>
-
-      <div className="grid grid-cols-2 gap-2 sm:gap-3 lg:grid-cols-4">
-        <KpiTile
-          label="PRODUK DIDAFTARKAN"
-          value={String(kpis.productCount)}
-          unit="SKU"
-        />
-        <KpiTile
-          label="TOTAL KUOTA SALE"
-          value={String(kpis.totalQuota)}
-          unit="unit"
-        />
-        <KpiTile
-          label="RESERVED / TERJUAL"
-          value={String(kpis.totalClaimed)}
-          unit="unit"
-          valueClassName="text-brand-secondary"
-          hint={`${kpis.totalClaimed}/${kpis.totalQuota} (${formatClaimPercent(
-            kpis.totalClaimed,
-            kpis.totalQuota,
-          )})`}
-        />
-        <KpiTile
-          label="ESTIMASI GMV"
-          value={formatRupiah(kpis.estimatedGmv)}
-          valueClassName="text-emerald-600"
-          hint={formatCompactRupiah(kpis.estimatedGmv)}
-        />
-      </div>
-    </section>
-  );
 }
 
 /**
