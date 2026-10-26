@@ -40,8 +40,13 @@ export type SessionProduct = {
   flashPrice: number;
   category: string | null;
   type: ProductType;
-  /** Catalog image URL — never populated yet (mockup D6: letter tiles). */
+  /**
+   * v2 thumbnail URL, joined live from the stock map on the roster page
+   * (`rosterProducts`) and preserved by the picker's add/save merges.
+   * Missing data (null/absent) renders the mockup D6 letter tile instead.
+   */
   image?: string | null;
+  /** Raw ERP stock from the same live v2 join; `null` renders "—". */
   availableStock: number | null;
 };
 
@@ -145,7 +150,10 @@ function categoryText(category: string | null): string {
   return category === null || category.trim() === "" ? "Umum" : category;
 }
 
-/** Letter-tile thumb frame — mockup D6 (real images excluded). */
+/**
+ * Roster thumb: the live v2 image when the join has one, else the mockup D6
+ * letter tile as the missing-data fallback.
+ */
 function RosterThumb({
   product,
   size = "table",
@@ -160,8 +168,8 @@ function RosterThumb({
   const letter = size === "table" ? "text-base" : "text-lg";
   if (product.image) {
     return (
-      // Brief pins plain <img class="object-cover">; no next/image config for
-      // external Jubelio CDNs yet (images are excluded per mockup D6 anyway).
+      // Brief pins plain <img class="object-cover">; no next/image config
+      // exists for external Jubelio CDN hosts yet.
       // eslint-disable-next-line @next/next/no-img-element
       <img
         src={product.image}
@@ -263,16 +271,33 @@ function selectedItemIds(
  * Merge freshly added/updated products into the roster keyed by `itemId`:
  * existing rows are replaced in place, new rows append. Re-POSTing the same
  * item never duplicates a roster row.
+ *
+ * POST/PUT answer with raw drizzle rows that carry neither `image` nor the
+ * computed `availableStock` (both are v2-map joins done on GET), so a plain
+ * replace would revert a row's thumbnail to a letter tile and its stock to
+ * `—` until the next reload. Live fields survive the merge instead: the
+ * picked catalog row (`live`, what the admin just saw) wins, then the row
+ * being replaced, else `null` renders the letter-tile/`—` fallbacks.
  */
 function mergeProductsById(
   prev: readonly SessionProduct[],
   incoming: readonly SessionProduct[],
+  live: readonly SearchResult[] = [],
 ): SessionProduct[] {
+  const liveByItem = new Map(live.map((r) => [r.itemId, r]));
   const next = [...prev];
   for (const p of incoming) {
     const idx = next.findIndex((x) => x.itemId === p.itemId);
-    if (idx === -1) next.push(p);
-    else next[idx] = p;
+    const existing = idx === -1 ? undefined : next[idx];
+    const patch = liveByItem.get(p.itemId);
+    const row: SessionProduct = {
+      ...p,
+      image: p.image ?? patch?.image ?? existing?.image ?? null,
+      availableStock:
+        p.availableStock ?? patch?.stock ?? existing?.availableStock ?? null,
+    };
+    if (idx === -1) next.push(row);
+    else next[idx] = row;
   }
   return next;
 }
@@ -878,7 +903,11 @@ function ProductPicker({
       }
       const added = data.products ?? [];
       if (added.length > 0) {
-        setProducts((prev) => mergeProductsById(prev, added));
+        // POST answers with raw drizzle rows (no v2 join) — pass the picked
+        // catalog row so the merged roster row shows the same thumbnail and
+        // stock the admin just saw in the search list, not a letter tile +
+        // "—" until the next reload.
+        setProducts((prev) => mergeProductsById(prev, added, [product]));
         toast.success("Produk ditambahkan.");
       }
     } catch {
@@ -913,17 +942,12 @@ function ProductPicker({
         return;
       }
       if (data.product) {
-        // PUT returns the raw drizzle row WITHOUT `availableStock` (that is
-        // computed per-row on GET); replacing the whole row would blank the
-        // stock cell to "—" for a SKU whose stock the client already had
-        // (final review I-5) — keep the previous value.
-        setProducts((prev) =>
-          prev.map((p) =>
-            p.itemId === itemId
-              ? { ...data.product!, availableStock: p.availableStock }
-              : p,
-          ),
-        );
+        // PUT returns the raw drizzle row WITHOUT `availableStock` or `image`
+        // (both are v2-map joins done on GET); replacing the whole row would
+        // blank the stock cell to "—" and revert the thumbnail to a letter
+        // tile for a row whose values the client already had (final review
+        // I-5 + Task 7 review) — mergeProductsById carries both over.
+        setProducts((prev) => mergeProductsById(prev, [data.product!]));
       }
       toast.success("Produk disimpan.");
     } catch {

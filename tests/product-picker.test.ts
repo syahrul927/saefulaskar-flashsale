@@ -113,6 +113,70 @@ describe("mergeProductsById", () => {
   });
 });
 
+/**
+ * What POST/PUT actually answer: the raw drizzle row — roster fields yes, v2
+ * join no. `image` and `availableStock` keys are ABSENT (only GET joins them
+ * from the v2 map), so a merge that replaces a row wholesale loses both.
+ */
+function postedRow(
+  itemId: number,
+  overrides: Partial<SessionProduct> = {},
+): SessionProduct {
+  const bare: Partial<SessionProduct> = rosterRow(itemId, overrides);
+  delete bare.availableStock;
+  delete bare.image;
+  return bare as SessionProduct;
+}
+
+describe("mergeProductsById keeps the roster's live v2 fields", () => {
+  it("a freshly added row keeps the thumbnail the admin just saw", () => {
+    const picked = catalogRow(7, "Sepeda Listrik X1", "SKU-SPD-X1", {
+      image: "https://cdn.jubelio.example/7.jpg",
+      stock: 12,
+    });
+    const merged = mergeProductsById([], [postedRow(7)], [picked]);
+    expect(merged[0]?.image).toBe("https://cdn.jubelio.example/7.jpg");
+    expect(merged[0]?.availableStock).toBe(12);
+  });
+
+  it("a saved row keeps its thumbnail and stock across the PUT replace", () => {
+    const prev = [
+      rosterRow(3, {
+        image: "https://cdn.jubelio.example/3.jpg",
+        availableStock: -14,
+      }),
+    ];
+    const merged = mergeProductsById(prev, [
+      postedRow(3, { sessionQuota: 4 }),
+    ]);
+    expect(merged.map((p) => p.itemId)).toEqual([3]);
+    expect(merged[0]?.sessionQuota).toBe(4);
+    expect(merged[0]?.image).toBe("https://cdn.jubelio.example/3.jpg");
+    // Raw negatives survive untouched (parity with the dashboard).
+    expect(merged[0]?.availableStock).toBe(-14);
+  });
+
+  it("a picked row with no v2 data still merges with both fallbacks", () => {
+    // Letter tile + "—", never a stale value: the answer is null, not absent.
+    const picked = catalogRow(8, "Helm Standar", "SKU-HELM-08");
+    const merged = mergeProductsById([], [postedRow(8)], [picked]);
+    expect(merged[0]?.image).toBeNull();
+    expect(merged[0]?.availableStock).toBeNull();
+  });
+
+  it("two-arg merges behave exactly as before for full SessionProduct rows", () => {
+    const stale = rosterRow(1, { sessionQuota: 10, availableStock: 5 });
+    const fresh = rosterRow(1, {
+      sessionQuota: 77,
+      image: "https://cdn.jubelio.example/new.jpg",
+    });
+    const merged = mergeProductsById([stale], [fresh]);
+    expect(merged[0]?.sessionQuota).toBe(77);
+    expect(merged[0]?.availableStock).toBe(5);
+    expect(merged[0]?.image).toBe("https://cdn.jubelio.example/new.jpg");
+  });
+});
+
 function catalogRow(
   itemId: number,
   itemGroupName: string,
