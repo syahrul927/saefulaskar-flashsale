@@ -86,6 +86,29 @@ export function filterCatalog(
   return matched.slice(0, cap);
 }
 
+/**
+ * The catalog-fetch guard, as a pure predicate (final review C-1). The old
+ * effect re-ran on every `loadingCatalog` flip; after a failure `catalog`
+ * stayed null and the guard passed again — one request per round trip in a
+ * loop, a toast storm, and hammering the ERP with the admin's token. The
+ * `errored` term is the stop: a failed load is retried only by closing and
+ * reopening the dialog, exactly what the error plate says.
+ * Exported for unit tests.
+ */
+export function shouldLoadCatalog({
+  open,
+  loaded,
+  inFlight,
+  errored,
+}: {
+  open: boolean;
+  loaded: boolean;
+  inFlight: boolean;
+  errored: boolean;
+}): boolean {
+  return open && !loaded && !inFlight && !errored;
+}
+
 type RowPatch = {
   sessionQuota: number;
   minOrder: number;
@@ -715,14 +738,32 @@ function ProductPicker({
   }, [pickerOpen]);
 
   // Load the catalog the first time the dialog opens. A failed load leaves
-  // `catalog` null, so closing and reopening the dialog retries.
+  // `catalog` null but marks `loadErrored`, which keeps the guard closed —
+  // closing and reopening the dialog clears it and retries (C-1: without the
+  // errored term the loadingCatalog flip re-ran this effect forever).
   useEffect(() => {
-    if (!pickerOpen || catalog !== null || loadingCatalog) return;
+    if (!pickerOpen) {
+      setLoadErrored(false);
+      return;
+    }
+    if (
+      !shouldLoadCatalog({
+        open: pickerOpen,
+        loaded: catalog !== null,
+        inFlight: loadingCatalog,
+        errored: loadErrored,
+      })
+    ) {
+      return;
+    }
     setLoadingCatalog(true);
     void (async () => {
       try {
         const res = await fetch("/api/jubelio/products");
         if (res.status === 401) {
+          // Count the expired-token path as an errored load too, or the
+          // finally-flip below would re-run this effect into a sign-out loop.
+          setLoadErrored(true);
           await signOutOnExpiry();
           return;
         }
@@ -749,7 +790,7 @@ function ProductPicker({
         setLoadingCatalog(false);
       }
     })();
-  }, [pickerOpen, catalog, loadingCatalog, signOutOnExpiry]);
+  }, [pickerOpen, catalog, loadingCatalog, loadErrored, signOutOnExpiry]);
 
   const debouncedSearch = useDebouncedValue(search, 300);
   const results = useMemo(

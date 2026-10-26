@@ -6,6 +6,7 @@ import {
   filterCatalog,
   mergeProductsById,
   selectedItemIds,
+  shouldLoadCatalog,
   type SearchResult,
   type SessionProduct,
 } from "@/app/_components/product-picker";
@@ -132,6 +133,38 @@ const CATALOG: SearchResult[] = [
   catalogRow(2, "Sepeda Listrik X1", "SKU-SPD-X1"),
   catalogRow(3, "Helm Standar", "SKU-HELM-01"),
 ];
+
+describe("shouldLoadCatalog", () => {
+  const fresh = { open: true, loaded: false, inFlight: false, errored: false };
+
+  it("fetches once: dialog open, nothing loaded, nothing in flight", () => {
+    expect(shouldLoadCatalog(fresh)).toBe(true);
+  });
+
+  it("never fetches while the dialog is closed", () => {
+    expect(shouldLoadCatalog({ ...fresh, open: false })).toBe(false);
+  });
+
+  it("never refetches once the catalog has arrived", () => {
+    expect(shouldLoadCatalog({ ...fresh, loaded: true })).toBe(false);
+  });
+
+  it("never overlaps an in-flight request", () => {
+    expect(shouldLoadCatalog({ ...fresh, inFlight: true })).toBe(false);
+  });
+
+  it("does NOT auto-retry after a failed load (final review C-1 loop pin)", () => {
+    // The failure path flips `inFlight` false while `catalog` stays null —
+    // without the `errored` guard that state change re-runs the effect and
+    // every cycle is one fresh upstream hit (toast storm + ERP hammering).
+    // Retry is deliberate: close/reopen resets `errored`.
+    expect(shouldLoadCatalog({ ...fresh, errored: true })).toBe(false);
+  });
+
+  it("retries after close+reopen: errored cleared, guard opens again", () => {
+    expect(shouldLoadCatalog({ ...fresh, errored: false })).toBe(true);
+  });
+});
 
 describe("filterCatalog", () => {
   it("matches item names case-insensitively", () => {
