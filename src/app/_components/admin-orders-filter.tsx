@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { TABS, type AdminTab } from "./admin-order-tabs";
 import { ConfirmOrderButton } from "./confirm-order-button";
 import { FilterPill } from "./filter-pill";
 import {
@@ -32,31 +33,9 @@ export type AdminOrderRow = {
   transferProofUrl: string | null;
 };
 
-/**
- * Raw-enum uppercase chips — the admin label precedent (Tasks 6/9), widened
- * to the full status enum so no admin row can become unreachable.
- */
-const TABS: readonly ("ALL" | OrderStatus)[] = [
-  "ALL",
-  "UNPAID",
-  "CONFIRMED",
-  "SHIPPED",
-  "COMPLETED",
-];
-
-type AdminTab = (typeof TABS)[number];
-
-/**
- * Deep-link contract (spec decision 4): the console's "Perlu Konfirmasi" KPI
- * tile links to `/admin/orders?status=UNPAID`, so the page reads `?status=`
- * and hands the value here. Anything outside the tab set — garbage, array,
- * empty — falls back to "ALL" instead of a dead tab. Exported for unit tests.
- */
-function resolveInitialTab(raw: string | undefined): AdminTab {
-  return raw && (TABS as readonly string[]).includes(raw)
-    ? (raw as AdminTab)
-    : "ALL";
-}
+// TABS/AdminTab/resolveInitialTab live in ./admin-order-tabs — the orders
+// page resolves the deep-link tab during SERVER render, and calling an
+// export of this "use client" module from the server throws.
 
 /**
  * Admin orders chips + rows (fold for Task 15): the same `FilterPill`
@@ -183,4 +162,4 @@ function AdminOrdersFilter({
   );
 }
 
-export { AdminOrdersFilter, resolveInitialTab, type AdminTab };
+export { AdminOrdersFilter };

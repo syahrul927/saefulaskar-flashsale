@@ -2,8 +2,10 @@ import { desc, inArray } from "drizzle-orm";
 import type { Metadata } from "next";
 
 import {
-  AdminOrdersFilter,
   resolveInitialTab,
+} from "@/app/_components/admin-order-tabs";
+import {
+  AdminOrdersFilter,
   type AdminOrderRow,
 } from "@/app/_components/admin-orders-filter";
 import { Panel } from "@/app/_components/panel";

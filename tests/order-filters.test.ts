@@ -76,9 +76,13 @@ describe("statusCounts", () => {
 });
 
 describe("resolveInitialTab (admin deep link)", () => {
+  // Pinned from the SERVER-SAFE module, not the client island: the orders
+  // page (a server component) calls this directly, so it must live where a
+  // server can import it. Importing it from the "use client" file would
+  // reproduce the runtime crash this fix removes.
   it("accepts exact status tabs", async () => {
     const { resolveInitialTab } = await import(
-      "@/app/_components/admin-orders-filter"
+      "@/app/_components/admin-order-tabs"
     );
     expect(resolveInitialTab("UNPAID")).toBe("UNPAID");
     expect(resolveInitialTab("COMPLETED")).toBe("COMPLETED");
@@ -86,7 +90,7 @@ describe("resolveInitialTab (admin deep link)", () => {
 
   it("falls back to ALL for garbage, empty, or missing values", async () => {
     const { resolveInitialTab } = await import(
-      "@/app/_components/admin-orders-filter"
+      "@/app/_components/admin-order-tabs"
     );
     expect(resolveInitialTab("DROP TABLE")).toBe("ALL");
     expect(resolveInitialTab("")).toBe("ALL");
