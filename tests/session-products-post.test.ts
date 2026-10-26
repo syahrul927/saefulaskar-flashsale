@@ -65,9 +65,10 @@ vi.mock("@/server/db", async () => {
   };
 });
 
-import { POST, resolveImportRow } from "@/app/api/sessions/[id]/products/route";
+import { POST } from "@/app/api/sessions/[id]/products/route";
 import { getSession } from "@/server/better-auth/server";
 import { getStockMap } from "@/server/jubelio-catalog";
+import { resolveImportRow } from "@/server/jubelio-import";
 
 describe("resolveImportRow", () => {
   it("v2 number → stock + floored quota", () => {

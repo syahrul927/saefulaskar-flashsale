@@ -4,11 +4,8 @@ import { getSession } from "@/server/better-auth/server";
 import { db } from "@/server/db";
 import { flashSessions, sessionProducts } from "@/server/db/schema";
 import { getStockMap, type StockMap } from "@/server/jubelio-catalog";
-import {
-  createJubelioClient,
-  isJubelioAuthError,
-  type StockEntry,
-} from "@/lib/jubelio";
+import { resolveImportRow } from "@/server/jubelio-import";
+import { createJubelioClient, isJubelioAuthError } from "@/lib/jubelio";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -17,39 +14,9 @@ function jsonError(status: number, error: string) {
   return Response.json({ error }, { status });
 }
 
-/** What one import row persists for stock/quota (see `resolveImportRow`). */
-export type ResolvedImport = { jubelioStock: number; sessionQuota: number };
-
-/**
- * Pure import decision for one picked row — the testable seam of the POST
- * guard (exported for tests, same convention as `toPickerRows`).
- * 1. v2 `entry` present → raw `available` as stock; quota floors negatives at
- *    0 and caps at 20 (v2 has 4 negative-available SKUs, min −14 — a negative
- *    quota could never be repaired by PUT's `positive()` schema, while the
- *    raw negative stays true to the ERP: gate ≤0 already means sold out).
- * 2. no entry, `existing` row → keep BOTH previous values: a v2 outage must
- *    not zero a live number or clobber admin quota edits (missing ≠ empty).
- * 3. no entry, no existing → `null` = skip: a brand-new row with no ERP
- *    number is blocked from import (partner ruling).
- */
-export function resolveImportRow(
-  entry: StockEntry | undefined,
-  existing: { jubelioStock: number; sessionQuota: number } | undefined,
-): ResolvedImport | null {
-  if (entry) {
-    return {
-      jubelioStock: entry.available,
-      sessionQuota: Math.max(0, Math.min(20, entry.available)),
-    };
-  }
-  if (existing) {
-    return {
-      jubelioStock: existing.jubelioStock,
-      sessionQuota: existing.sessionQuota,
-    };
-  }
-  return null;
-}
+// `resolveImportRow` (the POST guard's pure decision, tested in
+// `session-products-post.test.ts`) lives in `@/server/jubelio-import`: Next's
+// route contract allows only HTTP handlers + config exports on `route.ts`.
 
 const ProductInput = z.object({
   itemId: z.number().int().positive(),
