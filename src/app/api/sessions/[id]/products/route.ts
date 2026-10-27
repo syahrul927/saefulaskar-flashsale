@@ -89,10 +89,11 @@ export async function GET(
  * guarded by the v2 import source. Body: [{ itemId, skuCode, itemGroupName,
  * originalPrice }].
  * Stock comes from the cached v2 map (`getStockMap`) instead of a per-SKU
- * `getStockBySku` fan-out: numbered rows import with raw `available` and a
- * floored quota (`resolveImportRow`); a no-number re-add keeps the row's
- * previous stock/quota; a no-number NEW row is skipped and reported in
- * `skipped` — never inserted with 0. A v2 outage skips all new rows but still
+ * `getStockBySku` fan-out: numbered rows import with raw `available`, a
+ * floored quota and the v2 `thumbnail` (`resolveImportRow`) — a fresh URL
+ * refreshes `image_url`, a silent v2 never blanks a stored photo; a no-number
+ * re-add keeps the row's previous stock/quota/image; a no-number NEW row is
+ * skipped and reported in `skipped` — never inserted with 0. A v2 outage skips all new rows but still
  * answers 201 `ok:true` (only an expired token is 401). Defaults unchanged:
  * `flashPrice = originalPrice`, `minOrder = 1`, `claimed = 0`, `category = ""`
  * — a re-add with a number resets quota to the derived value (one truth per
@@ -159,6 +160,7 @@ export async function POST(
       itemId: sessionProducts.itemId,
       jubelioStock: sessionProducts.jubelioStock,
       sessionQuota: sessionProducts.sessionQuota,
+      imageUrl: sessionProducts.imageUrl,
     })
     .from(sessionProducts)
     .where(
@@ -206,6 +208,7 @@ export async function POST(
               originalPrice: input.originalPrice,
               sessionQuota: resolved.sessionQuota,
               jubelioStock: resolved.jubelioStock,
+              imageUrl: resolved.imageUrl,
               flashPrice: input.originalPrice,
               minOrder: 1,
               claimed: 0,
@@ -219,6 +222,7 @@ export async function POST(
                 originalPrice: input.originalPrice,
                 sessionQuota: resolved.sessionQuota,
                 jubelioStock: resolved.jubelioStock,
+                imageUrl: resolved.imageUrl,
                 flashPrice: input.originalPrice,
                 minOrder: 1,
                 category: "",

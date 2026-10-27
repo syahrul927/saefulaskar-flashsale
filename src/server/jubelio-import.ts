@@ -8,29 +8,41 @@ import type { StockEntry } from "@/lib/jubelio";
  *    0 and caps at 20 (v2 has 4 negative-available SKUs, min −14 — a negative
  *    quota could never be repaired by PUT's `positive()` schema, while the
  *    raw negative stays true to the ERP: gate ≤0 already means sold out).
- * 2. no entry, `existing` row → keep BOTH previous values: a v2 outage must
- *    not zero a live number or clobber admin quota edits (missing ≠ empty).
+ *    The `thumbnail` rides along: a fresh URL refreshes the stored photo, a
+ *    null thumbnail keeps the previous one (missing ≠ empty — a v2 response
+ *    without a picture must never blank a photo the customer is looking at).
+ * 2. no entry, `existing` row → keep ALL previous values (stock, quota,
+ *    image): a v2 outage must not zero a live number, clobber admin quota
+ *    edits, or drop a photo (missing ≠ empty).
  * 3. no entry, no existing → `null` = skip: a brand-new row with no ERP
  *    number is blocked from import (partner ruling).
  */
 export function resolveImportRow(
   entry: StockEntry | undefined,
-  existing: { jubelioStock: number; sessionQuota: number } | undefined,
+  existing:
+    | { jubelioStock: number; sessionQuota: number; imageUrl: string | null }
+    | undefined,
 ): ResolvedImport | null {
   if (entry) {
     return {
       jubelioStock: entry.available,
       sessionQuota: Math.max(0, Math.min(20, entry.available)),
+      imageUrl: entry.image ?? existing?.imageUrl ?? null,
     };
   }
   if (existing) {
     return {
       jubelioStock: existing.jubelioStock,
       sessionQuota: existing.sessionQuota,
+      imageUrl: existing.imageUrl,
     };
   }
   return null;
 }
 
-/** What one import row persists for stock/quota (see `resolveImportRow`). */
-export type ResolvedImport = { jubelioStock: number; sessionQuota: number };
+/** What one import row persists for stock/quota/image (see `resolveImportRow`). */
+export type ResolvedImport = {
+  jubelioStock: number;
+  sessionQuota: number;
+  imageUrl: string | null;
+};

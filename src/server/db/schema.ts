@@ -128,6 +128,9 @@ export const sessionProducts = createTable(
     skuCode: t.text("sku_code"),
     itemGroupName: t.text("item_group_name"),
     jubelioStock: t.integer("jubelio_stock").default(0).notNull(),
+    // v2 `thumbnail` URL captured at import (snapshot, like jubelio_stock —
+    // the customer surfaces render this; admin surfaces join v2 live).
+    imageUrl: t.text("image_url"),
     originalPrice: t.integer("original_price").notNull(),
     sessionQuota: t.integer("session_quota").notNull(),
     claimed: t.integer("claimed").default(0).notNull(),

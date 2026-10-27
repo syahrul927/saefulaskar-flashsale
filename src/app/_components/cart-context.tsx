@@ -9,6 +9,12 @@ import {
   useState,
   type ReactNode,
 } from "react";
+import { toast } from "sonner";
+
+import {
+  nextQtyAfterAdd,
+  nextQtyAfterIncrement,
+} from "./cart-rules";
 
 const STORAGE_KEY = "fs-cart";
 
@@ -22,6 +28,14 @@ export type CartItem = {
    * Optional so carts saved before Task 12 still load (they show no savings). */
   originalPrice?: number;
   minOrder: number;
+  /** v2 thumbnail URL at add-time — optional so carts saved before the
+   * photo feature still load (those rows show the letter tile). */
+  image?: string | null;
+  /** Cart ceiling at add-time (`capForProduct`): quota remaining AND ERP
+   * stock from the page snapshot. Optional — carts saved before the cap
+   * feature (or products without stock info) simply skip the client clamp;
+   * the server checkout guard stays the authority. */
+  maxQty?: number;
   qty: number;
 };
 
@@ -85,39 +99,100 @@ function saveCart(items: CartItem[]) {
 }
 
 function CartProvider({ children }: { children: ReactNode }) {
-  const [items, setItems] = useState<CartItem[]>(loadCart);
+  // Both server AND the client's first render must see an empty cart —
+  // reading localStorage in `useState(loadCart)` made the header badge /
+  // aria-label differ between the SSR HTML and hydration ("Hydration
+  // failed … CartButton"). The cart is picked up in the mount effect below;
+  // `loaded` keeps that effect from letting the save effect wipe a stored
+  // cart with the initial empty state first.
+  const [items, setItems] = useState<CartItem[]>(EMPTY);
+  const [loaded, setLoaded] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
   useEffect(() => {
-    saveCart(items);
-  }, [items]);
+    setItems(loadCart());
+    setLoaded(true);
+  }, []);
 
-  const add = useCallback((item: CartItemInput, qty: number) => {
-    const normalizedQty = Math.max(item.minOrder, Math.floor(qty));
-    setItems((prev) => {
-      const existing = prev.find(
+  useEffect(() => {
+    if (loaded) saveCart(items);
+  }, [items, loaded]);
+
+  const add = useCallback(
+    (item: CartItemInput, qty: number) => {
+      const normalizedQty = Math.max(item.minOrder, Math.floor(qty));
+      const existing = items.find(
         (row) => row.sessionProductId === item.sessionProductId,
       );
-      if (!existing) {
-        return [...prev, { ...item, qty: normalizedQty }];
+      const decision = nextQtyAfterAdd({
+        currentQty: existing?.qty ?? 0,
+        addQty: normalizedQty,
+        minOrder: item.minOrder,
+        // No cap info (legacy cart row / unknown stock) → no client clamp;
+        // the server guard still decides at checkout.
+        cap: item.maxQty ?? Infinity,
+      });
+      if (decision.kind === "unbuyable") {
+        toast.error(
+          `Sisa stok tidak cukup untuk minimum order ${item.minOrder}.`,
+        );
+        return;
       }
-      return prev.map((row) =>
-        row.sessionProductId === item.sessionProductId
-          ? { ...row, qty: row.qty + normalizedQty }
-          : row,
+      if (decision.kind === "at-max") {
+        toast.info(`Sisa tinggal ${item.maxQty}.`);
+        return;
+      }
+      setItems((prev) => {
+        const row = prev.find(
+          (r) => r.sessionProductId === item.sessionProductId,
+        );
+        if (!row) return [...prev, { ...item, qty: decision.qty }];
+        return prev.map((r) =>
+          r.sessionProductId === item.sessionProductId
+            ? { ...r, ...item, qty: decision.qty }
+            : r,
+        );
+      });
+      toast.success(
+        `${decision.qty} x ${item.name} ditambahkan ke keranjang`,
       );
-    });
-  }, []);
+      if (decision.clamped) {
+        toast.info(`Dibatasi sisa stok — tinggal ${item.maxQty}.`);
+      }
+    },
+    [items],
+  );
 
-  const increment = useCallback((sessionProductId: string) => {
-    setItems((prev) =>
-      prev.map((row) =>
-        row.sessionProductId === sessionProductId
-          ? { ...row, qty: row.qty + 1 }
-          : row,
-      ),
-    );
-  }, []);
+  const increment = useCallback(
+    (sessionProductId: string) => {
+      const row = items.find((r) => r.sessionProductId === sessionProductId);
+      if (!row) return;
+      if (row.maxQty === undefined) {
+        setItems((prev) =>
+          prev.map((r) =>
+            r.sessionProductId === sessionProductId ? { ...r, qty: r.qty + 1 } : r,
+          ),
+        );
+        return;
+      }
+      const decision = nextQtyAfterIncrement({
+        currentQty: row.qty,
+        cap: row.maxQty,
+      });
+      if (decision.kind === "at-max") {
+        toast.info(`Sisa tinggal ${row.maxQty}.`);
+        return;
+      }
+      setItems((prev) =>
+        prev.map((r) =>
+          r.sessionProductId === sessionProductId
+            ? { ...r, qty: decision.qty }
+            : r,
+        ),
+      );
+    },
+    [items],
+  );
 
   const decrement = useCallback((sessionProductId: string) => {
     setItems((prev) =>

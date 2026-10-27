@@ -21,6 +21,7 @@ function dbRow(
     skuCode: `SKU-${overrides.itemId}`,
     itemGroupName: "Kuangyu Dream - SLA",
     jubelioStock: 3,
+    imageUrl: null,
     originalPrice: 3700000,
     sessionQuota: 5,
     claimed: 1,

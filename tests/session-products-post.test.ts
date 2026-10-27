@@ -26,6 +26,7 @@ const state = vi.hoisted(() => ({
     itemId: number;
     jubelioStock: number;
     sessionQuota: number;
+    imageUrl: string | null;
   }[],
   inserted: [] as Record<string, unknown>[],
   echoSeq: 0,
@@ -77,20 +78,59 @@ import { getStockMap } from "@/server/jubelio-catalog";
 import { resolveImportRow } from "@/server/jubelio-import";
 
 describe("resolveImportRow", () => {
-  it("v2 number → stock + floored quota", () => {
-    expect(resolveImportRow({ available: 5000, image: null }, undefined)).toEqual(
-      { jubelioStock: 5000, sessionQuota: 20 },
-    );
+  it("v2 number → stock + floored quota + thumbnail URL", () => {
+    expect(
+      resolveImportRow(
+        { available: 5000, image: "https://cdn/1.jpg" },
+        undefined,
+      ),
+    ).toEqual({
+      jubelioStock: 5000,
+      sessionQuota: 20,
+      imageUrl: "https://cdn/1.jpg",
+    });
   });
   it("negative available → raw negative stock, quota floors at 0", () => {
     expect(resolveImportRow({ available: -14, image: null }, undefined)).toEqual(
-      { jubelioStock: -14, sessionQuota: 0 },
+      { jubelioStock: -14, sessionQuota: 0, imageUrl: null },
     );
   });
-  it("Review Focus 2 — no number, existing row keeps BOTH previous stock and quota", () => {
-    expect(resolveImportRow(undefined, { jubelioStock: 37, sessionQuota: 5 })).toEqual(
-      { jubelioStock: 37, sessionQuota: 5 },
-    );
+  it("Review Focus 2 — no number, existing row keeps ALL previous values (stock, quota, image)", () => {
+    expect(
+      resolveImportRow(undefined, {
+        jubelioStock: 37,
+        sessionQuota: 5,
+        imageUrl: "https://cdn/old.jpg",
+      }),
+    ).toEqual({
+      jubelioStock: 37,
+      sessionQuota: 5,
+      imageUrl: "https://cdn/old.jpg",
+    });
+  });
+  it("entry with no thumbnail, existing row keeps the stored photo — missing ≠ empty", () => {
+    expect(
+      resolveImportRow(
+        { available: 40, image: null },
+        { jubelioStock: 1, sessionQuota: 1, imageUrl: "https://cdn/old.jpg" },
+      ),
+    ).toEqual({
+      jubelioStock: 40,
+      sessionQuota: 20,
+      imageUrl: "https://cdn/old.jpg",
+    });
+  });
+  it("entry with a thumbnail refreshes the stored photo", () => {
+    expect(
+      resolveImportRow(
+        { available: 40, image: "https://cdn/new.jpg" },
+        { jubelioStock: 1, sessionQuota: 1, imageUrl: "https://cdn/old.jpg" },
+      ),
+    ).toEqual({
+      jubelioStock: 40,
+      sessionQuota: 20,
+      imageUrl: "https://cdn/new.jpg",
+    });
   });
   it("no number, no existing → null (skip, partner ruling)", () => {
     expect(resolveImportRow(undefined, undefined)).toBeNull();
@@ -131,7 +171,7 @@ describe("POST /api/sessions/[id]/products", () => {
   it("happy path: every numbered row inserts, quota floors at 20, skipped is []", async () => {
     vi.mocked(getStockMap).mockResolvedValue(
       new Map([
-        [1, { available: 5000, image: null }],
+        [1, { available: 5000, image: "https://cdn/1.jpg" }],
         [2, { available: 8, image: null }],
       ]),
     );
@@ -147,6 +187,12 @@ describe("POST /api/sessions/[id]/products", () => {
     ).toEqual([
       [1, 5000, 20],
       [2, 8, 8],
+    ]);
+    // The v2 thumbnail persists right beside the stock number — same map,
+    // one truth per pipeline, no extra fetch.
+    expect(state.inserted.map((v) => [v.itemId, v.imageUrl])).toEqual([
+      [1, "https://cdn/1.jpg"],
+      [2, null],
     ]);
     // The unchanged default fields ride along with every row.
     expect(state.inserted[0]).toMatchObject({
@@ -225,9 +271,16 @@ describe("POST /api/sessions/[id]/products", () => {
     ]);
   });
 
-  it("no-number row that already exists keeps previous stock and quota (update path, missing ≠ empty)", async () => {
+  it("no-number row that already exists keeps previous stock, quota and photo (update path, missing ≠ empty)", async () => {
     vi.mocked(getStockMap).mockResolvedValue(new Map());
-    state.existingRows = [{ itemId: 2, jubelioStock: 37, sessionQuota: 5 }];
+    state.existingRows = [
+      {
+        itemId: 2,
+        jubelioStock: 37,
+        sessionQuota: 5,
+        imageUrl: "https://cdn/old.jpg",
+      },
+    ];
     const res = await POST(postRequest([item(2)]), params);
     expect(res.status).toBe(201);
     const body = (await res.json()) as Record<string, unknown>;
@@ -237,6 +290,7 @@ describe("POST /api/sessions/[id]/products", () => {
       itemId: 2,
       jubelioStock: 37,
       sessionQuota: 5,
+      imageUrl: "https://cdn/old.jpg",
     });
   });
 

@@ -1,12 +1,13 @@
 "use client";
 
 import { PlusIcon } from "@phosphor-icons/react";
-import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { formatRupiah } from "@/lib/format";
 import { PRODUCT_TYPE_LABELS, type ProductType } from "@/server/db/schema";
+import { capForProduct } from "./cart-rules";
 import { pillIdFor } from "./category-pills";
+import { ProductThumb } from "./product-thumb";
 import { StatusBadge } from "./status-badge";
 import { useCartContext } from "./cart-context";
 
@@ -22,6 +23,8 @@ export type StorefrontProduct = {
   flashPrice: number;
   category: string | null;
   availableStock: number | null;
+  /** v2 thumbnail URL stored at import — null → letter tile. */
+  image: string | null;
   type: ProductType;
 };
 
@@ -41,9 +44,10 @@ function ProductCard({ product }: ProductCardProps) {
   const { add } = useCartContext();
 
   const remaining = product.sessionQuota - product.claimed;
-  const soldOut =
-    remaining <= 0 ||
-    (product.availableStock !== null && product.availableStock <= 0);
+  // Same ceiling the cart enforces (`cart-rules`, mirroring the server
+  // checkout guard): when no legal quantity fits — quota exhausted, stock
+  // ≤ 0, or the remainder below `minOrder` — the card is sold out.
+  const soldOut = capForProduct(product) < product.minOrder;
   // Urgency threshold — show the "sisa N" callout once stock is genuinely low.
   const lowStock = remaining <= Math.max(10, Math.ceil(product.sessionQuota * 0.15));
   const quotaPercent =
@@ -52,6 +56,9 @@ function ProductCard({ product }: ProductCardProps) {
       : 0;
 
   const handleAdd = () => {
+    // The cap travels with the line (`cart-rules` mirrors the server
+    // checkout guard); the context owns the feedback toast so the stated
+    // quantity is the one that actually landed after clamping.
     add(
       {
         sessionProductId: product.id,
@@ -61,26 +68,25 @@ function ProductCard({ product }: ProductCardProps) {
         price: product.flashPrice,
         originalPrice: product.originalPrice,
         minOrder: product.minOrder,
+        image: product.image,
+        maxQty: capForProduct(product),
       },
       product.minOrder,
-    );
-    toast.success(
-      `${product.minOrder} x ${product.itemGroupName ?? "Item"} ditambahkan ke keranjang`,
     );
   };
 
   return (
     <div className="flex h-full flex-col rounded-2xl border border-neutral-200 bg-white p-3.5 transition hover:border-neutral-300 hover:shadow-md dark:border-border dark:bg-card">
-      {/* Thumb frame — letter tile until real images land (mockup D6). */}
+      {/* Thumb frame — v2 photo over the letter tile (tile = null/broken
+          fallback, mockup D6 resting state). */}
       <div className="relative mb-3 flex aspect-square items-center justify-center overflow-hidden rounded-xl border border-neutral-200/80 bg-neutral-100">
-        <span
-          aria-hidden="true"
-          className="flex size-full items-center justify-center bg-gradient-to-br from-amber-50 to-amber-200"
-        >
-          <span className="text-5xl font-black text-amber-700">
-            {product.itemGroupName?.slice(0, 1).toUpperCase() ?? "?"}
-          </span>
-        </span>
+        <ProductThumb
+          src={product.image}
+          alt={
+            product.itemGroupName ?? `SKU ${product.skuCode ?? product.itemId}`
+          }
+          letter={product.itemGroupName?.slice(0, 1).toUpperCase() ?? "?"}
+        />
 
         {/* Category pill overlay — top-left, floats over the tile. */}
         <span className="absolute left-2 top-2 rounded-md border border-neutral-200 bg-white/95 px-2 py-0.5 font-mono text-[10px] font-bold text-neutral-800 backdrop-blur">

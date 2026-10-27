@@ -43,6 +43,13 @@
       "when": 1792954702982,
       "tag": "0005_daffy_norrin_radd",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1793067434436,
+      "tag": "0006_lonely_selene",
+      "breakpoints": true
     }
   ]
 }

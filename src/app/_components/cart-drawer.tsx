@@ -20,6 +20,7 @@ import {
   type CheckoutResult,
 } from "./checkout-dialog";
 import { PaymentPanel } from "./payment-panel";
+import { ProductThumb } from "./product-thumb";
 
 /**
  * Cart review drawer — mockup "CUSTOMER CART" transplant (design.html:883-980):
@@ -161,14 +162,16 @@ function CartDrawer({
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex min-w-0 items-center gap-2.5">
-                          {/* Thumb frame — mirrors the product-card letter tile. */}
-                          <div className="flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-neutral-200/80 bg-neutral-100">
-                            <span
-                              aria-hidden="true"
-                              className="flex size-full items-center justify-center bg-gradient-to-br from-amber-50 to-amber-200 text-lg font-black text-amber-700"
-                            >
-                              {row.name.slice(0, 1).toUpperCase()}
-                            </span>
+                          {/* Thumb frame — same photo-over-tile treatment as
+                              the product card; old carts without an image
+                              fall back to the letter tile. */}
+                          <div className="relative flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-neutral-200/80 bg-neutral-100">
+                            <ProductThumb
+                              src={row.image ?? null}
+                              alt={row.name}
+                              letter={row.name.slice(0, 1).toUpperCase()}
+                              letterClass="text-lg"
+                            />
                           </div>
                           <div className="min-w-0">
                             <p className="truncate text-xs font-bold text-neutral-950 dark:text-neutral-50">
