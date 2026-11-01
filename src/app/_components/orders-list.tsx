@@ -17,6 +17,10 @@ import {
   orderStatusTone,
   StatusBadge,
 } from "./status-badge";
+import {
+  OrderDetailTrigger,
+  type OrderDetailData,
+} from "./order-detail-dialog";
 import { filterOrders, statusCounts, type OrderFilterTab } from "./order-filters";
 
 /**
@@ -38,6 +42,12 @@ export type TransactionRow = ReceiptOrderData & {
   shipper: string | null;
   /** WhatsApp deep link for the "hubungi CS" line on a COMPLETED order. */
   csLink: string;
+  /**
+   * Everything the detail dialog shows. No `cancel` anywhere on this surface:
+   * customers cannot cancel (spec §2, §8.12) — the dialog is mounted without
+   * one, and `Batalkan` simply never renders here.
+   */
+  detail: OrderDetailData;
 };
 
 /** Pill copy: mockup labels (:614-617 "All Orders / Waiting Payment /
@@ -275,7 +285,13 @@ function TransactionCard({
               {row.grandTotalLabel}
             </span>
           </div>
+          {/* Detail first, receipt second: the dialog is the broader surface —
+              it is where a cancelled order explains itself — and the receipt
+              stays exactly where a customer's muscle memory puts it. No
+              `cancel` prop: customers cannot cancel (spec §2, §8.12), so the
+              dialog mounts without the button. */}
           <div className="flex items-center gap-1.5">
+            <OrderDetailTrigger order={row.detail} />
             <ReceiptTrigger order={row} />
           </div>
         </div>

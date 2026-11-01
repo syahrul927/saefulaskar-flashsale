@@ -2,14 +2,22 @@ import { desc, eq, inArray } from "drizzle-orm";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
+import type { OrderDetailData } from "@/app/_components/order-detail-dialog";
 import { env } from "@/env";
 import { getSession } from "@/server/better-auth/server";
 import { buildWaLink, parseBankAccounts } from "@/server/checkout";
 import { db } from "@/server/db";
-import { contacts, orderItems, orders } from "@/server/db/schema";
+import {
+  contacts,
+  flashSessions,
+  orderItems,
+  orders,
+} from "@/server/db/schema";
 import { formatRupiah } from "@/lib/format";
 import { resolveRecipient } from "@/server/recipient";
 import { CUSTOMER_STATUS_LABEL } from "@/server/order-status";
+import { buildStatusSteps } from "@/server/status-steps";
+import { listStatusHistory } from "@/server/status-history";
 import { OrdersList, type TransactionRow } from "@/app/_components/orders-list";
 import type { ReceiptOrderData } from "@/app/_components/receipt-dialog";
 
@@ -48,6 +56,7 @@ export default async function OrdersPage() {
       id: orders.id,
       bookingId: orders.bookingId,
       status: orders.status,
+      sessionId: orders.sessionId,
       grandTotal: orders.grandTotal,
       paymentMethod: orders.paymentMethod,
       transferProofUrl: orders.transferProofUrl,
@@ -81,6 +90,24 @@ export default async function OrdersPage() {
     list.push(item);
     itemsByOrder.set(item.orderId, list);
   }
+
+  // Two reads, not three: the customer surface dials CS through `buildCsLink`,
+  // which needs no phone resolution, so `resolveCustomerContacts` is absent by
+  // design (spec §8.17). The session name still costs a second query, because
+  // the explicit column list above would otherwise join `flashSessions` into
+  // every row's shape for a string only the detail dialog reads.
+  const orderIds = rows.map((r) => r.id);
+  const sessionIds = [...new Set(rows.map((r) => r.sessionId))];
+  const [historyByOrder, sessions] = await Promise.all([
+    listStatusHistory(db, orderIds),
+    sessionIds.length === 0
+      ? Promise.resolve([] as { id: string; name: string }[])
+      : db
+          .select({ id: flashSessions.id, name: flashSessions.name })
+          .from(flashSessions)
+          .where(inArray(flashSessions.id, sessionIds)),
+  ]);
+  const sessionNames = new Map(sessions.map((s) => [s.id, s.name]));
 
   const banks = parseBankAccounts(env.BANK_ACCOUNTS);
 
@@ -121,8 +148,44 @@ export default async function OrdersPage() {
       grandTotalLabel: formatRupiah(order.grandTotal),
     };
     const firstBank = banks[0];
+
+    // Relabels, never recomputes: `receipt.items` already carries the rupiah
+    // strings, and re-deriving them here would put a second money formatter on
+    // the same number the receipt dialog shows — two strings that can disagree.
+    // `jubelioSoId: null` is the deliberate cut: the storefront select does not
+    // read the column, and the customer has no use for our upstream id (spec
+    // §8.12). `contactHint: null` because CS is always reachable here — the
+    // link is built from config, not from the order, so it cannot be missing.
+    const detail: OrderDetailData = {
+      orderId: order.id,
+      bookingId: order.bookingId,
+      status: order.status,
+      statusLabel: CUSTOMER_STATUS_LABEL[order.status],
+      dateLabel: receipt.dateLabel,
+      grandTotalLabel: receipt.grandTotalLabel,
+      sessionName: sessionNames.get(order.sessionId) ?? null,
+      jubelioSoId: null,
+      steps: buildStatusSteps({
+        status: order.status,
+        createdAt: order.createdAt,
+        history: historyByOrder.get(order.id) ?? [],
+      }),
+      items: receipt.items.map((i) => ({
+        id: i.id,
+        name: i.name,
+        qtyPriceLabel: `${i.qty} × ${i.priceLabel}`,
+        subtotalLabel: i.subtotalLabel,
+      })),
+      transferProofUrl: order.transferProofUrl,
+      trackingNumber: order.trackingNumber,
+      shipper: order.shipper,
+      contact: { label: "Hubungi CS", href: buildCsLink(order.bookingId) },
+      contactHint: null,
+    };
+
     return {
       ...receipt,
+      detail,
       grandTotal: order.grandTotal,
       transferProofUrl: order.transferProofUrl,
       trackingNumber: order.trackingNumber,
