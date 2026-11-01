@@ -5,9 +5,12 @@ import { getSession } from "@/server/better-auth/server";
 import {
   buildSalesOrderPayload,
   markConfirmed,
+  pickConfirmContact,
+  readSalesOrderId,
 } from "@/server/confirm-order";
+import { resolveUnits } from "@/server/confirm-units";
 import { db } from "@/server/db";
-import { contacts, orderItems, orders } from "@/server/db/schema";
+import { contacts, orderItems, orders, user } from "@/server/db/schema";
 
 export const runtime = "nodejs";
 
@@ -41,25 +44,76 @@ export async function POST(
     .from(orderItems)
     .where(eq(orderItems.orderId, order.id));
 
-  // Resolve the customer contact (nullable — created at onboarding).
-  const [contact] = order.contactId
-    ? await db.select().from(contacts).where(eq(contacts.id, order.contactId))
-    : [];
+  // Resolve the customer contact: the order's linked row first, then the
+  // ORDER CUSTOMER's contact by email (`order.customer_id → user.email`) —
+  // never the confirming admin's email: an OWNER admin confirming someone
+  // else's order would key the lookup on the wrong account and find nothing
+  // (the empty-`customer_name` root cause, second face).
+  const orderContact = order.contactId
+    ? (
+        await db
+          .select()
+          .from(contacts)
+          .where(eq(contacts.id, order.contactId))
+      )[0] ?? null
+    : null;
+  let emailContact: (typeof contacts.$inferSelect | null) = null;
+  if (!orderContact) {
+    const [customer] = await db
+      .select({ email: user.email })
+      .from(user)
+      .where(eq(user.id, order.customerId));
+    emailContact = customer?.email
+      ? (
+          await db
+            .select()
+            .from(contacts)
+            .where(eq(contacts.email, customer.email))
+        )[0] ?? null
+      : null;
+  }
+  const contact = pickConfirmContact(orderContact, emailContact);
+  if (!contact?.contactName?.trim()) {
+    // Unregistered customer: actionable 409, not the payload guard's 500.
+    return jsonError(
+      409,
+      "Pelanggan belum terdaftar di Jubelio (data kontak kosong). Minta pelanggan lengkapi data terlebih dahulu.",
+    );
+  }
+
+  // SO items need the strict-schema `unit` (uom_name) per line — resolve one
+  // upstream call per unique SKU; a failed lookup falls back to the probed
+  // default and never blocks confirmation.
+  const units = await resolveUnits(items, async (sku) => {
+    const data = (await createJubelioClient(auth.user.token).getStockBySku(
+      sku,
+    )) as { uom_name?: unknown } | null;
+    return typeof data?.uom_name === "string" ? { uom_name: data.uom_name } : null;
+  });
 
   const payload = buildSalesOrderPayload({
     grandTotal: order.grandTotal,
     createdAt: order.createdAt,
-    items: items.map((item) => ({
+    items: items.map((item, i) => ({
       itemId: item.itemId,
       sku: item.sku,
       itemName: item.itemName,
       qty: item.qty,
       price: item.price,
       subtotal: item.subtotal,
+      unit: units[i] ?? "Buah",
     })),
     contact: {
       jubelioContactId: contact?.jubelioContactId ?? null,
       contactName: contact?.contactName ?? null,
+    },
+    // The SO's shipping block: the order-level recipient snapshot first, the
+    // contact record behind it — the dashboard's create always sends a named
+    // recipient, and our dead rows had `shipping_full_name: null`.
+    shipping: {
+      fullName: order.recipientName?.trim() || contact?.contactName?.trim() || "",
+      address: order.recipientAddress?.trim() || contact?.sAddress?.trim() || "",
+      phone: order.recipientPhone?.trim() || contact?.phone?.trim() || "",
     },
   });
 
@@ -68,19 +122,35 @@ export async function POST(
     data = await createJubelioClient(auth.user.token).createSalesOrder(payload);
   } catch (e) {
     if (isJubelioAuthError(e)) return jsonError(401, "SESSION_EXPIRED");
+    if (e instanceof Error && e.message.includes("customer_name")) {
+      return jsonError(
+        409,
+        "Pelanggan belum terdaftar di Jubelio (data kontak kosong). Minta pelanggan lengkapi data terlebih dahulu.",
+      );
+    }
     console.error("confirm: createSalesOrder failed", e);
     return jsonError(502, "Gagal membuat sales order, coba lagi");
   }
 
-  const salesorder_id = (data as { salesorder_id?: number } | null)
-    ?.salesorder_id;
-  if (!salesorder_id) {
-    return jsonError(502, "Jubelio tidak mengembalikan salesorder_id");
+  const salesorderId = readSalesOrderId(data);
+  if (!salesorderId) {
+    // The create itself SUCCEEDED (2xx) — so a paid sales order now exists in
+    // Jubelio that we cannot name. Logging the raw body is the point: this
+    // shape assumption is what left SO-000192297 unlinked on 2026-10-28, and a
+    // blind retry would create a second one.
+    console.error(
+      "confirm: Jubelio create returned no usable SO id; raw body:",
+      JSON.stringify(data),
+    );
+    return jsonError(
+      502,
+      "Respon Jubelio tidak memuat id sales order — SO mungkin sudah dibuat, cek Jubelio sebelum konfirmasi ulang.",
+    );
   }
 
   const [updated] = await db
     .update(orders)
-    .set(markConfirmed(order, { salesorder_id }))
+    .set(markConfirmed(order, salesorderId))
     .where(eq(orders.id, order.id))
     .returning();
 

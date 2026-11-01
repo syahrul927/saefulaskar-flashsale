@@ -7,23 +7,26 @@ function pad(n: number) {
   return n.toString().padStart(2, "0");
 }
 
-/** Breaks a duration into clamped (never negative) hour/minute/second parts. */
+/** Breaks a duration into clamped (never negative) day/hour/minute/second
+ * parts — `d` unbounded, `h` stays 0-23 so 90 061 s reads 1d 01:01:01. */
 function formatRemainingParts(totalMs: number): {
+  d: number;
   h: number;
   m: number;
   s: number;
 } {
   const totalSec = Math.max(0, Math.floor(totalMs / 1000));
   return {
-    h: Math.floor(totalSec / 3600),
+    d: Math.floor(totalSec / 86400),
+    h: Math.floor((totalSec % 86400) / 3600),
     m: Math.floor((totalSec % 3600) / 60),
     s: totalSec % 60,
   };
 }
 
 function formatRemaining(totalMs: number): string {
-  const { h, m, s } = formatRemainingParts(totalMs);
-  return `${pad(h)}:${pad(m)}:${pad(s)}`;
+  const { d, h, m, s } = formatRemainingParts(totalMs);
+  return `${d > 0 ? `${d}d ` : ""}${pad(h)}:${pad(m)}:${pad(s)}`;
 }
 
 const BOXED_UNITS = [
@@ -31,6 +34,8 @@ const BOXED_UNITS = [
   { key: "m", label: "Menit" },
   { key: "s", label: "Detik" },
 ] as const;
+
+const BOXED_UNITS_DAYS = [{ key: "d", label: "Hari" }, ...BOXED_UNITS] as const;
 
 function BoxedCell({
   label,
@@ -86,9 +91,12 @@ function CountdownTimer({
 
   if (variant === "boxed") {
     const parts = remaining != null ? formatRemainingParts(remaining) : null;
+    // The "Hari" cell only appears once the session really is a day+ away —
+    // a same-evening sale keeps the compact Jam/Menit/Detik three cells.
+    const units = parts && parts.d > 0 ? BOXED_UNITS_DAYS : BOXED_UNITS;
     return (
       <span className={cn("inline-flex items-center gap-1.5", className)}>
-        {BOXED_UNITS.map((unit, i) => (
+        {units.map((unit, i) => (
           <Fragment key={unit.key}>
             {i > 0 && (
               <span className="font-mono text-sm font-bold text-neutral-400">
@@ -97,7 +105,13 @@ function CountdownTimer({
             )}
             <BoxedCell
               label={unit.label}
-              value={parts ? pad(parts[unit.key]) : "--"}
+              value={
+                parts
+                  ? unit.key === "d"
+                    ? String(parts.d)
+                    : pad(parts[unit.key])
+                  : "--"
+              }
               accent={unit.key === "s"}
             />
           </Fragment>

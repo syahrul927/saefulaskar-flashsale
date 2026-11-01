@@ -4,8 +4,13 @@
  * instantly, so there is no refetch path here at all.
  */
 
-/** Pinned customer tab set (plan contract). */
-type OrderFilterTab = "all" | "UNPAID" | "CONFIRMED" | "SHIPPED";
+/**
+ * Pinned customer tab set (plan contract), re-pinned 2026-10-31: SHIPPED left it
+ * and COMPLETED took its place (spec §4.7). A customer's ladder is three steps —
+ * not paid, paid, out of our hands — and legacy rows still sitting on SHIPPED
+ * stay reachable under `"all"`.
+ */
+type OrderFilterTab = "all" | "UNPAID" | "CONFIRMED" | "COMPLETED";
 
 /** The only field the filters read — any order row shape satisfies it. */
 type StatusFilterable = { status: string };
@@ -15,7 +20,7 @@ type OrderStatusCounts = {
   all: number;
   UNPAID: number;
   CONFIRMED: number;
-  SHIPPED: number;
+  COMPLETED: number;
 };
 
 /** Rows for one tab, original order preserved; `"all"` keeps everything. */
@@ -28,9 +33,9 @@ function filterOrders<T extends StatusFilterable>(
 }
 
 /**
- * Pill counts. `all` is the full list (COMPLETED orders included — they exist
- * in the enum but have no customer pill per the pinned tab set), the status
- * keys count their own status only.
+ * Pill counts. `all` is the full list — every status, including a legacy SHIPPED
+ * row that no longer has a pill of its own — and the three status keys count
+ * their own status only.
  */
 function statusCounts(
   orders: readonly StatusFilterable[],
@@ -39,7 +44,7 @@ function statusCounts(
     all: orders.length,
     UNPAID: orders.filter((order) => order.status === "UNPAID").length,
     CONFIRMED: orders.filter((order) => order.status === "CONFIRMED").length,
-    SHIPPED: orders.filter((order) => order.status === "SHIPPED").length,
+    COMPLETED: orders.filter((order) => order.status === "COMPLETED").length,
   };
 }
 

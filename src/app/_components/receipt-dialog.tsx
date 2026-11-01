@@ -10,7 +10,7 @@ import {
   DialogDescription,
   DialogTitle,
 } from "@/components/ui/dialog";
-import { CopyChip } from "@/lib/format";
+import { CopyChip } from "./copy-chip";
 import { ProofUploadButton } from "./proof-upload-button";
 import {
   isPulseStatus,

@@ -15,6 +15,7 @@ import {
 import { db } from "@/server/db";
 import {
   flashSessions,
+  contacts,
   orderItems,
   orders,
   sessionProducts,
@@ -43,18 +44,42 @@ function jsonError(status: number, error: string, itemId?: number) {
   return Response.json({ ok: false, error, ...(itemId === undefined ? {} : { itemId }) }, { status });
 }
 
+/**
+ * Customer-facing checkout failures (rendered verbatim as a toast by the
+ * checkout dialog): plain Indonesian, says what happened AND what to do —
+ * the old set leaked English ("Quota exceeded") and system-speak
+ * ("Sesi telah berakhir", "Produk tidak dikenal").
+ */
 function errorResponse(error: CheckoutError): Response {
   switch (error.code) {
     case "SESSION_NOT_ACTIVE":
-      return jsonError(409, "Sesi telah berakhir");
+      return jsonError(
+        409,
+        "Flash sale sudah berakhir. Sampai jumpa di sesi berikutnya!",
+      );
     case "UNKNOWN_PRODUCT":
-      return jsonError(400, "Produk tidak dikenal");
+      return jsonError(
+        400,
+        "Ada produk yang sudah tidak tersedia. Refresh dan pilih ulang, ya.",
+      );
     case "STOCK_INSUFFICIENT":
-      return jsonError(409, "Stock tidak mencukupi", error.itemId);
+      return jsonError(
+        409,
+        "Stok salah satu produk tidak cukup. Kurangi jumlahnya, lalu checkout lagi.",
+        error.itemId,
+      );
     case "QUOTA_EXCEEDED":
-      return jsonError(409, "Quota exceeded", error.itemId);
+      return jsonError(
+        409,
+        "Kuota salah satu produk sudah habis dipesan. Kurangi jumlahnya, ya.",
+        error.itemId,
+      );
     case "BELOW_MIN_ORDER":
-      return jsonError(400, "Pesanan di bawah minimal order", error.itemId);
+      return jsonError(
+        400,
+        "Jumlah belum memenuhi minimal order. Tambah qty-nya, ya.",
+        error.itemId,
+      );
   }
 }
 
@@ -120,6 +145,14 @@ export async function POST(request: Request) {
   try {
     const { bookingId } = await nextBookingId(db, new Date());
 
+    // Link the customer's registered Jubelio contact (resolved by email) so
+    // payment confirmation can build the sales order without a re-lookup.
+    // Nullable: customers who skipped onboarding still check out.
+    const [contact] = await db
+      .select({ id: contacts.id })
+      .from(contacts)
+      .where(eq(contacts.email, auth.user.email));
+
     // Hoisted out of the transaction so the 201 response can hand back the
     // order UUID (orderId contract — the PaymentPanel seeds its proof phase
     // from it instead of polling the order list).
@@ -137,7 +170,13 @@ export async function POST(request: Request) {
         .insert(orders)
         .values({
           bookingId,
-          ...buildOrderValues(body, auth.user.id, body.sessionId, grandTotal),
+          ...buildOrderValues(
+            body,
+            auth.user.id,
+            body.sessionId,
+            grandTotal,
+            contact?.id ?? null,
+          ),
         })
         .returning();
       if (!order) throw new Error("order insert returned no row");

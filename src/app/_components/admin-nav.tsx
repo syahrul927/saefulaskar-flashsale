@@ -4,7 +4,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 
 // SSR entry: rendered by the admin layout, which is a server component.
-import { ClipboardIcon, GearIcon } from "@phosphor-icons/react/ssr";
+import { BroadcastIcon, ClipboardIcon, GearIcon } from "@phosphor-icons/react/ssr";
 import { cn } from "cn";
 
 type NavItem = {
@@ -15,24 +15,38 @@ type NavItem = {
   isActive: (pathname: string) => boolean;
 };
 
+/** Own segment plus anything nested under it, without swallowing siblings. */
+function under(href: string) {
+  return (pathname: string) =>
+    pathname === href || pathname.startsWith(`${href}/`);
+}
+
 const NAV_ITEMS: NavItem[] = [
   {
     href: "/admin",
     label: "Konsol",
     Icon: GearIcon,
-    // Session config lives under /admin/* — only the order queue is separate.
-    isActive: (pathname) => !pathname.startsWith("/admin/orders"),
+    // Session config lives at /admin itself; every other segment owns its label.
+    isActive: under("/admin"),
   },
   {
     href: "/admin/orders",
     label: "Pesanan",
     Icon: ClipboardIcon,
-    isActive: (pathname) => pathname.startsWith("/admin/orders"),
+    isActive: under("/admin/orders"),
+  },
+  {
+    // Observation bench for the Jubelio integration — see spec §4.7. Hidden
+    // from customers, but reachable from the admin header like everything else.
+    href: "/admin/jubelio",
+    label: "Jubelio",
+    Icon: BroadcastIcon,
+    isActive: under("/admin/jubelio"),
   },
 ];
 
 /**
- * Segmented-control nav for the two admin surfaces. Client component because
+ * Segmented-control nav for the three admin surfaces. Client component because
  * the active segment needs the live pathname; the header around it stays a
  * server component. Labels collapse to icons below `sm` so the rail fits a
  * phone without clipping the status chrome.

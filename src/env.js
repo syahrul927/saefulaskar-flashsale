@@ -33,7 +33,20 @@ export const env = createEnv({
     WHATSAPP_NUMBER: z.string(),
     // JSON array string, parsed at runtime (e.g. BANK_ACCOUNTS = '[{"bank":"BCA",...}]')
     BANK_ACCOUNTS: z.string(),
+    // Jubelio observation rig (spec §4.7): the secret path segment of the public
+    // webhook sink. OPTIONAL on purpose — unset means the sink answers 503 and
+    // stores nothing, so a public endpoint that writes to the database is always
+    // a deliberate opt-in and never something a fresh clone turns on by default.
+    JUBELIO_WEBHOOK_SINK_TOKEN: z.string().optional(),
     CRON_SECRET: z.string(),
+    // Order-status sync throttle. The cron always runs a full pass; this is the
+    // floor between the "an admin opened the orders page" runs, so a busy
+    // dashboard cannot sweep Jubelio on every request. 0 disables the throttle.
+    ORDER_SYNC_INTERVAL_MS: z.coerce.number().int().min(0).default(300_000),
+    // How long a page render will wait for a due sync before painting with
+    // whatever it has (the run keeps going in the background). Keeps the
+    // dashboard fast when the upstream sweep is slow.
+    ORDER_SYNC_AWAIT_MS: z.coerce.number().int().min(0).default(4_000),
     DATABASE_URL: z.string().url(),
     NODE_ENV: z
       .enum(["development", "test", "production"])
@@ -68,7 +81,10 @@ export const env = createEnv({
     JUBELIO_BASE_URL: process.env.JUBELIO_BASE_URL,
     WHATSAPP_NUMBER: process.env.WHATSAPP_NUMBER,
     BANK_ACCOUNTS: process.env.BANK_ACCOUNTS,
+    JUBELIO_WEBHOOK_SINK_TOKEN: process.env.JUBELIO_WEBHOOK_SINK_TOKEN,
     CRON_SECRET: process.env.CRON_SECRET,
+    ORDER_SYNC_INTERVAL_MS: process.env.ORDER_SYNC_INTERVAL_MS,
+    ORDER_SYNC_AWAIT_MS: process.env.ORDER_SYNC_AWAIT_MS,
     DATABASE_URL: process.env.DATABASE_URL,
     NODE_ENV: process.env.NODE_ENV,
   },

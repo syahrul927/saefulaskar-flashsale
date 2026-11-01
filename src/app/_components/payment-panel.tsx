@@ -16,8 +16,9 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { Skeleton } from "@/components/ui/skeleton";
-import { CopyChip, formatRupiah } from "@/lib/format";
+import { formatRupiah } from "@/lib/format";
 import type { BankAccount } from "@/server/checkout";
+import { CopyChip } from "./copy-chip";
 import { ProofUploadButton } from "./proof-upload-button";
 import { StatusBadge } from "./status-badge";
 

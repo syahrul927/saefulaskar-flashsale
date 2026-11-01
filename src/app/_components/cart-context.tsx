@@ -11,10 +11,7 @@ import {
 } from "react";
 import { toast } from "sonner";
 
-import {
-  nextQtyAfterAdd,
-  nextQtyAfterIncrement,
-} from "./cart-rules";
+import { nextQtyAfterAdd, nextQtyAfterIncrement } from "./cart-rules";
 
 const STORAGE_KEY = "fs-cart";
 
@@ -134,12 +131,12 @@ function CartProvider({ children }: { children: ReactNode }) {
       });
       if (decision.kind === "unbuyable") {
         toast.error(
-          `Sisa stok tidak cukup untuk minimum order ${item.minOrder}.`,
+          `Sisa "${item.name}" tinggal ${item.maxQty} — belum cukup untuk minimal order ${item.minOrder}.`,
         );
         return;
       }
       if (decision.kind === "at-max") {
-        toast.info(`Sisa tinggal ${item.maxQty}.`);
+        toast.info(`Stok "${item.name}" sudah habis.`);
         return;
       }
       setItems((prev) => {
@@ -157,7 +154,9 @@ function CartProvider({ children }: { children: ReactNode }) {
         `${decision.qty} x ${item.name} ditambahkan ke keranjang`,
       );
       if (decision.clamped) {
-        toast.info(`Dibatasi sisa stok — tinggal ${item.maxQty}.`);
+        toast.info(
+          `Jumlah disesuaikan dengan sisa stok — "${item.name}" tinggal ${item.maxQty}.`,
+        );
       }
     },
     [items],
@@ -180,7 +179,7 @@ function CartProvider({ children }: { children: ReactNode }) {
         cap: row.maxQty,
       });
       if (decision.kind === "at-max") {
-        toast.info(`Sisa tinggal ${row.maxQty}.`);
+        toast.info(`Stok "${row.name}" sudah habis.`);
         return;
       }
       setItems((prev) =>

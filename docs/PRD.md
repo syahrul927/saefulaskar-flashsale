@@ -153,7 +153,11 @@ transaction_date : <date>         (ISO date)
 location_id      : <number>       (warehouse location)
 source           : 1               (1 = Internal)
 is_paid          : true            (instant paid — payment already confirmed)
-payment_method   : "transfer"       (bank transfer)
+channel_status   : "paid"          (⚠ REQUIRED — see note below)
+store_id         : -100            (⚠ REQUIRED — "Toko Default")
+is_tax_included  : false           (⚠ REQUIRED)
+payment_method   : ""              (⚠ key REQUIRED; the value is empty, NOT
+                                   "transfer" — live capture 2026-10-29)
 items[]          : <array>
   item_id         : <number>       (from product_skus.item_id)
   item_name       : <string>
@@ -178,12 +182,26 @@ Optional:
 ```
 shipping_full_name, shipping_address, shipping_city,
 shipping_district, shipping_zipcode, shipping_courier,
-courier, note, ref_no, channel_status
+courier, note, ref_no
 ```
 
-**Response:** `{ id: <salesorder_id> }`
+`note` and `ref_no` are optional upstream but always sent (empty) — the payload
+mirrors the dashboard request key-for-key; `tests/confirm-order.test.ts` pins
+that key set.
 
-> **Note:** `is_paid: true` + `payment_method: "transfer"` marks the order as paid at creation — no UNPAID phase. Status transitions (CONFIRMED → SHIPPED → Completed) handled by Jubelio internally + synced back via webhooks.
+**Response:** `{ id: <salesorder_id> }` — the key is `id`, **not**
+`salesorder_id` (that name belongs to list/detail rows). Parsing `data
+.salesorder_id` answered "Jubelio tidak mengembalikan salesorderId" while the SO
+had already been created and paid. See `readSalesOrderId`.
+
+> **Note:** `is_paid: true` alone is not enough. Omit `channel_status`/`store_id`/
+> `is_tax_included` and Jubelio creates the row at `wms_status: "UNKNOWN"`, then
+> rejects its own transition with `Status Sekarang: UNKNOWN, Status Dituju: PAID`
+> — leaving an orphan SO that no longer accepts a second confirm. With all four
+> flags the SO lands `internal=PAID / channel=Paid / wms=PAID` (verified live).
+> Status transitions after that (PAID → SHIPPED → COMPLETED) happen inside
+> Jubelio's own warehouse flow and are read back by polling — see §4.2/§4.3, not
+> webhooks.
 
 ---
 
@@ -225,20 +243,41 @@ items[]         : <array>
 
 ### 3.6 Webhooks
 
-Four webhooks available — registered via `POST /webhooks/{type}`:
-
-| Webhook | Trigger | Action in our system |
+| Event (prose docs) | Trigger | Action in our system |
 |---|---|---|
-| `invoice` | Invoice created/updated | Sync invoice status |
-| `salesorder` | Order created/changed (e.g. status transitions) | Sync order status |
-| `stock` | Stock change (orders, transfers, returns) | Update available quota |
+| `invoice` | Invoice created/updated | **Not used** — under observation, see §4.6 |
+| `salesorder` | Order created/changed (e.g. status transitions) | **Not used** — order status arrives by polling |
+| `stock` | Stock change (orders, transfers, returns) | **Not used** — quota comes from `/inventory/items/all-stocks/` |
 | `payment` | Price change (⚠ see note) | **Not used** — payment confirmed via WhatsApp |
 
-> **Note:** `payment` webhook describes price change, not payment received. Payment confirmation done via WhatsApp proof upload → admin creates SO with `is_paid: true`. Jubelio immediately sets status to **Ready to Ship** — no UNPAID or CONFIRMED phase in Jubelio. The `salesorder` webhook fires with `status: "Ready to Ship"`, which maps to local status **CONFIRMED**.
+> **There is no registration endpoint.** This section used to say webhooks are
+> registered via `POST /webhooks/{type}`; that path does not exist. Checked against
+> the live `https://open.jubelio.com/core-api/swagger.json` (472 paths) on
+> 2026-10-31: the only `webhook` path is `POST /webhook/sales-order`, which
+> *resends* the sales-order callback for the SO ids you name
+> (`{"ids":[192297]}`). Registration is dashboard-only — Pengaturan → Developer →
+> Webhook, one callback URL per event type, no place to add a header.
+>
+> **Not implemented in the order flow.** No webhook is consumed by anything that
+> writes order state. The only receiver in `src/` is a **probe sink**
+> (`POST /api/jubelio/webhook-sink/[token]`, §4.6) that records what Jubelio
+> actually sends into two debug tables and cannot touch `orders.status`; it is
+> closed unless `JUBELIO_WEBHOOK_SINK_TOKEN` is set. Order status and resi arrive
+> by **polling the SO by id** (§4.2/§4.3).
+>
+> Payment confirmation is: WhatsApp proof upload → admin clicks Konfirmasi Bayar →
+> we create the SO with `is_paid: true` + `channel_status: "paid"`. The SO lands
+> directly at `internal_status: "PAID"`, which maps to local **CONFIRMED** — there
+> is no UNPAID or intermediate phase inside Jubelio. (`payment` webhook describes
+> price change, not payment received.)
 
-Webhook payload fields available (from schema):
-- `invoice_id`, `invoice_no`, `contact_id`, `customer_name`, `transaction_date`, `due_date`, `grand_total`, `status`
-- `order_id`, `order_no`, `order_status`, `payment_status`, `tracking_number`, `courier`, `is_shipped`, `wms_status`
+**No payload shape is known.** Any field list for a webhook body would be a guess —
+there is nothing in the live spec describing a delivery body, and we have never
+captured one. That is deliberate now: the probe sink (§4.6) exists to record the
+first real delivery instead of us assuming its shape. The one lesson carried over
+from the SO header: `is_shipped` is the wrong gate (it is `null` even on shipped
+SOs, §4.3) and the field is `shipper`, not `courier`. Do not code against either
+name until a capture proves it.
 
 ---
 
@@ -259,11 +298,10 @@ Used when we need to reserve quota outside of order flow:
 | Data | Sync Method | When |
 |---|---|---|
 | Products / SKUs | **Live fetch** (on-demand) | Admin creates session + at checkout CO |
-| Orders | **Polling + save to DB** | Daily scheduler (for Completed status) |
-| Sales Orders | **Polling + save to DB** | Daily scheduler |
-| Invoices | **Polling + save to DB** | Daily scheduler |
-| Stock changes | **Webhook** (`/webhooks/stock`) | Real-time quota update after orders/returns |
-| Order status | **Webhook** (`/webhooks/salesorder`) | Real-time status update |
+| Orders / Sales Orders | **Polling, `GET /sales/orders/{id}`** | Vercel daily cron + optional external pinger (hourly) + throttled pass when an admin opens the orders page (`ORDER_SYNC_INTERVAL_MS`, default 5 min) |
+| Stock | **Live fetch** at session setup and at checkout | No webhook receiver — `/inventory/items/all-stocks/` on demand |
+| Invoices | not synced | No invoice surface in this app |
+| Order status | **same poll as above** | no webhook receiver exists in `src/` (§3.6) |
 
 ### 4.1 Product — Live Fetch (On-Demand)
 
@@ -286,38 +324,72 @@ GET /sales/invoices/                 → all invoices
 GET /sales/invoices/{id}            → single invoice
 ```
 
-**Transaction is Completed when** Jubelio `status = "Completed"`.
+**Corrected against live responses (probe 2026-10-29).** A sales-order row has
+NO `status` field — the earlier claim that it reads `status = "Completed"` was
+wrong, and it is why the sync written from this section reported `synced: 0`
+every night. Status lives in three fields, each with its own vocabulary:
 
-**Jubelio internal status → local status mapping:**
+| Field | Observed values |
+|---|---|
+| `internal_status` | `PENDING, PAID, PROCESSING, SHIPPED, COMPLETED, CANCELED` |
+| `channel_status` | `UNPAID, Paid, READY_TO_SHIP, Processing, delivered, remitted, refunded` |
+| `wms_status` | `PENDING, PAID, SHIPPED, COMPLETED, CANCELED, UNKNOWN` |
+
+**`internal_status` → local status mapping** (the sync reads this one field):
 | Jubelio | Local |
 |---|---|
 | *(no SO yet)* | UNPAID (booking) |
-| Ready to Ship | CONFIRMED |
-| Shipped | SHIPPED |
-| Completed | Completed |
+| `PAID` | CONFIRMED |
+| `SHIPPED` | **CONFIRMED** — SHIPPED is skipped (§4.6); the resi from the same response is what says "shipped" |
+| `COMPLETED` | COMPLETED |
+| `PENDING` / `PROCESSING` / `CANCELED` / anything else | left as-is (no local equivalent) |
 
-Save to local DB on every sync. Webhook handles urgent events (stock, order status transitions) as backup.
+The sync only ever moves a local status FORWARD — a stale SO reading `PAID`
+cannot pull an order back, and a row already sitting on a legacy `SHIPPED` is
+never pulled back to `CONFIRMED` either (`STATUS_RANK` keeps that value ranked so
+history stays ahead of the two-state ladder).
+
+**Reads are per-SO by id, never the list.** `GET /sales/orders/` holds 184 072
+rows at 200/page, page 1 is 2022-era marketplace traffic, and `page_size` /
+`sort` / `order` are rejected by the upstream schema — so our own orders are
+not reachable through it. `GET /sales/orders/{id}` returns the header (status +
+`tracking_number` + `shipper`) and is the only usable read.
+
+Save to local DB on every sync. Triggers: the Vercel daily cron, an optional
+external hourly pinger, and a throttled pass when an admin opens the orders page
+(`ORDER_SYNC_INTERVAL_MS`, default 5 min).
 
 ### 4.3 Resi / AWB Tracking
 
-No dedicated shipment webhook. Use **`/webhooks/salesorder`** — fires on order status changes.
+No dedicated shipment webhook is wired up in this app; the status sync carries the
+resi instead. Fields as actually observed on the SO header (probe 2026-10-29):
+```
+tracking_number    ← resi/AWB number ("" on a freshly created SO)
+shipper            ← courier name, free text ("SiCepat HALU", "Grab Same Day")
+tn_created_date    ← when the AWB was created
+internal_status    ← SHIPPED once it has moved
+```
+`is_shipped` and `marked_as_complete` are `null` even on shipped and completed
+SOs — do not gate anything on them.
 
-Webhook fields:
-```
-tracking_number    ← resi/AWB number
-courier           ← courier name
-is_shipped        ← "yes" when shipped
-wms_status        ← WMS fulfillment status
-```
+Handler (in `src/server/daily-sync.ts` + `src/server/order-sync.ts`): the sync
+copies `tracking_number` → `orders.tracking_number` and `shipper` →
+`orders.shipper` whenever the SO carries one and we don't already have it. This
+happens **whether or not the local status moves** — which matters now that SHIPPED
+is skipped (§4.6): an order that stays `CONFIRMED` for the customer still gets its
+resi. No `shipped_at` column: `updated_at` covers it, and Jubelio gives no shipped
+date on the header. Courier names are free text with no carrier→site mapping, so
+the UI offers copy, not a tracking link.
 
-Handler: watch for `tracking_number` empty → filled transition. Update local `orders.tracking_number`, `orders.courier`, `orders.shipped_at`.
+The resi strip (`ShipmentBand`) renders on the presence of a tracking number, not
+on a status, so it needs no change for the skipped status — and a legacy `SHIPPED`
+row still shows its resi like any other.
 
-**Backup polling:**
-```
-GET /wms/sales/shipped/             → all shipped orders + AWB
-GET /sales/orders/{id}             → single order
-POST /wms/sales/shipments/orders/   → get AWB for specific order
-```
+**What we do NOT use:** the `GET /sales/orders/` list (184 072 rows at 200/page,
+`page_size`/`sort`/`order` rejected by its Joi schema — a page-1 sweep never
+reaches our orders), and `GET /wms/sales/shipped/` +
+`POST /wms/sales/shipments/orders/`, which are listed upstream but have never been
+probed from this app.
 
 ### 4.4 Bank Accounts (Payment)
 
@@ -342,9 +414,58 @@ Displayed to customer at checkout. Customer uploads proof of transfer via WhatsA
 **Phase 2 — Confirmation (creates Jubelio SO as instant paid):**
 5. Admin sees pending bookings in dashboard (order number + transfer screenshot)
 6. Admin verifies screenshot matches amount → clicks "Konfirmasi Bayar"
-7. App creates SO in Jubelio with `is_paid: true`, `payment_method: "transfer"` → **instant paid** (no UNPAID phase)
-8. Local order status → **CONFIRMED**
-9. Daily sync → SHIPPED → Completed (via webhooks as backup)
+7. App creates SO in Jubelio with `is_paid: true` + `channel_status: "paid"` +
+   `store_id: -100` + `is_tax_included: false` → **instant PAID** (no UNPAID phase;
+   omit any of those four and Jubelio 500s mid-transition, see §3.3)
+8. App reads the SO id off the response (`{ id }`) → local order status
+   **CONFIRMED**, `jubelio_so_id` stored. No id parsed = 502 **and no local write** —
+   the SO may already exist, so the message tells the admin to check Jubelio rather
+   than click again.
+9. Status sync (§4.2/§4.3) reads the SO by id and moves the local row
+   CONFIRMED → COMPLETED, filling `tracking_number`/`shipper` on the way.
+   Forward-only; a CANCELED SO leaves the local row untouched. There is no
+   SHIPPED step any more (§4.6) — a shipped SO keeps the row at CONFIRMED and
+   delivers the resi.
+
+### 4.6 Status Ladder & Jubelio Observation Rig
+
+**The customer ladder is three steps:** `UNPAID → CONFIRMED → COMPLETED`. SHIPPED
+was dropped from it on request — one status per thing the customer needs to know,
+and "paid" and "out of our hands" are the two they asked about.
+
+**Skipped, not deleted.** The `order_status` PG enum keeps `SHIPPED`, the columns
+keep their values, `ShipmentBand` stays, and rows already written as `SHIPPED`
+stay `SHIPPED` and still render ("Dikirim"). Only the *writer* changed: nothing in
+`src/` can produce a SHIPPED order now (`SyncStatus` no longer admits it), and the
+customer's status pills replaced `DIKIRIM` with `DIPROSES`. No migration, no
+history rewrite.
+
+**COMPLETED copy.** The badge reads `DIPROSES` and the card line under it says:
+*"Order sudah diproses atau dikirim — hubungi CS untuk informasi lebih lanjut."*
+with "hubungi CS" as a WhatsApp deep link (`buildCsLink` — deliberately not the
+payment-proof `waLink`). The label cannot claim "Selesai"/arrived, because COMPLETED
+now covers both processed and shipped and we cannot tell them apart from the SO
+header. Full design and rationale: spec §4.7.
+
+**Why a rig instead of just building the webhook.** The next step the user asked
+for — flag COMPLETED when Jubelio creates the faktur, via webhook — rests on two
+unknowns: what a Jubelio webhook body contains, and which SO fields a created
+invoice moves. Upstream documents neither, and a wrong guess here already produced
+four orphan `UNKNOWN` sales orders. So:
+
+| Piece | Path | Purpose |
+|---|---|---|
+| Probe sink | `POST /api/jubelio/webhook-sink/[token]` | Record any POST Jubelio fires: verbatim body, credential-redacted headers, and whether the payload carries a joinable `salesorder_id` / `invoice_id` / `ref_no` |
+| Snapshot diff | `POST /api/admin/jubelio/snapshot` + `/admin/jubelio` | Read `GET /sales/orders/{id}` on demand, store it, and diff it against that SO's previous read — snapshot, create the faktur, snapshot again |
+| Bench page | `/admin/jubelio` (admin nav → "Jubelio") | The sink URL to copy into Pengaturan → Developer → Webhook, the linked orders, the capture log, the snapshot history |
+
+Storage is two throwaway tables — `webhook_captures` (self-pruning to the newest
+200) and `jubelio_so_snapshots` (kept, since each row is a deliberate reading).
+Neither is read by any order flow, and neither can write `orders.status`. The sink
+is closed unless `JUBELIO_WEBHOOK_SINK_TOKEN` is set.
+
+**Held until the rig answers:** wiring a faktur-created webhook into the status
+sync, and whether the daily cron stays once a manual sync button exists.
 
 ---
 
@@ -360,6 +481,7 @@ Displayed to customer at checkout. Customer uploads proof of transfer via WhatsA
 - **AS-06** — Set session start/end time, set status (SCHEDULED / ACTIVE / PAUSED / ENDED)
 - **AS-07** — Verify customer payment proof uploaded via WhatsApp, mark order as PAID
 - **AS-08** — See daily sync job results; track Completed orders from Jubelio
+- **AS-09** — Open the Jubelio bench (`/admin/jubelio`), copy the sink callback URL, snapshot a sales order and read what changed since the last snapshot (§4.6)
 
 ### Customer
 
@@ -370,7 +492,7 @@ Displayed to customer at checkout. Customer uploads proof of transfer via WhatsA
 - **CS-05** — Add to cart (starts at MOQ qty), increment/decrement with MOQ floor enforced
 - **CS-06** — Quick buy (add + open cart)
 - **CS-07** — Checkout: enter/confirm address, select bank transfer account
-- **CS-08** — See order in Transaction History with status badge (UNPAID / CONFIRMED / SHIPPED / Completed)
+- **CS-08** — See order in Transaction History with status badge (Belum Bayar / Dikonfirmasi / Diproses — filter pills, no SHIPPED step, §4.6), and on a COMPLETED order the line "Order sudah diproses atau dikirim — hubungi CS untuk informasi lebih lanjut" with a working CS link
 - **CS-09** — View order number (booking_id) + bank account info on UNPAID orders
 - **CS-10** — Click "Kirim Bukti Transfer" → WhatsApp opens with pre-filled text + attachment prompt for screenshot
 - **CS-11** — View receipt/invoice with tracking number, courier, delivery address
@@ -386,16 +508,18 @@ Displayed to customer at checkout. Customer uploads proof of transfer via WhatsA
 | 3 | New customer form fields | **Resolved** — Nama, Nama PIC, Jabatan dropdown, No. Telf PIC, Alamat lengkap |
 | 4 | Customer address/contact creation flow | **Resolved** — `POST /contacts/` on Google sign-up |
 | 5 | Category source | **Resolved** — manual input per product, not from Jubelio |
-| 6 | Stock sync strategy | **Resolved** — live fetch at session setup + at CO; webhook as real-time backup |
-| 7 | Order Completed trigger | **Resolved** — when `order_status = "Completed"` in Jubelio |
-| 8 | Polling interval for daily sync | **Pending** — propose: daily at midnight + manual trigger |
+| 6 | Stock sync strategy | **Resolved** — live fetch at session setup + at CO; no webhook receiver implemented |
+| 7 | Order Completed trigger | **Resolved (as far as we can go today)** — SO header `internal_status = "COMPLETED"` (not `order_status`; the field doesn't exist on the header). Full mapping in §4.2. The requested "faktur created ⇒ COMPLETED" trigger is **held on evidence**: see §4.6 / spec §4.7 |
+| 8 | Polling interval for daily sync | **Resolved** — Vercel cron 00:00 UTC + optional external hourly pinger to `POST /api/cron/daily-sync` + throttled pass on admin-orders view (`ORDER_SYNC_INTERVAL_MS`, default 300000 ms; `ORDER_SYNC_AWAIT_MS` caps how long the page waits, default 4000 ms) |
 | 9 | `location_id` — how to map to our warehouse | **Needs Jubelio** — query `/locations/` |
 | 10 | Stock reservation (pre-allocate vs. on-order) | **TBD** — may use `/inventory/reserved/` for flash sale quota |
-| 11 | Webhook secret/authentication | Need to implement HMAC verification |
+| 11 | Webhook secret/authentication | **Open, by observation** — no webhook is consumed by the order flow. Jubelio's dashboard gives no place to put an auth header on a callback, so the probe sink authenticates with a secret path segment (`JUBELIO_WEBHOOK_SINK_TOKEN`, unset ⇒ closed). Whether Jubelio signs its deliveries at all is one of the findings: the sink keeps every non-credential header. `/api/cron/daily-sync` is guarded by `CRON_SECRET` and accepts either `x-cron-secret: <secret>` (external pingers) or `Authorization: Bearer <secret>` on GET **or** POST — the bearer-on-GET form is what Vercel's own cron sender sends |
+| 17 | SHIPPED as a customer-facing status | **Resolved** — dropped (§4.6). Skipped, not deleted: enum, columns, legacy rows and the resi strip stay; nothing writes the value. "Diproses" (COMPLETED) is the last step |
 | 12 | WhatsApp link format | **Pending** — wa.me/ number + pre-filled text template |
 | 13 | API base URL | **Resolved** — use `https://open.jubelio.com/core-api/` (new domain); old `api2.jubelio.com` possibly deprecated |
 | 14 | API docs reliability | **Known issue** — docs not 100% valid. Some endpoints moved/deprecated. Need trial & error per endpoint. |
 | 15 | `location_id` — Jubelio | **Resolved** — `GET /core-api/locations/` works on new domain. Set in `.env` as `JUBELIO_LOCATION_ID`. |
+| 16 | Confirm idempotency (a retry must not make a second paid SO) | **Open** — candidate: send `ref_no = orders.booking_id` and verify-then-adopt on an ambiguous failure. Blocked on an unknown: marketplace SOs carry `ref_no` and their `salesorder_no` becomes `SP-<ref_no>` instead of our `SO-000…`, so this may change how our SOs are numbered. Do not click Konfirmasi Bayar twice on a failed confirm until this lands. |
 
 ---
 
@@ -403,9 +527,11 @@ Displayed to customer at checkout. Customer uploads proof of transfer via WhatsA
 
 ### Auth
 ```
-POST /login   → { access_token }   (12h expiry)
+POST /login   body { email, password }   → { token, fullName, userName, currentCompany, nik }
 Authorization: Bearer <token>
 ```
+Sending `companyId` in the body is rejected: `400 "companyId" is not allowed`. The
+response key is `token` — not `access_token`, which this section used to claim.
 
 ### Product Setup
 ```
@@ -430,11 +556,23 @@ POST /contacts/                            → create customer (onboarding)
 GET  /contacts/{id}                        → get customer
 ```
 
-### Webhooks (register via POST)
+### Webhooks (NOT used by this app, see §3.6)
 ```
-POST /webhooks/invoice      → invoice events
-POST /webhooks/salesorder   → order status events
-POST /webhooks/stock        → stock change events
+POST /webhook/sales-order   body { "ids": [<salesorder_id>, …] }   → RESEND the SO callback
+```
+That is the only `webhook` path in the live spec — the `POST /webhooks/invoice` /
+`/webhooks/salesorder` / `/webhooks/stock` registration endpoints this section
+used to list do not exist (verified against `/core-api/swagger.json`, 472 paths,
+2026-10-31). Registration is dashboard-only, and this app consumes nothing.
+
+### Endpoints this app actually calls
+```
+POST /login                                → system-account token (12 h expiry)
+POST /contacts/                            → customer onboarding
+GET  /inventory/items/by-sku/{sku}         → product + stock
+POST /inventory/items/all-stocks/          → stock sweep
+POST /sales/orders/                        → confirm (create SO, instant PAID)
+GET  /sales/orders/{id}                    → status sync (status + resi), and the bench snapshot (§4.6)
 ```
 
 ---
@@ -462,6 +600,34 @@ Or via `.env`:
 ```
 BANK_ACCOUNTS=[{"bank":"BCA","account_number":"1234567890","account_name":"PT FlashStudio"},{"bank":"Mandiri","account_number":"0987654321","account_name":"PT FlashStudio"}]
 ```
+
+### Order status sync — `.env`
+
+```
+# How often the throttled pass is allowed to run, process-wide. 0 disables the
+# throttle so every admin-orders view sweeps (dev only — it multiplies upstream
+# calls by the number of linked orders).
+ORDER_SYNC_INTERVAL_MS=300000
+# Longest the admin orders page waits for that sweep before rendering what the
+# DB already has; the run finishes in the background via after(). 0 = never
+# block, statuses appear on the next reload.
+ORDER_SYNC_AWAIT_MS=4000
+# Guards /api/cron/daily-sync (GET and POST). Vercel's own cron sender presents
+# it as `Authorization: Bearer <CRON_SECRET>` on a GET; external pingers can use
+# either that or `x-cron-secret: <CRON_SECRET>`.
+# Required and non-empty — `emptyStringAsUndefined` in src/env.js means
+# `CRON_SECRET=""` fails validation at boot, not "no auth".
+CRON_SECRET="<random string>"
+# Jubelio probe sink (§4.6). Optional, and `""` is the same as unset: the public
+# POST endpoint then answers 503 and stores nothing. Set it only while probing,
+# copy the URL from /admin/jubelio into Jubelio's dashboard, clear it afterwards.
+JUBELIO_WEBHOOK_SINK_TOKEN=""
+```
+
+Both sync vars are `z.coerce.number()` and have defaults, so they are optional in
+`.env`. Vercel Hobby allows one daily cron (`vercel.json`: `0 0 * * *`); for
+hourly freshness point an external pinger (cron-job.org, GitHub Actions schedule)
+at `POST /api/cron/daily-sync` with the `x-cron-secret` header.
 
 ---
 

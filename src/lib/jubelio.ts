@@ -271,19 +271,56 @@ export type ContactPayload = {
   is_reseller?: boolean;
 };
 
+/**
+ * One `saveSalesOrderRequest.items[]` line — the STRICT upstream Joi schema
+ * (OpenAPI `saveSalesOrderRequest.items[]`, live-verified 2026-10-27):
+ * `item_name`/`sku`/`qty` are rejected ("not allowed"); quantity travels as
+ * `qty_in_base` + `unit`, and `amount` (qty × price) must be precomputed.
+ */
 export type SalesOrderItem = {
+  salesorder_detail_id: number;
   item_id: number;
-  item_name: string;
-  sku: string;
-  qty: number;
+  qty_in_base: number;
+  unit: string;
   price: number;
-  discount?: number;
-  tax?: number;
-  uom_id?: number;
-  warehouse_id?: number;
+  amount: number;
+  disc: number;
+  disc_amount: number;
+  tax_amount: number;
+  tax_id: number;
+  location_id: number;
+  /**
+   * The four keys below are not business data for us — they are what the
+   * dashboard's own create request sends on every line (captured live
+   * 2026-10-28), and the rows we created without them came back with
+   * `status: null` on the line. Emitted as constants.
+   */
+  description: string;
+  channel_order_detail_id: null;
+  shipper: string;
+  tracking_no: string;
 };
 
-/** `saveSalesOrderRequest` — spec §4.5 (confirm payment → paid SO). */
+/**
+ * `saveSalesOrderRequest` — spec §4.5 (confirm payment → paid SO).
+ *
+ * The field set is the dashboard's own create request, captured live
+ * 2026-10-28, NOT the doc's required-field list. Reason: `is_paid: true` does
+ * not make an order paid on its own. Jubelio inserts the header, then runs its
+ * status machine in the same request — and with no `channel_status` handed to
+ * it the row lands `internal_status: null` / `wms_status: "UNKNOWN"`, the
+ * transition is rejected, and it answers 500 with
+ * `Pesanan sudah dipakai di transaksi lain … Status Channel: <NULL>,
+ *  Status Sekarang: UNKNOWN, Status Dituju: PAID`.
+ * The row stays committed (no rollback), so every retry adds another orphan.
+ * The dashboard's identical create came back `internal=PAID, channel=Paid,
+ * wms=PAID` — which is what `channel_status`, `store_id` and
+ * `is_tax_included` buy us.
+ *
+ * The optional-looking extras below are all present in that capture; they are
+ * sent as constants because Joi validation runs before insert and an
+ * unverified field set is what produced four dead SOs.
+ */
 export type SalesOrderPayload = {
   salesorder_id: 0;
   salesorder_no: "[auto]";
@@ -292,16 +329,62 @@ export type SalesOrderPayload = {
   transaction_date: string;
   location_id: number;
   source: 1;
+  /** Target status — the field the paid transition actually reads. */
+  channel_status: "paid";
   is_paid: boolean;
-  payment_method?: string;
+  /**
+   * Empty string, as every healthy internal SO in this account has it. The
+   * `"transfer"` we used to send is not a Jubelio payment method, and our dead
+   * row was the only SO in the account carrying it.
+   */
+  payment_method: string;
+  /** -100 = "Toko Default", the internal outlet; NULL store_id was another
+   * difference between our dead row and every healthy one. */
+  store_id: number;
+  is_tax_included: boolean;
+  /** Free-text note shown on the SO. The key-set diff against the dashboard
+   * capture found this as the one header field we were not sending at all. */
+  note: string;
+  ref_no: string;
+  is_canceled: boolean;
+  cancel_reason: string;
+  cancel_reason_detail: string;
+  shipping_full_name: string;
+  shipping_address: string;
+  shipping_phone: string;
+  shipping_country: string;
+  shipping_subdistrict: string | null;
+  shipping_area: string | null;
+  shipping_city: string | null;
+  shipping_province: string | null;
+  shipping_post_code: string | null;
+  shipping_province_id: string | null;
+  shipping_city_id: string | null;
+  shipping_district_id: string | null;
+  shipping_subdistrict_id: string | null;
+  shipping_coordinate: string | null;
+  shipping_cost: number;
+  shipping_cost_discount: number;
+  cod_fee: number;
+  cod_fee_discount: number;
+  insurance_cost: number;
+  service_fee: number;
+  add_disc: number;
+  add_fee: number;
+  order_processing_fee: number;
+  use_shipping_insurance: boolean;
+  is_cod: boolean;
+  is_jubelio_shipment: boolean;
+  add_cost_detail: unknown[];
+  extra_info: Record<string, unknown>;
+  voucher_codes: string[];
+  service_category_id: number | null;
+  salesmen_id: number | null;
   items: SalesOrderItem[];
   sub_total: number;
   total_disc: number;
   total_tax: number;
   grand_total: number;
-  add_disc?: number;
-  add_fee?: number;
-  service_fee?: number;
 };
 
 /* ---------------------------------- client --------------------------------- */
@@ -366,9 +449,24 @@ export function createJubelioClient(token: string) {
       });
     },
 
-    /** GET /sales/orders/ — daily sync poll (spec §4.6). */
+    /**
+     * GET /sales/orders/ — first page of the sales-order list (spec §4.6).
+     * NOT usable for the status sync: 184 072 rows at 200/page, page 1 is 2022
+     * marketplace orders, and `page_size`/`sort`/`order` are rejected by their
+     * Joi schema (live probe 2026-10-29). Kept for diagnostics only.
+     */
     async listSalesOrders(): Promise<unknown> {
       return request(token, "/sales/orders/", { method: "GET" });
+    },
+
+    /**
+     * GET /sales/orders/{id} — one SO's full header + items. This is what the
+     * status sync reads: the header carries `internal_status` (PAID → SHIPPED →
+     * COMPLETED / CANCELED) plus `tracking_number` and `shipper` once shipped
+     * (live probe 2026-10-29, SO 209/85/192297).
+     */
+    async getSalesOrder(salesorderId: number): Promise<unknown> {
+      return request(token, `/sales/orders/${salesorderId}`, { method: "GET" });
     },
 
     /** GET /sales/invoices/ — daily sync poll (spec §4.6). */

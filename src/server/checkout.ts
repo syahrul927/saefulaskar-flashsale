@@ -160,13 +160,17 @@ export type CheckoutRecipientInput = {
  * fields land verbatim on the order, and missing/undefined inputs persist as
  * `null` (never `undefined` — the columns are nullable and the receipt layer
  * renders `null` as an em dash). `evaluateCheckout` stays untouched; this is
- * the snapshot half of the same guard file.
+ * the snapshot half of the same guard file. `contactId` is the customer's
+ * registered `contacts` row (resolved by email in the route) so payment
+ * confirmation can build the Jubelio sales order without a re-lookup; `null`
+ * when the customer never completed onboarding.
  */
 export function buildOrderValues(
-  body: CheckoutRecipientInput,
+  body: CheckoutRecipientInput & { contactId?: string | null },
   customerId: string,
   sessionId: string,
   grandTotal: number,
+  contactId: string | null = null,
 ) {
   return {
     customerId,
@@ -177,6 +181,7 @@ export function buildOrderValues(
     recipientName: body.recipientName ?? null,
     recipientPhone: body.recipientPhone ?? null,
     recipientAddress: body.recipientAddress ?? null,
+    contactId,
   };
 }
 

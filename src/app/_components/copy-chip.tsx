@@ -1,27 +1,15 @@
+"use client";
+
 import { CopyIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 
 /**
- * Shared rupiah formatting + clipboard helpers — the one copy of the id-ID
- * Intl config (pinned by `tests/admin-format.test.ts`). Client-safe and free
- * of server imports, so both server pages and client components can take it.
- * Final-review consolidation (R7): previously nine identical `formatRupiah`
- * copies plus two `copyToClipboard`/`CopyChip` clones lived in the modules
- * that use them.
+ * Clipboard helpers shared by the payment panel and the receipt (lifted out of
+ * `src/lib/format` — that module must stay dependency-free for RSC; these
+ * import sonner/phosphor/ui and are client-only).
  */
-
-const RUPIAH = new Intl.NumberFormat("id-ID", {
-  style: "currency",
-  currency: "IDR",
-  maximumFractionDigits: 0,
-});
-
-/** Full rupiah, e.g. `Rp 1.234.567`. */
-export function formatRupiah(value: number): string {
-  return RUPIAH.format(value);
-}
 
 /** Clipboard write + the verbatim "Disalin" toast. A missing/insecure
  * `navigator.clipboard` throws into the catch, which is the fallback path. */

@@ -5,6 +5,7 @@ import { useState } from "react";
 import { TABS, type AdminTab } from "./admin-order-tabs";
 import { ConfirmOrderButton } from "./confirm-order-button";
 import { FilterPill } from "./filter-pill";
+import { ShipmentBand } from "./shipment-band";
 import {
   isPulseStatus,
   orderStatusTone,
@@ -31,6 +32,9 @@ export type AdminOrderRow = {
     subtotalLabel: string;
   }[];
   transferProofUrl: string | null;
+  /** Filled by the order-status sync from the Jubelio SO once it ships. */
+  trackingNumber: string | null;
+  shipper: string | null;
 };
 
 // TABS/AdminTab/resolveInitialTab live in ./admin-order-tabs — the orders
@@ -42,9 +46,10 @@ export type AdminOrderRow = {
  * treatment as the customer transactions list (design.html:606-628 doubles
  * for admin in the mockup's single role switcher). Filtering is instant over
  * the loaded rows — no refetch. The customer `filterOrders`/`statusCounts`
- * helpers keep their pinned `"all" | UNPAID | CONFIRMED | SHIPPED` shape and
- * are deliberately not widened for this; the admin fold needs `ALL` +
- * `COMPLETED` too, so the one-line visibility filter lives here.
+ * helpers keep their pinned `"all" | UNPAID | CONFIRMED | COMPLETED` shape
+ * (spec §4.7) and are deliberately not widened for this; the admin fold also
+ * needs `ALL` + the legacy `SHIPPED`, so the one-line visibility filter lives
+ * here.
  */
 function AdminOrdersFilter({
   rows,
@@ -131,6 +136,16 @@ function AdminOrdersFilter({
                   </li>
                 ))}
               </ul>
+
+              {/* Resi strip — only once the sync has pulled a tracking number
+                  off the Jubelio SO, so its absence means "hasn't shipped". */}
+              {order.trackingNumber ? (
+                <ShipmentBand
+                  className="mt-3"
+                  trackingNumber={order.trackingNumber}
+                  shipper={order.shipper}
+                />
+              ) : null}
 
               <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
                 {order.transferProofUrl ? (

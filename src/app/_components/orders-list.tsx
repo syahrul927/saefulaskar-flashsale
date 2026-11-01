@@ -11,6 +11,7 @@ import { ProofUploadButton } from "./proof-upload-button";
 import { FilterPill } from "./filter-pill";
 import { PaymentPanel } from "./payment-panel";
 import { ReceiptTrigger, type ReceiptOrderData } from "./receipt-dialog";
+import { ShipmentBand } from "./shipment-band";
 import {
   isPulseStatus,
   orderStatusTone,
@@ -31,16 +32,25 @@ export type TransactionRow = ReceiptOrderData & {
   grandTotal: number;
   transferProofUrl: string | null;
   waLink: string;
+  /** Pulled from the Jubelio SO by the order-status sync once it ships;
+   *  both null until then, which is what hides the resi strip. */
+  trackingNumber: string | null;
+  shipper: string | null;
+  /** WhatsApp deep link for the "hubungi CS" line on a COMPLETED order. */
+  csLink: string;
 };
 
 /** Pill copy: mockup labels (:614-617 "All Orders / Waiting Payment /
  *  Confirmed / In Transit") in the app's Bahasa status vocabulary, uppercase
- *  mono per the pill treatment. */
+ *  mono per the pill treatment. "DIKIRIM" became "DIPROSES" when SHIPPED was
+ *  skipped (spec §4.7) — the pill marks the last state we can see, and that
+ *  state now covers both processed and shipped.
+ */
 const TABS: { id: OrderFilterTab; label: string }[] = [
   { id: "all", label: "SEMUA" },
   { id: "UNPAID", label: "BELUM BAYAR" },
   { id: "CONFIRMED", label: "DIKONFIRMASI" },
-  { id: "SHIPPED", label: "DIKIRIM" },
+  { id: "COMPLETED", label: "DIPROSES" },
 ];
 
 function EmptyPlate({ children }: { children: ReactNode }) {
@@ -217,8 +227,37 @@ function TransactionCard({
         </div>
       )}
 
-      {/* Bottom rule — payment meta left, Total + Struk right (:729-766).
-          Tracking/AWB is omitted: not stored on the order. */}
+      {/* Resi strip, in the same slot the payment band uses: one band per
+          order, whichever state it is in. Absent until the sync pulls a
+          tracking number off the Jubelio SO. */}
+      {row.trackingNumber ? (
+        <ShipmentBand
+          className="mb-3"
+          trackingNumber={row.trackingNumber}
+          shipper={row.shipper}
+        />
+      ) : null}
+
+      {/* COMPLETED means "out of our hands", not "arrived" (spec §4.7) — the
+          order may be packed, picked up, or on a courier's truck, and we cannot
+          tell from here. Say exactly that, and put the question somewhere to
+          take it. Shares the unpaid band's slot: one note per order. */}
+      {row.status === "COMPLETED" && (
+        <p className="mb-3 rounded-xl border border-neutral-200 bg-neutral-50/60 px-3 py-2 text-xs text-neutral-600 dark:border-border dark:bg-input/20 dark:text-neutral-300">
+          Order sudah diproses atau dikirim —{" "}
+          <a
+            className="font-semibold text-neutral-950 underline underline-offset-4 dark:text-neutral-50"
+            href={row.csLink}
+            target="_blank"
+            rel="noreferrer"
+          >
+            hubungi CS
+          </a>{" "}
+          untuk informasi lebih lanjut.
+        </p>
+      )}
+
+      {/* Bottom rule — payment meta left, Total + Struk right (:729-766). */}
       <div className="flex flex-col gap-3 border-t border-neutral-100 pt-3 font-mono text-xs dark:border-border sm:flex-row sm:items-center sm:justify-between">
         <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
           Pembayaran:{" "}

@@ -218,15 +218,25 @@ add_fee: 0
 service_fee: 0
 ```
 
-**Jubelio status result:** "Ready to Ship" immediately (no UNPAID/CONFIRMED phase).
+> **Corrected by live evidence 2026-10-29 — see `docs/PRD.md` §3.3/§4.2 for what
+> ships.** Three things in the block above were wrong: `payment_method` is sent
+> **empty**, not `"transfer"`; a create without `channel_status: "paid"` +
+> `store_id: -100` + `is_tax_included: false` lands at `wms_status: "UNKNOWN"` and
+> Jubelio 500s its own UNKNOWN → PAID step; and the SO does not read "Ready to
+> Ship", it reads `internal_status: "PAID"`.
 
-**Status mapping:**
+**Jubelio status result:** `internal_status: "PAID"` immediately (no UNPAID phase).
+
+**Status mapping** (superseded — the real field is `internal_status`, values
+`PENDING / PAID / PROCESSING / SHIPPED / COMPLETED / CANCELED`, mapped
+`PAID → CONFIRMED`, `SHIPPED → SHIPPED`, `COMPLETED → COMPLETED`, anything else
+left alone):
 | Local | Jubelio |
 |---|---|
 | UNPAID (booking) | *(no SO yet)* |
-| CONFIRMED | Ready to Ship |
-| SHIPPED | Shipped |
-| Completed | Completed |
+| CONFIRMED | `internal_status: PAID` |
+| SHIPPED | `internal_status: SHIPPED` |
+| COMPLETED | `internal_status: COMPLETED` |
 
 ---
 
@@ -242,6 +252,81 @@ GET /core-api/sales/invoices/
 ```
 
 **Completed trigger:** when local status = SHIPPED and `order_status = "Completed"` from Jubelio → update to Completed.
+
+> **Superseded 2026-10-26.** The pass is a throttled sweep of orders *we already
+> link* (`order-sync.ts`), not a `GET /sales/orders/` list read — that endpoint
+> has no usable sort and 184 072 rows. `is_shipped` and `marked_as_complete` on
+> the SO header are null even for shipped orders, so shipping is not detectable
+> that way; see §4.7 for what replaced the SHIPPED step in the status ladder.
+
+---
+
+### 4.7 Jubelio Observation Rig (status ladder, held for evidence)
+
+**Why this exists.** Two changes to the status flow were requested — stop using
+SHIPPED, and flag COMPLETED from the "faktur created" event — and both rest on a
+question nobody can currently answer: **what does a Jubelio sales order actually
+look like when an invoice is created, and what does a Jubelio webhook actually
+send?** Upstream documents neither (the public guide's webhook section describes a
+registration endpoint that does not exist; the live `/swagger.json` has one
+webhook path, and it only *resends*). Guessing produced four orphan `UNKNOWN`
+sales orders earlier in this project. So the rig gets the facts first, and the
+status change ships after them.
+
+**What was decided.**
+
+1. **SHIPPED is skipped, not deleted.** The `order_status` enum, the `SHIPPED`
+   column value, and the shipment UI stay in the schema and the codebase. Nothing
+   writes `SHIPPED` any more; the ladder becomes `UNPAID → CONFIRMED → COMPLETED`.
+   Deleting the value would mean a migration and a rewrite of history for a status
+   the customer never asked for.
+2. **COMPLETED is the "processed or shipped" state**, and the customer copy says
+   exactly that: *"Order sudah diproses atau dikirim — hubungi CS untuk informasi
+   lebih lanjut."* One status because the requirement is one thing the customer
+   needs to know: it is out of our hands.
+3. **The webhook is on hold.** Build the observation surface, read real payloads,
+   then decide whether a faktur-created webhook is even usable — and whether the
+   nightly cron is still needed once we know.
+4. **The rig never touches production state.** It writes to two new probe tables
+   only. No capture and no snapshot can move `orders.status`, so whatever the rig
+   discovers cannot break an order mid-flight.
+
+**The two instruments.**
+
+| Instrument | What it answers | Shape |
+|---|---|---|
+| Webhook sink `POST /api/jubelio/webhook-sink/[token]` | Does Jubelio fire anything, at what URL, with which headers and body — and does that body carry a key we can join on? | Public, token-in-path, stores verbatim body + redacted headers, plus `salesorder_id / invoice_id / ref_no` extracted for a join test |
+| Snapshot button on `/admin/jubelio` | Which SO header fields move when a faktur is created | `POST /api/admin/jubelio/snapshot` → `GET /sales/orders/{id}` → store raw JSON → diff against that SO's previous read |
+
+The operator loop is: snapshot an order → create its faktur in Jubelio → snapshot
+again → read the diff. The diff prints `added` for fields that did not exist
+before (`invoice_id`, `invoice_no`), so a new fact is never confused with a
+changed one. The status triple `internal_status / channel_status / wms_status` is
+shown side by side, because the earlier enum guess assumed all three move
+together and they do not.
+
+**Security defaults (builder's calls, stated because they are decisions).**
+
+- Sink is **closed unless `JUBELIO_WEBHOOK_SINK_TOKEN` is set** — unset answers
+  503 and stores nothing. A public POST endpoint that writes to the DB is opt-in.
+- Credential headers (`authorization`, `cookie`, `*token*`, `*secret*`, …) are
+  stored as `[redacted]`; `*signature*` headers are kept verbatim, because whether
+  Jubelio signs its callbacks is one of the findings.
+- Bodies are capped at 64 KiB. A cut body is stored as raw text with
+  `truncated = true`, never presented as parsed JSON.
+- Captures self-prune to the newest 200 rows on each write — they are a firehose
+  of debug noise. Snapshots are kept until someone deletes them: each one is a
+  deliberate reading of a specific SO at a specific moment, which is the evidence.
+- Storage failure returns 500, not 200 — Jubelio must never be told an event
+  landed when it did not.
+- The snapshot endpoint is OWNER-only (`getSession()` + role check), like the rest
+  of `/api/admin/*`.
+
+**Findings this must produce before the status change ships:** whether any
+webhook fires at all; whether its payload carries `salesorder_id` or only an
+invoice id; whether `GET /sales/orders/{id}` shows an invoice number when the
+faktur exists; and whether `POST /sales/v2/invoices/?ids=` or `?reff_no=` can
+answer "does this SO have a faktur" directly — which would need no webhook.
 
 ---
 
@@ -315,6 +400,14 @@ BETTER_AUTH_SECRET=<existing>
 
 # Cron
 CRON_SECRET=<random secret for cron endpoint protection>
+# Required and non-empty — emptyStringAsUndefined makes CRON_SECRET="" a
+# boot-time validation error. Vercel's cron sender presents it as
+# `Authorization: Bearer <CRON_SECRET>` on a GET; external pingers may use that
+# or `x-cron-secret: <CRON_SECRET>`.
+
+# Jubelio observation rig (§4.7). Unset or "" keeps the public sink CLOSED (503,
+# stores nothing). Set it only while probing, then copy the URL from /admin/jubelio.
+JUBELIO_WEBHOOK_SINK_TOKEN=<random string, or empty to keep the sink closed>
 ```
 
 ---

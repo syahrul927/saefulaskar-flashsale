@@ -7,14 +7,21 @@ import {
 // R7 consolidation: the pinned id-ID config now lives in the shared module.
 import { formatRupiah } from "@/lib/format";
 
-// Intl's id-ID currency format separates "Rp" from the amount with a
-// no-break space, so expectations spell it explicitly instead of typing it.
-const NB = String.fromCharCode(0xa0);
-
 describe("formatRupiah", () => {
+  // Pinned with a PLAIN space on purpose: `style:"currency"` spacing/symbol
+  // come from each runtime's bundled CLDR data (Node emits "Rp 0", some
+  // browsers "Rp0", others "Rp 0") — server and client disagreed and the
+  // storefront header hydration-crashed. The function must build the string
+  // deterministically (manual "Rp " + decimal Intl), like formatCompactRupiah.
   it("formats full rupiah with id-ID separators", () => {
-    expect(formatRupiah(0)).toBe(`Rp${NB}0`);
-    expect(formatRupiah(1_234_567)).toBe(`Rp${NB}1.234.567`);
+    expect(formatRupiah(0)).toBe("Rp 0");
+    expect(formatRupiah(1_234_567)).toBe("Rp 1.234.567");
+  });
+
+  it("emits exactly one ASCII space — no NBSP, no zero-width variants", () => {
+    expect([...formatRupiah(150_000)].map((c) => c.codePointAt(0))).toEqual([
+      0x52, 0x70, 0x20, 0x31, 0x35, 0x30, 0x2e, 0x30, 0x30, 0x30,
+    ]);
   });
 });
 

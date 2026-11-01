@@ -34,6 +34,7 @@ export default defineConfig({
       BANK_ACCOUNTS:
         '[{"bank":"BCA","account_number":"123","account_name":"Test"}]',
       CRON_SECRET: "test-cron-secret",
+      JUBELIO_WEBHOOK_SINK_TOKEN: "test-sink-token",
       DATABASE_URL:
         "postgresql://postgres:password@localhost:5432/saefulaskar-flash-sale",
       BETTER_AUTH_GITHUB_CLIENT_ID: "test-client-id",

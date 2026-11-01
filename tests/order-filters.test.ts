@@ -6,7 +6,9 @@ import {
   type OrderFilterTab,
 } from "@/app/_components/order-filters";
 
-/** Minimal structural fixture — `filterOrders` may only read `status`. */
+/** Minimal structural fixture — `filterOrders` may only read `status`.
+ *  Row 4 is a legacy SHIPPED: the value still exists in the enum and in old
+ *  rows, it is just no longer written and has no customer pill (spec §4.7). */
 const rows = [
   { id: "1", status: "UNPAID" },
   { id: "2", status: "CONFIRMED" },
@@ -16,7 +18,7 @@ const rows = [
 ];
 
 describe("filterOrders", () => {
-  it('"all" keeps every order (including COMPLETED) in original order', () => {
+  it('"all" keeps every order (including a legacy SHIPPED) in original order', () => {
     expect(filterOrders(rows, "all")).toEqual(rows);
   });
 
@@ -28,8 +30,8 @@ describe("filterOrders", () => {
     expect(filterOrders(rows, "CONFIRMED")).toEqual([rows[1]]);
   });
 
-  it("SHIPPED returns only shipped rows", () => {
-    expect(filterOrders(rows, "SHIPPED")).toEqual([rows[3]]);
+  it("COMPLETED returns only completed rows", () => {
+    expect(filterOrders(rows, "COMPLETED")).toEqual([rows[4]]);
   });
 
   it("yields an empty list when no order matches the tab", () => {
@@ -39,7 +41,7 @@ describe("filterOrders", () => {
   });
 
   it("handles an empty input for every tab without throwing", () => {
-    const tabs: OrderFilterTab[] = ["all", "UNPAID", "CONFIRMED", "SHIPPED"];
+    const tabs: OrderFilterTab[] = ["all", "UNPAID", "CONFIRMED", "COMPLETED"];
     for (const tab of tabs) {
       expect(filterOrders([], tab)).toEqual([]);
     }
@@ -47,21 +49,21 @@ describe("filterOrders", () => {
 });
 
 describe("statusCounts", () => {
-  it("returns exactly the pinned shape { all, UNPAID, CONFIRMED, SHIPPED }", () => {
+  it("returns exactly the pinned shape { all, UNPAID, CONFIRMED, COMPLETED }", () => {
     const counts = statusCounts(rows);
     expect(Object.keys(counts).sort()).toEqual([
+      "COMPLETED",
       "CONFIRMED",
-      "SHIPPED",
       "UNPAID",
       "all",
     ]);
-    // `all` counts every row — COMPLETED included — while the three status
-    // keys stay true to their own status only.
+    // `all` counts every row — a legacy SHIPPED included — while the three
+    // status keys stay true to their own status only.
     expect(counts).toEqual({
       all: 5,
       UNPAID: 2,
       CONFIRMED: 1,
-      SHIPPED: 1,
+      COMPLETED: 1,
     });
   });
 
@@ -70,7 +72,7 @@ describe("statusCounts", () => {
       all: 0,
       UNPAID: 0,
       CONFIRMED: 0,
-      SHIPPED: 0,
+      COMPLETED: 0,
     });
   });
 });

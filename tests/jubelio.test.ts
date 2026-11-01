@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createJubelioClient, JubelioError, toStockMap } from "@/lib/jubelio";
+import { buildSalesOrderPayload } from "@/server/confirm-order";
 import { env } from "@/env";
 
 // Canonical base URL after the join fix: base ends with "/", paths start with "/".
@@ -185,6 +186,7 @@ describe("createJubelioClient", () => {
     await client.getStockBySku("AB/1");
     await client.listSalesOrders();
     await client.listInvoices();
+    await client.getSalesOrder(192297);
 
     for (const [, init] of fetchMock.mock.calls as [string, RequestInit][]) {
       expect(init.signal).toBeInstanceOf(AbortSignal);
@@ -225,28 +227,51 @@ describe("createJubelioClient", () => {
   it("posts SalesOrderPayload to /sales/orders/", async () => {
     const fetchMock = vi.fn().mockResolvedValue(jsonResponse({ salesorder_id: 9 }));
     vi.stubGlobal("fetch", fetchMock);
-    const payload = {
-      salesorder_id: 0 as const,
-      salesorder_no: "[auto]" as const,
-      contact_id: 55,
-      customer_name: "Toko Test",
-      transaction_date: "2026-10-25",
-      location_id: env.JUBELIO_LOCATION_ID,
-      source: 1 as const,
-      is_paid: true,
-      payment_method: "transfer",
-      items: [{ item_id: 1, item_name: "Baju", sku: "AB/1", qty: 2, price: 50000, discount: 0, tax: 0 }],
-      sub_total: 100000,
-      total_disc: 0,
-      total_tax: 0,
-      grand_total: 100000,
-    };
+    // Built by the real builder, not hand-rolled: the payload shape is
+    // Jubelio's paid-transition contract (see `SalesOrderPayload`), and a
+    // stale literal here would drift from it silently.
+    const payload = buildSalesOrderPayload({
+      grandTotal: 100_000,
+      createdAt: new Date("2026-10-25T00:00:00.000Z"),
+      contact: { jubelioContactId: 55, contactName: "Toko Test" },
+      shipping: { fullName: "Toko Test", address: "", phone: "" },
+      items: [
+        {
+          itemId: 1,
+          sku: "SKU-1",
+          itemName: "First",
+          qty: 2,
+          price: 50_000,
+          subtotal: 100_000,
+          unit: "Buah",
+        },
+      ],
+    });
 
     await client.createSalesOrder(payload);
 
     const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
     expect(url).toBe(`${API}/sales/orders/`);
     expect(init.body).toBe(JSON.stringify(payload));
+  });
+
+  it("GETs /sales/orders/{id} — the only read that can find our SO", async () => {
+    // Live probe 2026-10-29: the list has 184 072 rows at 200/page, page 1 is
+    // 2022 marketplace orders, and our SO-000192297 is NOT on it; `page_size`,
+    // `sort` and `order` are rejected by their Joi. By-id returns the full
+    // header + items, which is what the status sync maps.
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ items: [], salesorder_id: 192297 }));
+    vi.stubGlobal("fetch", fetchMock);
+
+    const so = await client.getSalesOrder(192297);
+
+    const [url, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(url).toBe(`${API}/sales/orders/192297`);
+    expect(init.method).toBe("GET");
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect((so as { salesorder_id: number }).salesorder_id).toBe(192297);
   });
 
   it("maps listSalesOrders/listInvoices to GET endpoints", async () => {

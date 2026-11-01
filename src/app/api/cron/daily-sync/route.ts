@@ -1,51 +1,61 @@
-import { eq, isNotNull } from "drizzle-orm";
 import { NextResponse } from "next/server";
 
 import { env } from "@/env";
-import { db } from "@/server/db";
-import { orders } from "@/server/db/schema";
-import { planSync } from "@/server/daily-sync";
-import { withSystemClient } from "@/server/jubelio-token";
+import { runOrderSyncNow } from "@/server/order-sync";
 
 /**
- * Daily cron: poll Jubelio sales orders and advance local order statuses
- * (spec §4.6). Guarded by the `x-cron-secret` header (=== `env.CRON_SECRET`).
+ * Order-status sync endpoint (spec §4.6). Two accepted credentials, because two
+ * different senders hit it:
+ * - `x-cron-secret: <CRON_SECRET>` — external pingers (curl, cron-job.org,
+ *   GitHub Actions), any method.
+ * - `Authorization: Bearer <CRON_SECRET>` — how **Vercel's own cron sender**
+ *   calls a `vercel.json` path: a GET with the bearer token, never a custom
+ *   header. POST + header-only would have 405/401'd every nightly run while the
+ *   dashboard showed the job as configured.
  *
- * Scheduled by Vercel via `vercel.json` (`0 0 * * *`, midnight UTC). For
- * non-Vercel hosts, invoke with `node-cron` or any scheduler hitting this
- * endpoint with the secret header — the route itself is host-agnostic.
+ * Scheduled by Vercel via `vercel.json` (`0 0 * * *`, midnight UTC = 07:00
+ * WIB). Vercel Hobby allows only that one daily cron, so an external pinger
+ * (cron-job.org, a GitHub Actions schedule) can hit this same route hourly with
+ * the same header for fresher statuses — the work is idempotent and
+ * forward-only, so overlapping schedules are safe.
+ *
+ * The sweep reads each linked SO by id (`GET /sales/orders/{id}`): the list
+ * endpoint cannot find our orders (184 072 rows, 200/page, no usable sort) and
+ * its rows carry no `status` field — which is why the previous list-based
+ * version reported `synced: 0` forever. See `src/server/daily-sync.ts`.
+ *
+ * The same pass also runs, throttled by `ORDER_SYNC_INTERVAL_MS`, when an admin
+ * opens the orders page — see `src/app/admin/orders/page.tsx`.
  */
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
+function isAuthorized(request: Request): boolean {
+  // `env.CRON_SECRET` can never be the empty string: `emptyStringAsUndefined`
+  // in src/env.js turns `CRON_SECRET=` into undefined and `z.string()` then
+  // refuses to boot — so a missing header (null) can never match by accident.
+  const secret = env.CRON_SECRET;
+  if (request.headers.get("x-cron-secret") === secret) return true;
+  return request.headers.get("authorization") === `Bearer ${secret}`;
+}
+
+async function sync(request: Request) {
+  if (!isAuthorized(request)) {
+    return NextResponse.json(
+      { ok: false, error: "Unauthorized" },
+      { status: 401 },
+    );
+  }
+
+  const result = await runOrderSyncNow();
+
+  return NextResponse.json({ ok: true, ...result });
+}
+
+export async function GET(request: Request) {
+  return sync(request);
+}
+
 export async function POST(request: Request) {
-  if (request.headers.get("x-cron-secret") !== env.CRON_SECRET) {
-    return NextResponse.json({ ok: false, error: "Unauthorized" }, { status: 401 });
-  }
-
-  const raw = await withSystemClient((client) => client.listSalesOrders());
-
-  const localOrders = await db
-    .select({
-      id: orders.id,
-      jubelioSoId: orders.jubelioSoId,
-      status: orders.status,
-    })
-    .from(orders)
-    .where(isNotNull(orders.jubelioSoId));
-
-  const patches = planSync(localOrders, raw);
-
-  for (const patch of patches) {
-    await db
-      .update(orders)
-      .set({ status: patch.status })
-      .where(eq(orders.id, patch.orderId));
-  }
-
-  return NextResponse.json({
-    ok: true,
-    synced: patches.length,
-    skipped: localOrders.length - patches.length,
-  });
+  return sync(request);
 }

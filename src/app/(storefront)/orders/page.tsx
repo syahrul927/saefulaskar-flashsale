@@ -22,13 +22,27 @@ export const dynamic = "force-dynamic";
 /** Bahasa status labels — the receipt's `statusLabel` (Task 14), uppercased
  *  onto the customer list badges too (final review I-1: the pill above says
  *  "BELUM BAYAR", so the card badge can't shout the raw enum beside it).
- *  Admin surfaces keep raw-enum labels — the documented admin precedent. */
+ *  Admin surfaces keep raw-enum labels — the documented admin precedent.
+ *
+ *  COMPLETED reads "Diproses", not "Selesai", because it now covers both
+ *  processed-and-shipped (spec §4.7): nothing writes SHIPPED any more, so the
+ *  last state an order reaches must not claim only one of those two things. The
+ *  card spells it out under the pill; this label is the short form. `SHIPPED`
+ *  stays so legacy rows still get a word instead of the raw enum. */
 const STATUS_LABEL: Record<string, string> = {
   UNPAID: "Belum Bayar",
   CONFIRMED: "Dikonfirmasi",
   SHIPPED: "Dikirim",
-  COMPLETED: "Selesai",
+  COMPLETED: "Diproses",
 };
+
+/** Chat link for the "hubungi CS" line. Deliberately not `waLink`: that one is
+ *  pre-filled with the transfer-proof message for an UNPAID order, and sending
+ *  a customer a payment script for an order already on its way is wrong. */
+function buildCsLink(bookingId: string): string {
+  const text = `Halo CS Flash Studio, saya ingin menanyakan status pesanan ${bookingId}.`;
+  return `https://wa.me/${env.WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
+}
 
 /**
  * Transactions page. All queries stay server-side (orders + items + the
@@ -56,6 +70,8 @@ export default async function OrdersPage() {
       recipientName: orders.recipientName,
       recipientPhone: orders.recipientPhone,
       recipientAddress: orders.recipientAddress,
+      trackingNumber: orders.trackingNumber,
+      shipper: orders.shipper,
       createdAt: orders.createdAt,
       contactRowId: contacts.id,
       contactName: contacts.contactName,
@@ -125,6 +141,8 @@ export default async function OrdersPage() {
       ...receipt,
       grandTotal: order.grandTotal,
       transferProofUrl: order.transferProofUrl,
+      trackingNumber: order.trackingNumber,
+      shipper: order.shipper,
       // Same precedent as the cart drawer / PaymentPanel: the WA proof link
       // rides on the first configured bank account; empty string = no CTA.
       waLink: firstBank
@@ -135,6 +153,7 @@ export default async function OrdersPage() {
             whatsappNumber: env.WHATSAPP_NUMBER,
           })
         : "",
+      csLink: buildCsLink(order.bookingId),
     };
   });
 

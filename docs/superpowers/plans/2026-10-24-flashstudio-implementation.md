@@ -300,6 +300,17 @@ Money as integer rupiah. Index: `orders(bookingId)` unique, `orders(customerId)`
 
 ## Task 10: Daily sync cron
 
+> **Reworked 2026-10-29 — this task as written shipped a permanent no-op.** The
+> list it planned to sweep (`listSalesOrders`) returns page 1 of 184 072 rows
+> sorted oldest-first and rejects `page_size`/`sort`/`order`, so it never contains
+> our orders; the `Ready to Ship` / `Shipped` / `Completed` labels it maps are not
+> the field's vocabulary. What runs now reads each SO by id
+> (`getSalesOrder(jubelioSoId)`), maps `internal_status` (`PAID → CONFIRMED`,
+> `SHIPPED → SHIPPED`, `COMPLETED → COMPLETED`, forward-only, anything else left
+> alone), backfills `tracking_number`/`shipper`, and is throttled by
+> `ORDER_SYNC_INTERVAL_MS` on top of the cron. See `docs/PRD.md` §4.2-§4.3 and
+> `src/server/order-sync.ts`.
+
 **Files:**
 - Create: `src/app/api/cron/daily-sync/route.ts`
 - Test: `tests/daily-sync.test.ts`

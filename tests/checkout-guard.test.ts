@@ -173,6 +173,7 @@ describe("buildOrderValues", () => {
       recipientName: "Budi Santoso",
       recipientPhone: "081234567890",
       recipientAddress: "Jl. Merdeka No. 1, Jakarta Pusat",
+      contactId: null,
     });
   });
 
@@ -199,6 +200,22 @@ describe("buildOrderValues", () => {
     expect(values.recipientName).toBeNull();
     expect(values.recipientPhone).toBeNull();
     expect(values.recipientAddress).toBeNull();
+  });
+
+  it("carries a resolved contactId onto the order values", () => {
+    const values = buildOrderValues(
+      {},
+      "customer-1",
+      "session-1",
+      50_000,
+      "contact-uuid-1",
+    );
+    expect(values.contactId).toBe("contact-uuid-1");
+  });
+
+  it("maps an absent contactId to null (customer never registered a contact)", () => {
+    const values = buildOrderValues({}, "customer-1", "session-1", 50_000);
+    expect(values.contactId).toBeNull();
   });
 });
 

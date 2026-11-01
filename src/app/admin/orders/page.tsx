@@ -1,5 +1,6 @@
 import { desc, inArray } from "drizzle-orm";
 import type { Metadata } from "next";
+import { after } from "next/server";
 
 import {
   resolveInitialTab,
@@ -9,9 +10,11 @@ import {
   type AdminOrderRow,
 } from "@/app/_components/admin-orders-filter";
 import { Panel } from "@/app/_components/panel";
+import { env } from "@/env";
 import { formatRupiah } from "@/lib/format";
 import { db } from "@/server/db";
 import { orderItems, orders } from "@/server/db/schema";
+import { maybeRunOrderSync } from "@/server/order-sync";
 
 export const metadata: Metadata = {
   title: "Pesanan — Flash Studio Admin",
@@ -42,6 +45,24 @@ export default async function AdminOrdersPage({
   const initialTab = resolveInitialTab(
     typeof raw === "string" ? raw : undefined,
   );
+
+  // Pull Jubelio's latest order statuses before reading the rows, so an admin
+  // opening this page sees COMPLETED and any new resi instead of waiting for the
+  // nightly cron. Throttled process-wide by `ORDER_SYNC_INTERVAL_MS` (default 5 min) —
+  // a skipped run resolves immediately. The wait is capped by
+  // `ORDER_SYNC_AWAIT_MS`: when the upstream sweep is slower than that, the page
+  // paints with what the DB already has and `after()` keeps the run alive past
+  // the response so its writes still land.
+  const sync = maybeRunOrderSync().catch((e) => {
+    console.error("admin orders: status sync failed", e);
+    return null;
+  });
+  after(() => sync);
+  await Promise.race([
+    sync,
+    new Promise((resolve) => setTimeout(resolve, env.ORDER_SYNC_AWAIT_MS)),
+  ]);
+
   const rows = await db
     .select()
     .from(orders)
@@ -79,6 +100,8 @@ export default async function AdminOrdersPage({
       subtotalLabel: formatRupiah(item.subtotal),
     })),
     transferProofUrl: order.transferProofUrl,
+    trackingNumber: order.trackingNumber,
+    shipper: order.shipper,
   }));
 
   return (
