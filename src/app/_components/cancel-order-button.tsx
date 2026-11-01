@@ -33,7 +33,7 @@ import type { OrderStatus } from "@/server/order-status";
  * `customerWaLink` is `""` when no phone resolved — the contact row then renders
  * nothing at all rather than a dead link.
  */
-type CancelOrderTarget = {
+export type CancelOrderTarget = {
   orderId: string;
   bookingId: string;
   /** `UNPAID` | `CONFIRMED` in practice; anything else renders no button. */
@@ -102,14 +102,7 @@ function CancelOrderButton({
   };
 
   return (
-    <Dialog
-      open={open}
-      // Dismissing mid-request would hide the only feedback the admin has that
-      // the cancel is in flight; the escape path stays available until then.
-      onOpenChange={(next) => {
-        if (!loading) setOpen(next);
-      }}
-    >
+    <Dialog open={open} onOpenChange={setOpen}>
       <Button
         variant="outline"
         size={size}
@@ -152,7 +145,9 @@ function CancelOrderButton({
               Hubungi pelanggan
             </Button>
           )}
-          <span className="flex items-center gap-2">
+          {/* `ml-auto` because `justify-between` with one child leaves it on the
+              LEFT, which is every row whose customer has no phone. */}
+          <span className="ml-auto flex items-center gap-2">
             <Button variant="ghost" size="xs" onClick={() => setOpen(false)}>
               Kembali
             </Button>
@@ -172,4 +167,3 @@ function CancelOrderButton({
 }
 
 export { CancelOrderButton };
-export type { CancelOrderTarget };
