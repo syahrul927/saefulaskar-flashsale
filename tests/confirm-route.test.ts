@@ -10,6 +10,10 @@ import { PgDialect } from "drizzle-orm/pg-core";
 // selects hand back per-table fixtures (pre-filtered the way the DB would)
 // and every `where()` condition is captured so the test can assert WHICH key
 // the contacts lookup used — the customer's email, not the confirming admin's.
+// `transaction()` hands the callback the SAME builders (so the final write and
+// its status-history row run through one code path) and `insert()` captures
+// `order_status_history` rows — that capture is what proves a refused
+// transition writes no audit row.
 vi.mock("@/server/better-auth/server", () => ({ getSession: vi.fn() }));
 vi.mock("@/lib/jubelio", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -27,13 +31,15 @@ vi.mock("@/lib/jubelio", async (importOriginal) => {
 const state = vi.hoisted(() => ({
   contactsEmailWhere: [] as unknown[],
   contactExists: true,
+  orderExists: true,
   updatedSets: [] as Record<string, unknown>[],
+  /** Rows the route inserted into `order_status_history`, in call order. */
+  history: [] as Record<string, unknown>[],
 }));
 
 vi.mock("@/server/db", async () => {
-  const { contacts, orderItems, orders, user } = await import(
-    "@/server/db/schema"
-  );
+  const { contacts, orderItems, orders, orderStatusHistory, user } =
+    await import("@/server/db/schema");
   const ORDER = {
     id: "order-1",
     status: "UNPAID",
@@ -42,57 +48,70 @@ vi.mock("@/server/db", async () => {
     grandTotal: 692_000,
     createdAt: new Date("2026-10-26T10:00:00.000Z"),
   };
+  const select = () => ({
+    from: (table: unknown) => ({
+      where: (cond: unknown) => {
+        if (table === contacts) state.contactsEmailWhere.push(cond);
+        const rows =
+          table === orders
+            ? state.orderExists
+              ? [ORDER]
+              : []
+            : table === orderItems
+              ? [
+                  {
+                    itemId: 1880,
+                    sku: "SD05100999",
+                    itemName: "Kunci Kontak",
+                    qty: 5,
+                    price: 80_000,
+                    subtotal: 400_000,
+                  },
+                ]
+              : table === user
+                ? [{ email: "customer@example.com" }]
+                : table === contacts
+                  ? state.contactExists
+                    ? [
+                        {
+                          id: "contact-1",
+                          email: "customer@example.com",
+                          jubelioContactId: 195465,
+                          contactName: "PT Suka Maju Mundur",
+                        },
+                      ]
+                    : []
+                  : [];
+        return Promise.resolve(rows);
+      },
+    }),
+  });
+  const update = () => ({
+    set: (v: Record<string, unknown>) => {
+      state.updatedSets.push(v);
+      return {
+        where: () => ({
+          returning: () =>
+            Promise.resolve([{ id: "order-1", status: "CONFIRMED", ...v }]),
+        }),
+      };
+    },
+  });
+  // Captured per table: `history` must hold ONLY the `order_status_history`
+  // rows, otherwise an insert into any other table would pass for an audit row.
+  const insert = (table: unknown) => ({
+    values: async (row: Record<string, unknown>) => {
+      if (table === orderStatusHistory) state.history.push(row);
+      return [row];
+    },
+  });
+  const tx = { select, update, insert };
   return {
     db: {
-      select: () => ({
-        from: (table: unknown) => ({
-          where: (cond: unknown) => {
-            if (table === contacts) state.contactsEmailWhere.push(cond);
-            const rows =
-              table === orders
-                ? [ORDER]
-                : table === orderItems
-                  ? [
-                      {
-                        itemId: 1880,
-                        sku: "SD05100999",
-                        itemName: "Kunci Kontak",
-                        qty: 5,
-                        price: 80_000,
-                        subtotal: 400_000,
-                      },
-                    ]
-                  : table === user
-                    ? [{ email: "customer@example.com" }]
-                    : table === contacts
-                      ? state.contactExists
-                        ? [
-                            {
-                              id: "contact-1",
-                              email: "customer@example.com",
-                              jubelioContactId: 195465,
-                              contactName: "PT Suka Maju Mundur",
-                            },
-                          ]
-                        : []
-                      : [];
-            return Promise.resolve(rows);
-          },
-        }),
-      }),
-      update: () => ({
-        set: (v: Record<string, unknown>) => {
-          state.updatedSets.push(v);
-          return {
-            where: () => ({
-              returning: () =>
-                Promise.resolve([
-                  { id: "order-1", status: "CONFIRMED", ...v },
-                ]),
-            }),
-          };
-        },
-      }),
+      ...tx,
+      // The route's final write runs in a transaction; the fake hands it the
+      // same builders so update + history row go through the identical path.
+      transaction: async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
     },
   };
 });
@@ -136,6 +155,8 @@ function request(id = "order-1") {
 beforeEach(() => {
   state.contactsEmailWhere = [];
   state.contactExists = true;
+  state.orderExists = true;
+  state.history = [];
   vi.mocked(getSession).mockReset();
   vi.mocked(getSession).mockResolvedValue(ADMIN as never);
   client.createSalesOrder.mockClear();
@@ -160,15 +181,46 @@ describe("confirm route SO id", () => {
     expect(body.order.jubelioSoId).toBe(555);
   });
 
+  it("records the UNPAID → CONFIRMED transition with the confirming admin", async () => {
+    const res = await request();
+    expect(res.status).toBe(200);
+    // The stepper reads this row: `fromStatus` must be the status the route
+    // read BEFORE the update (UNPAID), never the value it just wrote.
+    expect(state.history).toHaveLength(1);
+    expect(state.history[0]).toMatchObject({
+      orderId: "order-1",
+      fromStatus: "UNPAID",
+      toStatus: "CONFIRMED",
+      source: "admin",
+      actorUserId: ADMIN.user.id,
+    });
+    expect(String(state.history[0]?.note)).toContain("SO #555");
+  });
+
   it("502s without marking the order when the response carries no id", async () => {
     client.createSalesOrder.mockResolvedValueOnce({});
     const res = await request();
     expect(res.status).toBe(502);
     expect(state.updatedSets).toEqual([]);
+    expect(state.history).toEqual([]);
     // The admin must be told a SO may already exist — a blind retry is what
     // produced the four dead `UNKNOWN` rows of the same afternoon.
     const body = (await res.json()) as { error: string };
     expect(body.error).toMatch(/mungkin sudah dibuat/i);
+  });
+});
+
+/**
+ * A transition that never happened must never be audited: no row for a 404,
+ * whatever else the route touched first. The 409 (contact) and 502 (no SO id)
+ * paths assert the same thing in their own describe blocks.
+ */
+describe("confirm route refused transitions", () => {
+  it("writes no history row for an order that does not exist", async () => {
+    state.orderExists = false;
+    const res = await request();
+    expect(res.status).toBe(404);
+    expect(state.history).toEqual([]);
   });
 });
 
@@ -198,5 +250,6 @@ describe("confirm route contact resolution", () => {
     const res = await request();
     expect(res.status).toBe(409);
     expect(client.createSalesOrder).not.toHaveBeenCalled();
+    expect(state.history).toEqual([]);
   });
 });

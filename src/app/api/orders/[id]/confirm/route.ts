@@ -11,6 +11,7 @@ import {
 import { resolveUnits } from "@/server/confirm-units";
 import { db } from "@/server/db";
 import { contacts, orderItems, orders, user } from "@/server/db/schema";
+import { recordStatusChange } from "@/server/status-history";
 
 export const runtime = "nodejs";
 
@@ -148,11 +149,28 @@ export async function POST(
     );
   }
 
-  const [updated] = await db
-    .update(orders)
-    .set(markConfirmed(order, salesorderId))
-    .where(eq(orders.id, order.id))
-    .returning();
+  // The status update and its audit row commit together (spec §4.5): a history
+  // row must never exist for an order that stayed UNPAID, and vice versa.
+  // `order.status` is the pre-update value read at the top of the handler —
+  // `markConfirmed` returns a patch, it does not mutate `order`.
+  const [updated] = await db.transaction(async (tx) => {
+    const rows = await tx
+      .update(orders)
+      .set(markConfirmed(order, salesorderId))
+      .where(eq(orders.id, order.id))
+      .returning();
+    if (rows[0]) {
+      await recordStatusChange(tx, {
+        orderId: order.id,
+        fromStatus: order.status,
+        toStatus: "CONFIRMED",
+        source: "admin",
+        actorUserId: auth.user.id,
+        note: `SO #${salesorderId} dibuat`,
+      });
+    }
+    return rows;
+  });
 
   return Response.json({ ok: true, order: updated });
 }

@@ -21,6 +21,7 @@ import {
   sessionProducts,
 } from "@/server/db/schema";
 import { recipientSchema } from "@/server/recipient";
+import { recordStatusChange } from "@/server/status-history";
 
 export const runtime = "nodejs";
 
@@ -181,6 +182,15 @@ export async function POST(request: Request) {
         .returning();
       if (!order) throw new Error("order insert returned no row");
       orderId = order.id;
+
+      // Creation row (spec §4.5): `null → UNPAID`, inside the same transaction
+      // as the order insert, so an order can never exist without its history.
+      await recordStatusChange(tx, {
+        orderId: order.id,
+        fromStatus: null,
+        toStatus: "UNPAID",
+        source: "checkout",
+      });
 
       await tx.insert(orderItems).values(
         lines.map((line) => ({
