@@ -22,6 +22,7 @@ const TABS: readonly ("ALL" | OrderStatus)[] = [
   "CONFIRMED",
   "SHIPPED",
   "COMPLETED",
+  "CANCEL",
 ];
 
 type AdminTab = (typeof TABS)[number];

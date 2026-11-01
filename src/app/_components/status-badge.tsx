@@ -1,11 +1,11 @@
 import type { ReactNode } from "react";
 
 import { Badge } from "@/components/ui/badge";
+import type { OrderStatus } from "@/server/order-status";
 
 type StatusTone = "amber" | "emerald" | "blue" | "neutral" | "red";
 
 type SessionStatus = "SCHEDULED" | "ACTIVE" | "PAUSED" | "ENDED";
-type OrderStatus = "UNPAID" | "CONFIRMED" | "SHIPPED" | "COMPLETED" | "CANCEL";
 
 const SESSION_STATUS_TONES = {
   SCHEDULED: "blue",
@@ -72,4 +72,6 @@ export {
   sessionStatusTone,
   StatusBadge,
 };
+// `OrderStatus` is re-exported for existing importers; the vocabulary itself
+// lives in `@/server/order-status`, derived from the `pgEnum`.
 export type { OrderStatus, SessionStatus, StatusTone };

@@ -21,6 +21,7 @@ describe("orderStatusTone", () => {
     expect(orderStatusTone("CONFIRMED")).toBe("emerald");
     expect(orderStatusTone("SHIPPED")).toBe("blue");
     expect(orderStatusTone("COMPLETED")).toBe("neutral");
+    expect(orderStatusTone("CANCEL")).toBe("red");
   });
 });
 
@@ -34,5 +35,7 @@ describe("isPulseStatus", () => {
     expect(isPulseStatus("CONFIRMED")).toBe(false);
     expect(isPulseStatus("SHIPPED")).toBe(false);
     expect(isPulseStatus("COMPLETED")).toBe(false);
+    // A cancelled order is finished, not live — the dot must not blink on it.
+    expect(isPulseStatus("CANCEL")).toBe(false);
   });
 });

@@ -63,7 +63,8 @@ export function formatGmvDelta(today: number, yesterday: number): string {
   return `${pct > 0 ? "+" : ""}${pct}% vs kemarin`;
 }
 
-/** Money statuses — GMV counts reserved/paid revenue, never UNPAID holds. */
+/** Money statuses — GMV counts reserved/paid revenue, never UNPAID holds.
+ *  `CANCEL` is deliberately absent: a cancelled order is not revenue we kept. */
 const GMV_STATUSES = ["CONFIRMED", "SHIPPED", "COMPLETED"] as const;
 
 function sumGmv(

@@ -9,8 +9,12 @@
  * and COMPLETED took its place (spec §4.7). A customer's ladder is three steps —
  * not paid, paid, out of our hands — and legacy rows still sitting on SHIPPED
  * stay reachable under `"all"`.
+ *
+ * Re-pinned 2026-11-01 for CANCEL (spec §3.1): a cancelled order is a state the
+ * customer must be able to find on their own side, not something only reachable
+ * inside `"all"` — the reason it becomes a fourth pill.
  */
-type OrderFilterTab = "all" | "UNPAID" | "CONFIRMED" | "COMPLETED";
+type OrderFilterTab = "all" | "UNPAID" | "CONFIRMED" | "COMPLETED" | "CANCEL";
 
 /** The only field the filters read — any order row shape satisfies it. */
 type StatusFilterable = { status: string };
@@ -21,6 +25,7 @@ type OrderStatusCounts = {
   UNPAID: number;
   CONFIRMED: number;
   COMPLETED: number;
+  CANCEL: number;
 };
 
 /** Rows for one tab, original order preserved; `"all"` keeps everything. */
@@ -34,7 +39,7 @@ function filterOrders<T extends StatusFilterable>(
 
 /**
  * Pill counts. `all` is the full list — every status, including a legacy SHIPPED
- * row that no longer has a pill of its own — and the three status keys count
+ * row that no longer has a pill of its own — and the four status keys count
  * their own status only.
  */
 function statusCounts(
@@ -45,6 +50,7 @@ function statusCounts(
     UNPAID: orders.filter((order) => order.status === "UNPAID").length,
     CONFIRMED: orders.filter((order) => order.status === "CONFIRMED").length,
     COMPLETED: orders.filter((order) => order.status === "COMPLETED").length,
+    CANCEL: orders.filter((order) => order.status === "CANCEL").length,
   };
 }
 

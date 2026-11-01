@@ -51,6 +51,7 @@ const TABS: { id: OrderFilterTab; label: string }[] = [
   { id: "UNPAID", label: "BELUM BAYAR" },
   { id: "CONFIRMED", label: "DIKONFIRMASI" },
   { id: "COMPLETED", label: "DIPROSES" },
+  { id: "CANCEL", label: "DIBATALKAN" },
 ];
 
 function EmptyPlate({ children }: { children: ReactNode }) {
