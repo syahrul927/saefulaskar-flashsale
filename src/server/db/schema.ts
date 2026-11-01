@@ -171,6 +171,11 @@ export const orders = createTable(
     recipientName: t.text("recipient_name"),
     recipientPhone: t.text("recipient_phone"),
     recipientAddress: t.text("recipient_address"),
+    // Filled by the order-status sync from the Jubelio SO header once it ships
+    // (live probe 2026-10-29: a SHIPPED SO carries `tracking_number`
+    // "001818714258" + `shipper` "SiCepat HALU"; both are "" while PAID).
+    trackingNumber: t.text("tracking_number"),
+    shipper: t.text("shipper"),
     createdAt: t
       .timestamp("created_at", { withTimezone: true })
       .$defaultFn(() => /* @__PURE__ */ new Date())
@@ -207,6 +212,76 @@ export const orderItems = createTable(
     subtotal: t.integer("subtotal").notNull(),
   }),
   (t) => [index("order_item_order_id_idx").on(t.orderId)],
+);
+
+/**
+ * Jubelio observation rig (spec §4.7). Two deliberately temporary tables: they
+ * exist to answer questions the upstream docs cannot, and both are pruned and
+ * safe to truncate at will — nothing in the order flow reads them.
+ *
+ * `webhook_capture` is what a Jubelio callback actually carried. Headers arrive
+ * credential-redacted (`redactHeaders`), bodies are capped
+ * (`SINK_MAX_BODY_BYTES`), and the three keys we would need to join an event
+ * back to a local order are lifted into real columns so the list is scannable
+ * without opening every row. If those three columns stay null on real traffic,
+ * the webhook design is unworkable and that is the finding.
+ */
+export const webhookCaptures = createTable(
+  "webhook_capture",
+  (t) => ({
+    id: t.uuid().primaryKey().defaultRandom(),
+    /** Which sink the event hit (`sales-order`, `invoice`, …) — the path segment. */
+    source: t.text("source").notNull(),
+    receivedAt: t
+      .timestamp("received_at", { withTimezone: true })
+      .$defaultFn(() => /* @__PURE__ */ new Date())
+      .notNull(),
+    method: t.text("method").notNull(),
+    contentType: t.text("content_type"),
+    headers: t.jsonb("headers").notNull(),
+    /** Parsed JSON when it parsed; null when it did not (or was cut). */
+    body: t.jsonb("body"),
+    rawBody: t.text("raw_body"),
+    truncated: t.boolean("truncated").notNull().default(false),
+    byteLength: t.integer("byte_length").notNull(),
+    salesorderId: t.integer("salesorder_id"),
+    invoiceId: t.integer("invoice_id"),
+    refNo: t.text("ref_no"),
+  }),
+  (t) => [index("webhook_capture_received_at_idx").on(t.receivedAt)],
+);
+
+/**
+ * One `GET /sales/orders/{id}` read, kept verbatim. Two of these on either side
+ * of creating a faktur in Jubelio is how we learn what an invoice does to an SO
+ * — `channel_status: "remitted"` on a COMPLETED SO (live probe 2026-10-29) is a
+ * hint we cannot read off a single snapshot.
+ */
+export const jubelioSoSnapshots = createTable(
+  "jubelio_so_snapshot",
+  (t) => ({
+    id: t.uuid().primaryKey().defaultRandom(),
+    orderId: t
+      .uuid("order_id")
+      .references(() => orders.id, { onDelete: "set null" }),
+    salesorderId: t.integer("salesorder_id").notNull(),
+    /** Operator's own marker for the capture ("sebelum faktur", "setelah"). */
+    label: t.text("label"),
+    capturedBy: t.text("captured_by").notNull(),
+    capturedAt: t
+      .timestamp("captured_at", { withTimezone: true })
+      .$defaultFn(() => /* @__PURE__ */ new Date())
+      .notNull(),
+    internalStatus: t.text("internal_status"),
+    channelStatus: t.text("channel_status"),
+    wmsStatus: t.text("wms_status"),
+    invoiceNo: t.text("invoice_no"),
+    trackingNumber: t.text("tracking_number"),
+    raw: t.jsonb("raw").notNull(),
+  }),
+  (t) => [
+    index("jubelio_so_snapshot_so_id_idx").on(t.salesorderId, t.capturedAt),
+  ],
 );
 
 export const contactRelations = relations(contacts, ({ many }) => ({
