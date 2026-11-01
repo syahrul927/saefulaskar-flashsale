@@ -103,19 +103,22 @@ export default async function AdminOrdersPage({
   // adding a `.leftJoin` would change the shape of every `order.x` access below
   // this — the same reason `itemsByOrder` is a separate map (spec §4.6).
   const orderIds = rows.map((r) => r.id);
-  const [historyByOrder, contactsByOrder] = await Promise.all([
+  const sessionIds = [...new Set(rows.map((r) => r.sessionId))];
+  // The session name list is awaited alongside the other two so a page load
+  // pays ONE round-trip wait, not two — the rows below need all three maps
+  // before the first one renders. The empty guard keeps `inArray` from ever
+  // seeing `[]`, the same reason `allItems` has one.
+  const [historyByOrder, contactsByOrder, sessions] = await Promise.all([
     listStatusHistory(db, orderIds),
     resolveCustomerContacts(db, orderIds),
-  ]);
-  const sessionIds = [...new Set(rows.map((r) => r.sessionId))];
-  const sessionRows =
     sessionIds.length === 0
-      ? []
-      : await db
+      ? Promise.resolve([] as { id: string; name: string }[])
+      : db
           .select({ id: flashSessions.id, name: flashSessions.name })
           .from(flashSessions)
-          .where(inArray(flashSessions.id, sessionIds));
-  const sessionNames = new Map(sessionRows.map((s) => [s.id, s.name]));
+          .where(inArray(flashSessions.id, sessionIds)),
+  ]);
+  const sessionNames = new Map(sessions.map((s) => [s.id, s.name]));
 
   const adminRows: AdminOrderRow[] = rows.map((order) => {
     const items = (itemsByOrder.get(order.id) ?? []).map((item) => ({

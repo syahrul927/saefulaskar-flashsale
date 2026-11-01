@@ -40,10 +40,9 @@ function StatusStepper({ steps }: { steps: readonly StatusStep[] }) {
         const isLast = index === steps.length - 1;
         // Either half may be absent, and the separator only appears when both
         // are — "oleh admin" alone must not read as a cut-off time.
-        const meta =
-          [step.timestampLabel, step.actorLabel]
-            .filter((v): v is string => v !== null && v !== "")
-            .join(" · ") ?? "";
+        const meta = [step.timestampLabel, step.actorLabel]
+          .filter((v): v is string => v !== null && v !== "")
+          .join(" · ");
         return (
           <li key={step.id} className="relative pb-4 pl-6 last:pb-0">
             {!isLast && (
