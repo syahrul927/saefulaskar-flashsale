@@ -663,7 +663,9 @@ it("names a deleted admin instead of dropping the step", () => {
 
 it("adds a muted, timestamp-free step when the order predates history", () => {
   const steps = buildStatusSteps({ status: "CONFIRMED", createdAt: new Date(2026, 9, 28), history: [] });
-  expect(steps).toHaveLength(2);
+  expect(steps).toHaveLength(3);   // corrected during execution: spec §4.6.3 appends a
+                                   // `pending` step for every non-end state, so a
+                                   // pre-history CONFIRMED order is created + current + pending
   expect(steps[1]).toEqual({ id: "current", label: "Dikonfirmasi", timestampLabel: null,
     actorLabel: null, note: "Tercatat sebelum riwayat status aktif", tone: "unknown" });
 });
@@ -692,8 +694,8 @@ Expected: FAIL — cannot resolve `@/server/status-steps`.
 Rules, in order — spec §4.5/§4.6, and Review Focus 5:
 
 1. Step `created`: `{ id: "created", label: "Pesanan dibuat", timestampLabel: formatStepTimestamp(createdAt), actorLabel: null, note: null, tone: "done" }`. Always first, always from `orders.created_at`.
-2. One step per history row, ascending as given: `label: stepLabel(fromStatus, toStatus)`, `timestampLabel: formatStepTimestamp(createdAt)`, `note`, and `actorLabel` = `source === "sync"` → `"sinkronisasi Jubelio"`; `source === "admin"` → `actorName?.trim() ? \`oleh ${actorName.trim()}\` : "oleh admin yang sudah dihapus"`; `source === "checkout"` → `null`. `tone` = `toStatus === "CANCEL" ? "cancel" : "done"`.
-3. When `history.length === 0`: one step `{ id: "current", label: CUSTOMER_STATUS_LABEL[status], timestampLabel: null, actorLabel: null, note: "Tercatat sebelum riwayat status aktif", tone: status === "CANCEL" ? "cancel" : "unknown" }`. **Never** fall back to `orders.updated_at` — `$onUpdate` rewrites it on a resi backfill that changed no status (spec §4.5).
+2. One step per history row, ascending as given, **skipping rows whose `fromStatus === null`** — the checkout row records the same fact rule 1 already renders, and spec §4.5 makes `orders.created_at` the authoritative creation step ("`checkout` history rows are optional, but creation must still render as a step"). Without the skip, every order created after this feature shows "Pesanan dibuat" twice with two near-identical timestamps. `label: stepLabel(fromStatus, toStatus)`, `timestampLabel: formatStepTimestamp(createdAt)`, `note`, and `actorLabel` = `source === "sync"` → `"sinkronisasi Jubelio"`; `source === "admin"` → `actorName === null` → `"oleh admin yang sudah dihapus"`, else `actorName.trim() ? \`oleh ${actorName.trim()}\` : "oleh admin"` (a live account with no name must not be reported as a deleted one); `source === "checkout"` → `null`. `tone` = `toStatus === "CANCEL" ? "cancel" : "done"`.
+3. When the **raw** `history.length === 0` (not the filtered list — a fresh order's only row is the checkout row, and calling that "predates history" would be a lie): one step `{ id: "current", label: CUSTOMER_STATUS_LABEL[status], timestampLabel: null, actorLabel: null, note: "Tercatat sebelum riwayat status aktif", tone: status === "CANCEL" ? "cancel" : "unknown" }`. **Never** fall back to `orders.updated_at` — `$onUpdate` rewrites it on a resi backfill that changed no status (spec §4.5).
 4. When `!isEndState(status)`: append `{ id: "pending", label: status === "UNPAID" ? "Menunggu pembayaran" : "Selesai", timestampLabel: null, actorLabel: null, note: null, tone: "pending" }`. (`SHIPPED` takes the same "Selesai" branch — legacy rows can still advance.)
 
 - [ ] **Step 7: Run both, expect pass**
