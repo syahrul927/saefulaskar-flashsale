@@ -35,6 +35,8 @@ const state = vi.hoisted(() => ({
   updatedSets: [] as Record<string, unknown>[],
   /** Rows the route inserted into `order_status_history`, in call order. */
   history: [] as Record<string, unknown>[],
+  /** Parallel to `history`: was that insert made on a `tx`, not on `db`? */
+  historyInTransaction: [] as boolean[],
 }));
 
 vi.mock("@/server/db", async () => {
@@ -99,18 +101,27 @@ vi.mock("@/server/db", async () => {
   });
   // Captured per table: `history` must hold ONLY the `order_status_history`
   // rows, otherwise an insert into any other table would pass for an audit row.
-  const insert = (table: unknown) => ({
+  // The builder is made per RECEIVER so the mock can tell `tx.insert` from
+  // `db.insert`: an audit row written on `db` would commit even when the
+  // status UPDATE rolls back, so "the row exists" alone is not enough.
+  const insertFor = (inTransaction: boolean) => (table: unknown) => ({
     values: async (row: Record<string, unknown>) => {
-      if (table === orderStatusHistory) state.history.push(row);
+      if (table === orderStatusHistory) {
+        state.history.push(row);
+        state.historyInTransaction.push(inTransaction);
+      }
       return [row];
     },
   });
-  const tx = { select, update, insert };
+  const tx = { select, update, insert: insertFor(true) };
   return {
     db: {
-      ...tx,
-      // The route's final write runs in a transaction; the fake hands it the
-      // same builders so update + history row go through the identical path.
+      select,
+      update,
+      insert: insertFor(false),
+      // The route's final write runs in a transaction; the fake hands the
+      // callback a tx whose select/update are the same builders (so the
+      // captured status UPDATE still lands) but whose insert is tagged.
       transaction: async (fn: (t: typeof tx) => Promise<unknown>) => fn(tx),
     },
   };
@@ -157,6 +168,7 @@ beforeEach(() => {
   state.contactExists = true;
   state.orderExists = true;
   state.history = [];
+  state.historyInTransaction = [];
   vi.mocked(getSession).mockReset();
   vi.mocked(getSession).mockResolvedValue(ADMIN as never);
   client.createSalesOrder.mockClear();
@@ -195,6 +207,10 @@ describe("confirm route SO id", () => {
       actorUserId: ADMIN.user.id,
     });
     expect(String(state.history[0]?.note)).toContain("SO #555");
+    // Not just that a row was written: it must be written INSIDE the
+    // transaction. An insert on `db` after the commit would leave an audit row
+    // claiming CONFIRMED on an order whose UPDATE rolled back.
+    expect(state.historyInTransaction).toEqual([true]);
   });
 
   it("502s without marking the order when the response carries no id", async () => {
