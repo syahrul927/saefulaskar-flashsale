@@ -961,15 +961,16 @@ Batched only. A single-order variant would have no caller — both surfaces that
 
 ```ts
 it("normalises every local spelling of an Indonesian number to 62…", () => {
-  for (const [raw, want] of [["0812-8877-1042","6281288771042"], ["0081288771042","6281288771042"],
+  for (const [raw, want] of [["0812-8877-1042","6281288771042"], ["006281288771042","6281288771042"],
     ["+62 812 8877 1042","6281288771042"], ["6281288771042","6281288771042"],
-    ["62 0812 8877 1042","6281288771042"], ["+62 0812-8877-1042","6281288771042"]] as const) {
+    ["62 0812 8877 1042","6281288771042"], ["+62 0812-8877-1042","6281288771042"],
+    ["0062 0812 8877 1042","6281288771042"]] as const) {
     expect(toWhatsAppNumber(raw)).toBe(want);
   }
 });
 it("returns null rather than a dead link for anything unusable", () => {
   for (const raw of [null, undefined, "", "   ", "-", "12345", "bukan nomor", "+1 555 0100",
-    "00442079460958"]) {
+    "00442079460958", "0081288771042", "021 555 1234"]) {
     expect(toWhatsAppNumber(raw)).toBeNull();
   }
 });
@@ -998,7 +999,12 @@ it("falls back to the order's recipient snapshot", …);   // no contact row →
 it("yields null when there is no number anywhere", …);   // Review Focus 5: no button, never a dead link
 it("resolves a whole list in one pass and keeps the order ids straight", …);  // two ids → Map with both keys
 it("returns an empty Map for an empty id list without issuing a query", …);   // an empty tab must not hit the DB
+it("uses the order's recipient name when the contact row has none", …);       // `contacts.contactName` null → `orders.recipientName`; a whitespace-only name is not a name
+it("asks each query once for a repeated order id", …);                        // ["o1","o1"] → one `inArray` with ["o1"], Map size 1
+it("falls through a contact whose only number is a landline to the checkout mobile", …);  // 628-shape rule earns its keep here
 ```
+
+(The last three were absent from the first draft of this task. The name fallback and the dedupe are the module's own stated behaviour shipping untested — deleting either keeps every other assertion green — and the landline row is the regression test for the `^628` rule above.)
 
 - [ ] **Step 3: Run them, expect failure**
 
@@ -1007,9 +1013,11 @@ Expected: FAIL — cannot resolve `@/server/order-contact`.
 
 - [ ] **Step 4: Implement `src/server/order-contact.ts`**
 
-`toWhatsAppNumber`: strip everything but digits and a leading `+`; drop the `+`; then `008…` → `62…`; any other `00…` → `null`; `0…` → `62…`; `62…` unchanged except that a trunk zero right after the country code is dropped (`62 0812…` → `62812…`); anything else → `null`; also `null` when the result is shorter than 9 or longer than 15 digits. Comment why `+1…` is rejected: `wa.me` wants an Indonesian mobile and a wrong-country link silently opens a stranger's chat.
+`toWhatsAppNumber`: strip everything but digits and a leading `+`; drop the `+`; then `0062…` → strip the `00` and treat the rest as `62…`; any other `00…` → `null`; `0…` → `62…`; `62…` unchanged except that a trunk zero right after the country code is dropped (`62 0812…` → `62812…`); anything else → `null`. Then require the result to be an Indonesian **mobile**: `^628`, and 9–15 digits total, else `null`. Comment why `+1…` is rejected: `wa.me` wants an Indonesian mobile and a wrong-country link silently opens a stranger's chat.
 
-_The `00…` rule is ordered, not merged, for the same reason_ (corrected after Task 8 review — the first draft of this line read `008… → 62…, 0… → 62…`, which puts the generic `0…` rewrite ahead of the `00` rejection): `00442079460958` is a UK number dialled with an international prefix, and rewriting its leading zero produces `620442079460958` — an Indonesian-looking number we invented. That is the wrong-country link the constraint above forbids, so it must return `null`. Only `008…` (the country code itself typed as `00` + `8…`) is safe to rewrite.
+_The `00…` rule is ordered, not merged, and only `0062` survives it_ (corrected twice after Task 8 review — the first draft read `008… → 62…, 0… → 62…`, putting the generic `0…` rewrite ahead of the `00` rejection; the second kept a `008… → 62…` branch that review showed to be unsafe): `00442079460958` is a UK number dialled with an international prefix, and rewriting its leading zero produces `620442079460958` — an Indonesian-looking number we invented. That is the wrong-country link the constraint above forbids, so it must return `null`. And the same argument kills the `008…` branch: `00` is the international access code, so `00` + anything is `00` + a **country code**, and the `8x` block is dense with them — `+81` Japan, `+82` Korea, `+84` Vietnam, `+852` Hong Kong, `+855` Cambodia, `+886` Taiwan. `0081 90 1234 5678` under that rule becomes `62819012345678`, a well-shaped Indonesian mobile belonging to somebody in Tokyo. Prefix narrowing cannot rescue it, because the collision set (Indonesia's own mobile second digits `1 2 3 5 7 8 9`) is exactly the dangerous set. `0062…` is the one `00` spelling whose country is stated in the input, so it is the only one rewritten; `0081288771042` now yields `null` — a lost button, which is the failure the spec ranks safe. Note the asymmetry with the `0…` branch, which stays: `0` is never a country code, so a leading-`0` string can only be a domestic spelling.
+
+_The result must be `628…`, not merely `62…`_ (Task 8 review finding 3): step 1 of the resolution chain prefers `contacts.phone`, and contact rows come from Jubelio's CRM, where they are often companies — `021 555 1234` normalises to `62215551234`, inside the length window, and resolves the order at step 1 so the buyer's own checkout mobile in `orders.recipient_phone` is never consulted. A fixed line is a dead WhatsApp link of the "not allowed on WhatsApp" kind, so the module's promise ("an Indonesian mobile and nothing else") has to be a rule and not a comment. No Indonesian mobile national number starts with anything but `8`, while fixed lines take area codes `21`–`76`; because a candidate that normalises to `null` leaves the order pending, a landline contact phone now falls through to the checkout mobile without disturbing the brief's chain order.
 
 _The trunk zero is dropped after `62`_ because `+62 0812 8877 1042` is a common local spelling of the same mobile number, and left as-is it passes the length window and opens a link to a number that does not exist — which is worse than no button. No Indonesian mobile national number begins with `0`, so `620…` is never a valid subscriber prefix and the strip cannot corrupt a correct number. The result must be idempotent: normalising an already-normalised string returns it unchanged.
 
