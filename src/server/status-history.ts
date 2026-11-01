@@ -1,3 +1,9 @@
+// Server-only write/read seams for `order_status_history` (spec §4.5). Every
+// producer and consumer of history goes through these two functions, so the
+// shape of a row is decided exactly once. Never imported for runtime values by
+// a client island — Task 6/12 read entries here and hand the client
+// already-formatted strings, never a `Date`.
+
 import { asc, eq, inArray } from "drizzle-orm";
 import type { PostgresJsDatabase } from "drizzle-orm/postgres-js";
 
@@ -6,19 +12,13 @@ import { orderStatusHistory, user } from "./db/schema";
 import type { OrderStatus, StatusHistorySource } from "./order-status";
 
 /**
- * Server-only write/read seams for `order_status_history` (spec §4.5). Every
- * producer and consumer of history goes through these two functions, so the
- * shape of a row is decided exactly once. Never imported for runtime values
- * by a client island — Task 6/12 read entries here and hand the client
- * already-formatted strings, never a `Date`.
- */
-
-/**
- * A `tx` inside `db.transaction(...)` satisfies both aliases: drizzle types
- * it as `PgTransaction<...>` extending `PgDatabase<...>` with the same
- * schema generics, so `insert`/`select` are the identical members — the
- * structural-widening fallback in the plan was not needed (verified by
- * typecheck, not just by reading the class).
+ * A `tx` inside `db.transaction(...)` satisfies both aliases: drizzle types it
+ * as `PgTransaction<TQueryResult, TFullSchema, TSchema> extends
+ * PgDatabase<TQueryResult, TFullSchema, TSchema>` with the same generics
+ * (`drizzle-orm/pg-core/session.d.ts:38`), so `insert`/`select` are the
+ * identical members and the plan's structural-widening fallback is not needed.
+ * Task 5 hands a real `tx` to both seams without a cast, which is the proof
+ * that matters here.
  */
 export type StatusWriter = Pick<PostgresJsDatabase<typeof schema>, "insert">;
 export type StatusReader = Pick<PostgresJsDatabase<typeof schema>, "select">;
