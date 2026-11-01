@@ -38,7 +38,8 @@ export type CustomerContact = {
  * E.164 caps at 15 digits; an Indonesian mobile that actually works is never
  * shorter than a `62` + operator + subscriber run. Anything outside this
  * window is a half-typed field, and dialling it opens a stranger's chat or no
- * chat at all.
+ * chat at all. This is the SECOND gate — the `^628` mobile-shape check below
+ * runs first, so a well-sized landline never reaches these bounds.
  */
 const MIN_DIGITS = 9;
 const MAX_DIGITS = 15;
@@ -46,49 +47,86 @@ const MAX_DIGITS = 15;
 /**
  * Normalise one stored phone field for `wa.me`, or say there is no number.
  *
- * `wa.me` takes an Indonesian mobile and nothing else, so the rules below
- * recognise the local spellings and REJECT the rest rather than guessing: a
- * wrong-country link looks identical to a right one in the admin's browser and
- * silently opens somebody else's chat, which is worse than no button.
+ * `wa.me` takes an Indonesian MOBILE and nothing else, so the rules below
+ * recognise the local spellings and REJECT the rest rather than guessing. Two
+ * rejections carry the whole guarantee: a wrong-country link looks identical to
+ * a right one in the admin's browser and silently opens somebody else's chat,
+ * and a fixed line opens no chat at all. Both are worse than no button.
  */
 export function toWhatsAppNumber(raw: string | null | undefined): string | null {
   // Strip everything that is not a digit. That includes the separators contact
   // data is full of (`-`, spaces, dots, brackets) and the leading `+` itself —
   // after this line the only spelling that can mean "Indonesia" is the `62`,
-  // `0` or `008` prefix, so `+62 …` and `62 …` land in the same branch.
+  // `0062` or `0` prefix, so `+62 …` and `62 …` land in the same branch.
   const digits = (raw ?? "").replace(/\D/g, "");
 
+  // `00` is the international access code, so `0062…` is the one `00` spelling
+  // whose country is stated in the input. Peel the access code and let the `62`
+  // branch below do the rest — which also hands `0062 0812…` the trunk-zero
+  // strip for free. Nothing else starting `00` gets this treatment.
+  const body = digits.startsWith("0062") ? digits.slice(2) : digits;
+
   let national: string;
-  if (digits.startsWith("008")) {
-    // The international access code written straight in front of a mobile:
-    // `00` + `812…` becomes `62` + `812…`.
-    national = `62${digits.slice(2)}`;
-  } else if (digits.startsWith("00")) {
+  if (body.startsWith("00")) {
     // Any OTHER `00…` is an access code followed by a FOREIGN country code
-    // (`0044…`). Rewriting it as `62…` would invent an Indonesian number out of
-    // a UK one, so it gets the same answer as `+1…` below.
+    // (`0044…` is the UK, `0081…` is Japan). Rewriting it as `62…` would invent
+    // an Indonesian number out of a foreign one, so it gets the same answer as
+    // the bare `+1…` case at the bottom of the chain.
+    //
+    // There used to be an `008…` → `62…` branch here, on the theory that `008`
+    // was Indonesia's own mobile `8…` wearing an access code. It is DELETED, not
+    // narrowed to a safer prefix: `00` + anything is by definition `00` + a
+    // country code, and the `8x` block is crowded with them — `+81` Japan,
+    // `+82` Korea, `+84` Vietnam, `+852` Hong Kong, `+886` Taiwan. `0081 90
+    // 1234 5678` under that rule becomes `62819012345678`: a well-shaped
+    // Indonesian mobile belonging to somebody in Tokyo, i.e. exactly the link
+    // this function exists to refuse. Prefix narrowing cannot rescue it either,
+    // because the collision set — `008` followed by Indonesia's own mobile
+    // second digits `1 2 3 5 7 8 9` — is precisely the dangerous set. So
+    // `0081288771042` now yields `null`: a missing button, the failure the spec
+    // ranks safe. The asymmetry with the `0…` branch below is deliberate and
+    // worth keeping in mind if this chain is ever touched again — `0` is never
+    // a country code, so a leading-`0` string can only be a domestic spelling.
     return null;
-  } else if (digits.startsWith("0")) {
+  } else if (body.startsWith("0")) {
     // Local trunk form: `0812…` → `62812…`.
-    national = `62${digits.slice(1)}`;
-  } else if (digits.startsWith("62")) {
+    national = `62${body.slice(1)}`;
+  } else if (body.startsWith("62")) {
     // Already normalised — including a `+62` that arrived through the strip —
     // with one exception: `+62 0812…` is the same mobile typed with its local
-    // leading zero still in front. That zero has to go, because `620812…` sits
-    // inside the length window below and would ship as a `wa.me` link to a
-    // number that almost certainly does not exist — silently the wrong
-    // recipient, which is worse than no button.
+    // leading zero still in front. That zero has to go, because `620812…` would
+    // otherwise ship as a `wa.me` link to a number that almost certainly does
+    // not exist — silently the wrong recipient, which is worse than no button.
     //
     // Dropping it cannot corrupt a correct number: no Indonesian mobile starts
     // its national number with `0`, so `62` + `0…` is never a real subscriber
     // prefix. And the rewrite is idempotent — the result starts `628…`, so
     // normalising it a second time leaves it alone.
-    national = digits[2] === "0" ? `62${digits.slice(3)}` : digits;
+    national = body[2] === "0" ? `62${body.slice(3)}` : body;
   } else {
     // `+1 555 0100` → `15550100`: no Indonesian prefix to hang it on, and the
     // guess ("maybe they meant 62") is exactly the wrong-country link above.
     return null;
   }
+
+  // Mobile shape, checked as a rule and not left to the comment at the top of
+  // this function. No Indonesian mobile national number starts with anything
+  // but `8`, while fixed lines take area codes `21`–`76` — so `021 555 1234`
+  // normalises to `62215551234`, comfortably inside the length window below,
+  // and would ship as a link WhatsApp refuses to open.
+  //
+  // The resolver makes this rule load-bearing rather than cosmetic: its step 1
+  // prefers `contacts.phone`, and contact rows come from Jubelio's CRM where
+  // they are often companies. A landline that normalised successfully would
+  // resolve the order at step 1, stranding the buyer's own checkout mobile in
+  // `orders.recipient_phone` — the number they actually typed, and the one most
+  // likely to be on WhatsApp. Returning `null` here leaves the order pending
+  // instead, so the landline falls through to the snapshot without the chain
+  // order changing at all.
+  // Spelled `startsWith("628")` rather than the `/^628/` test the plan names:
+  // same rule, and `@typescript-eslint/prefer-string-starts-ends-with` rejects
+  // the regex form on a plain prefix check.
+  if (!national.startsWith("628")) return null;
 
   if (national.length < MIN_DIGITS || national.length > MAX_DIGITS) return null;
   return national;
@@ -168,6 +206,16 @@ type ContactCandidate = {
  * the order but not a usable number leaves it pending, so the next step still
  * gets asked — resolving it here would produce a link with no digits in it.
  *
+ * That pending rule is what turns `toWhatsAppNumber`'s `^628` gate into chain
+ * behaviour rather than a curiosity: a CRM contact on a Jakarta fixed line
+ * normalises to `null`, so step 1 declines the order and the mobile the buyer
+ * typed at checkout is still consulted at step 3.
+ *
+ * The name follows the phone — `contacts.contact_name` when the winning contact
+ * row carries one, else the order's own `recipient_name`, else `null` — because
+ * greeting a buyer by the name on a company's CRM record is wrong, and a blank
+ * name is not a name.
+ *
  * Both joins are on unique keys (`orders.contact_id → contacts.id`,
  * `contacts.email` is UNIQUE), so a step returns at most one row per order; the
  * first-row-wins lookup below is belt-and-braces, not a fan-out rule.
@@ -227,7 +275,11 @@ export async function resolveCustomerContacts(
   // the Map would silently collapse it anyway.
   let pending = [...new Set(orderIds)];
 
-  // (1) The contact the order itself links to.
+  // (1) The contact the order itself links to. This is Jubelio CRM data and is
+  // often a COMPANY, so its `phone` is frequently an office landline — which is
+  // why the mobile gate lives in `toWhatsAppNumber` and not in a caller that
+  // could reasonably skip it: an order whose linked contact has no mobile must
+  // fall through to step 3, not resolve to a number nobody answers.
   const linked = await db
     .select({
       orderId: orders.id,

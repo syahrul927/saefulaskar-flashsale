@@ -25,15 +25,18 @@ describe("toWhatsAppNumber", () => {
    */
   const LOCAL: readonly [raw: string, want: string][] = [
     ["0812-8877-1042", "6281288771042"],
-    ["0081288771042", "6281288771042"],
+    ["006281288771042", "6281288771042"],
     ["+62 812 8877 1042", "6281288771042"],
     ["6281288771042", "6281288771042"],
     // Country code typed with the local leading zero left in front of the
-    // mobile. Same number as the four above, and the only spelling that needs
-    // a digit REMOVED rather than a prefix swapped — `620812…` is inside the
-    // length window, so keeping the zero ships a link, not a `null`.
+    // mobile. The only spelling that needs a digit REMOVED rather than a prefix
+    // swapped — `620812…` is inside the length window, so keeping the zero
+    // ships a link, not a `null`.
     ["62 0812 8877 1042", "6281288771042"],
     ["+62 0812-8877-1042", "6281288771042"],
+    // `00` in place of `+`, country spelled out: the one `00…` prefix whose
+    // country is stated in the input, so it strips to the case above.
+    ["0062 0812 8877 1042", "6281288771042"],
   ];
 
   it("normalises every local spelling of an Indonesian number to 62…", () => {
@@ -61,6 +64,11 @@ describe("toWhatsAppNumber", () => {
    * `0044…` belongs in this list rather than only in the test below, because a
    * future edit that folds the two `00` branches together has to go red HERE —
    * that is the table a reader trusts, not the one that explains the rule.
+   * `0081288771042` and `021 555 1234` are in it for the same reason: they are
+   * the two shapes that USED to normalise to something in-window and clickable
+   * (`6281288771042` from a Tokyo number, `62215551234` from a Jakarta office),
+   * so a rule that drifts back — reviving the `008…` rewrite or dropping the
+   * mobile requirement — fails on the contract table, not on a comment.
    */
   const DEAD: readonly (string | null | undefined)[] = [
     null,
@@ -72,6 +80,8 @@ describe("toWhatsAppNumber", () => {
     "bukan nomor",
     "+1 555 0100",
     "00442079460958",
+    "0081288771042",
+    "021 555 1234",
   ];
 
   it("returns null rather than a dead link for anything unusable", () => {
@@ -81,18 +91,33 @@ describe("toWhatsAppNumber", () => {
   });
 
   it("refuses to dress a foreign number in an Indonesian country code", () => {
-    // `00` is the international access code, so `0044…` is a UK number typed
-    // by hand. Rewriting it as `62…` would hand the admin a plausible-looking
-    // link to somebody else entirely.
+    // `00` is the international access code, so `00` + anything is `00` + a
+    // COUNTRY code. `0044…` is a UK number typed by hand and `0081 90…` is a
+    // Japanese mobile; rewriting either leading-`00` string as `62…` hands the
+    // admin a well-shaped Indonesian link belonging to somebody abroad.
     expect(toWhatsAppNumber("00442079460958")).toBeNull();
     expect(toWhatsAppNumber("+44 20 7946 0958")).toBeNull();
+    expect(toWhatsAppNumber("00819012345678")).toBeNull();
+    // The `0…` branch stays, by contrast: `0` is never a country code, so a
+    // leading-`0` string can only be a domestic spelling.
+    expect(toWhatsAppNumber("081288771042")).toBe("6281288771042");
+  });
+
+  it("requires an Indonesian MOBILE, not merely a 62-prefixed number", () => {
+    // Fixed lines take area codes `21`–`76`, so `62` + `21…` is an office, not
+    // the buyer. Length alone would have accepted it — `021 555 1234` is 11
+    // digits once the trunk rewrite is done.
+    expect(toWhatsAppNumber("021-555-1234")).toBeNull();
+    expect(toWhatsAppNumber("62215551234")).toBeNull();
+    expect(toWhatsAppNumber("+62 21 555 1234")).toBeNull();
+    expect(toWhatsAppNumber("628123456")).toBe("628123456"); // `628` is the shape
   });
 
   it("holds the result inside the 9–15 digit window", () => {
-    expect(toWhatsAppNumber("621234567")).toBe("621234567"); // 9 — shortest accepted
-    expect(toWhatsAppNumber("62123456")).toBeNull(); // 8
-    expect(toWhatsAppNumber("621234567890123")).toBe("621234567890123"); // 15
-    expect(toWhatsAppNumber("6212345678901234")).toBeNull(); // 16
+    expect(toWhatsAppNumber("628123456")).toBe("628123456"); // 9 — shortest accepted
+    expect(toWhatsAppNumber("62812345")).toBeNull(); // 8
+    expect(toWhatsAppNumber("628123456789012")).toBe("628123456789012"); // 15
+    expect(toWhatsAppNumber("6281234567890123")).toBeNull(); // 16
     expect(toWhatsAppNumber("0812")).toBeNull(); // trunk rewrite, still too short
   });
 });
@@ -255,6 +280,11 @@ function makeFakeDb(store: FakeStore) {
           const value = row[table]?.[column];
           return value !== null && value !== undefined && ids.includes(value);
         });
+        // The capture happens HERE, inside `where()`, not when `.from()` is
+        // reached: a query this fake never sees a `where` for would be invisible
+        // to the "without issuing a query" assertion. All three steps filter by
+        // id, so nothing is missed today — but a future `where`-less step would
+        // have to be recorded somewhere else too.
         captured.ids = ids;
         queries.push(captured);
         return Promise.resolve(
@@ -327,6 +357,16 @@ function store(): FakeStore {
         recipient_name: null,
         recipient_phone: "bukan nomor",
       },
+      {
+        // The shape the `^628` rule exists for: the CRM contact is a COMPANY on
+        // a Jakarta fixed line, and the buyer's own checkout mobile is sitting
+        // one step further down the chain. Step 1 must not answer this order.
+        id: "o-landline",
+        contact_id: "c-office",
+        customer_id: "u-nobody",
+        recipient_name: "Budi Checkout",
+        recipient_phone: "0813-7777-7777",
+      },
     ],
     contacts: [
       {
@@ -342,6 +382,14 @@ function store(): FakeStore {
         phone: "0812-2222-2222",
       },
       { id: "c-bad", email: "bad@example.com", contact_name: "Pak Badu", phone: "bukan nomor" },
+      {
+        id: "c-office",
+        // No user row carries this email, so step 2 cannot reach `c-office` —
+        // the landline is only ever offered by step 1.
+        email: "office@example.com",
+        contact_name: "PT Kantor Sentosa",
+        phone: "021-555-1234",
+      },
     ],
     user: [
       { id: "u-rina", email: "rina@example.com" },
@@ -468,6 +516,71 @@ describe("resolveCustomerContacts", () => {
     expect(queries[1]?.ids).toEqual(["o-garbage"]);
     expect(queries[2]?.ids).toEqual(["o-garbage"]);
     expect(result.get("o-garbage")).toBeNull();
+    expect(result.get("o-linked")).toEqual({ phone: "6281211111111", name: "PT Linked Jaya" });
+  });
+
+  it("falls through a contact whose only number is a landline to the checkout mobile", async () => {
+    const { result, queries } = await resolve(["o-landline"]);
+    // `c-office` IS linked and IS named, so step 1 returns a row for this order —
+    // but `021-555-1234` normalises to `null`, and a candidate that normalises to
+    // `null` leaves the order pending instead of resolving it to a link that
+    // WhatsApp refuses. The chain order is untouched; the `^628` rule is what
+    // keeps the office line from winning, and the buyer's own mobile from being
+    // stranded behind a CRM record.
+    expect(result.get("o-landline")).toEqual({
+      phone: "6281377777777",
+      name: "Budi Checkout",
+    });
+    // All three steps ran, and each later one was still asked for this order —
+    // its customer has no contact row, so the checkout snapshot is the answer.
+    expect(queries).toHaveLength(3);
+    expect(queries[1]?.ids).toEqual(["o-landline"]);
+    expect(queries[2]?.ids).toEqual(["o-landline"]);
+  });
+
+  it("uses the order's recipient name when the contact row has none", async () => {
+    // The name rule is `contactName → recipientName → null`. Every contact in the
+    // default store is named, so without these variants the fallback half of it
+    // ships untested: deleting `?? cleanName(row.recipientName)` from the module
+    // would leave every other assertion green. `"Rina Snapshot"` also proves the
+    // name came from the same step as the phone — step 2 could reach this order
+    // too, and would have said `"Rina Kartika"`.
+    const nullName = store();
+    nullName.contacts[0]!.contact_name = null;
+    expect((await resolve(["o-linked"], nullName)).result.get("o-linked")).toEqual({
+      phone: "6281211111111",
+      name: "Rina Snapshot",
+    });
+
+    // A whitespace-only name is not a name: it would render `Halo    ,` in the
+    // message, so `cleanName` treats it as absent rather than as a value.
+    const blankName = store();
+    blankName.contacts[0]!.contact_name = "   ";
+    expect((await resolve(["o-linked"], blankName)).result.get("o-linked")).toEqual({
+      phone: "6281211111111",
+      name: "Rina Snapshot",
+    });
+
+    // With neither, `cancelMessageText` gets `customerName: null` and drops the
+    // greeting instead of inventing one.
+    const noName = store();
+    noName.contacts[0]!.contact_name = null;
+    noName.orders[0]!.recipient_name = "  ";
+    expect((await resolve(["o-linked"], noName)).result.get("o-linked")).toEqual({
+      phone: "6281211111111",
+      name: null,
+    });
+  });
+
+  it("asks each query once for a repeated order id", async () => {
+    // A list can hold the same id twice, and `inArray` would widen it to
+    // `IN ('o-linked','o-linked')` — harmless to the result, wasteful in the SQL
+    // and confusing in a slow-query log. The dedupe is the module's stated
+    // behaviour, so it gets an assertion rather than a comment.
+    const { result, queries } = await resolve(["o-linked", "o-linked"]);
+    expect(queries).toHaveLength(1);
+    expect(queries[0]?.ids).toEqual(["o-linked"]);
+    expect(result.size).toBe(1);
     expect(result.get("o-linked")).toEqual({ phone: "6281211111111", name: "PT Linked Jaya" });
   });
 
