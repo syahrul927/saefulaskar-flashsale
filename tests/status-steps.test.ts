@@ -20,6 +20,23 @@ const entry = (o: Partial<StatusHistoryEntry> = {}): StatusHistoryEntry => ({
   ...o,
 });
 
+/**
+ * The row `POST /api/orders` writes inside the checkout transaction
+ * (`src/app/api/orders/route.ts:188`): `null → UNPAID`, `source: "checkout"`.
+ * Every order created after this feature exists has exactly one of these, and
+ * it restates the creation step — hence the skip ruled on in Task 6 review.
+ */
+const checkoutRow = (o: Partial<StatusHistoryEntry> = {}): StatusHistoryEntry =>
+  entry({
+    id: "h-checkout",
+    fromStatus: null,
+    toStatus: "UNPAID",
+    source: "checkout",
+    actorName: null,
+    note: null,
+    ...o,
+  });
+
 describe("buildStatusSteps", () => {
   it("always opens with the creation step, from orders.created_at", () => {
     const steps = buildStatusSteps({
@@ -83,6 +100,30 @@ describe("buildStatusSteps", () => {
     expect(steps[1]?.actorLabel).toBe("oleh admin yang sudah dihapus");
   });
 
+  it("says only `oleh admin` for a nameless account, never a deletion", () => {
+    // `status-history.ts:69-75` keeps these two cases apart on purpose:
+    // `actorName === null` is the FK having zeroed `actor_user_id` when an
+    // admin was deleted, while `""` is `full_name`'s default on an account that
+    // still exists. Printing "sudah dihapus" for the second would report a
+    // deletion that did not happen.
+    const nameless = buildStatusSteps({
+      status: "CANCEL",
+      createdAt: new Date(2026, 9, 28),
+      history: [entry({ toStatus: "CANCEL", source: "admin", actorName: "" })],
+    });
+    expect(nameless[1]?.actorLabel).toBe("oleh admin");
+
+    // Whitespace-only is the same case, not a name of " ".
+    const padded = buildStatusSteps({
+      status: "CANCEL",
+      createdAt: new Date(2026, 9, 28),
+      history: [
+        entry({ toStatus: "CANCEL", source: "admin", actorName: "   " }),
+      ],
+    });
+    expect(padded[1]?.actorLabel).toBe("oleh admin");
+  });
+
   it("adds a muted, timestamp-free step when the order predates history", () => {
     const steps = buildStatusSteps({
       status: "CONFIRMED",
@@ -110,6 +151,9 @@ describe("buildStatusSteps", () => {
       createdAt: new Date(2026, 9, 28),
       history: [],
     });
+    // Two, and the dialog stops there: CANCEL is an end state, so no pending
+    // step follows, and no actor is claimed for a transition nobody observed.
+    expect(steps).toHaveLength(2);
     expect(steps[1]).toMatchObject({
       label: "Dibatalkan",
       actorLabel: null,
@@ -144,5 +188,47 @@ describe("buildStatusSteps", () => {
         history: [entry({ toStatus: "COMPLETED", fromStatus: "CONFIRMED" })],
       }).at(-1)?.tone,
     ).toBe("done");
+  });
+
+  it("does not repeat the creation step for a fresh order's checkout row", () => {
+    // Spec §4.5: `order.created_at` "stays the creation time and the stepper's
+    // first step", and `checkout` history rows are "optional, but creation must
+    // still render as a step". So the creation step is authoritative and the
+    // `null → UNPAID` row restates a transition already on screen.
+    const steps = buildStatusSteps({
+      status: "UNPAID",
+      createdAt: new Date(2026, 9, 28, 19, 4),
+      history: [checkoutRow()],
+    });
+    // The id list is the strong assertion: no `current` (this order's history
+    // does NOT predate the feature, so it must not claim that) and no
+    // `h-checkout` (its row is skipped, not rendered).
+    expect(steps.map((s) => s.id)).toEqual(["created", "pending"]);
+    expect(steps.map((s) => s.label)).toEqual([
+      "Pesanan dibuat",
+      "Menunggu pembayaran",
+    ]);
+    expect(steps[0]?.timestampLabel).toBe("28 Okt 2026, 19.04");
+  });
+
+  it("gives a fresh order one step per distinct transition and no repeated label", () => {
+    const steps = buildStatusSteps({
+      status: "CONFIRMED",
+      createdAt: new Date(2026, 9, 28, 19, 4),
+      history: [
+        checkoutRow(),
+        entry({ id: "h-confirm" }),
+      ],
+    });
+    expect(steps.map((s) => s.id)).toEqual(["created", "h-confirm", "pending"]);
+    const labels = steps.map((s) => s.label);
+    expect(labels).toEqual([
+      "Pesanan dibuat",
+      "Dibayar — sales order dibuat",
+      "Selesai",
+    ]);
+    // The behaviour the duplicate would have broken, stated once as a rule:
+    // two steps never say the same thing.
+    expect(new Set(labels).size).toBe(labels.length);
   });
 });

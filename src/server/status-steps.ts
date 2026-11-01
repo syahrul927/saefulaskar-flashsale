@@ -58,6 +58,10 @@ type StatusStep = {
  * gets them ascending from SQL and re-sorting here would hide a broken
  * `ORDER BY`) → the pre-history current-status step when there are no rows →
  * the pending step while the order is still live.
+ *
+ * One row does not become a step: checkout's `null → UNPAID` creation record,
+ * because the step that opens the list already states that transition and
+ * carries the timestamp the spec calls authoritative (§4.5).
  */
 function buildStatusSteps(input: {
   status: OrderStatus;
@@ -83,7 +87,14 @@ function buildStatusSteps(input: {
     },
   ];
 
-  for (const row of history) {
+  // The `null → UNPAID` row checkout writes restates the creation step this
+  // array already opened, and `orders.created_at` is the timestamp spec §4.5
+  // treats as authoritative for it ("`checkout` history rows are optional, but
+  // creation must still render as a step"). Skipped as a step, never as a row:
+  // the audit record stays in the table.
+  const transitions = history.filter((row) => row.fromStatus !== null);
+
+  for (const row of transitions) {
     steps.push({
       id: row.id,
       label: stepLabel(row.fromStatus, row.toStatus),
@@ -96,6 +107,10 @@ function buildStatusSteps(input: {
     });
   }
 
+  // RAW `history`, not `transitions`: a fresh order has only the checkout row,
+  // so filtering first would make `transitions.length === 0` true and print the
+  // "predates the feature" step for an order whose history is complete. The
+  // muted step is a claim about the TABLE being empty.
   if (history.length === 0) {
     steps.push({
       id: "current",
@@ -142,15 +157,23 @@ function actorLabelFor(row: StatusHistoryEntry): string | null {
     case "sync":
       return "sinkronisasi Jubelio";
     case "admin": {
-      // `null` (admin deleted, FK set the actor to null) and `""` (an account
-      // with no name) both leave us with no person to print, and dropping the
-      // step would hide the transition itself. So the step stays and names the
-      // actor by what is left of it.
-      const name = row.actorName?.trim();
-      return name ? `oleh ${name}` : "oleh admin yang sudah dihapus";
+      // Two different empties, kept apart because the seam documents them as
+      // two facts (`status-history.ts:69-75`). `null` is the FK having zeroed
+      // `actor_user_id` when the admin was deleted, so the person is gone and
+      // the row says so. A blank name on a row that still points at an account
+      // means only "this account has no name" — printing "sudah dihapus" there
+      // would report a deletion that never happened.
+      if (row.actorName === null) return "oleh admin yang sudah dihapus";
+      const name = row.actorName.trim();
+      return name ? `oleh ${name}` : "oleh admin";
     }
     case "checkout":
       // The customer paid through the storefront; no admin touched this one.
+      // Today the only checkout row is the creation record, which never reaches
+      // this function (filtered above) — the branch stays because attribution
+      // for a checkout-sourced TRANSITION must be decided here, not defaulted,
+      // and dropping it would break the exhaustiveness that catches a new
+      // source.
       return null;
   }
 }
