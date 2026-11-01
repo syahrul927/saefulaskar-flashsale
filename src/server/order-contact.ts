@@ -72,8 +72,18 @@ export function toWhatsAppNumber(raw: string | null | undefined): string | null 
     // Local trunk form: `0812…` → `62812…`.
     national = `62${digits.slice(1)}`;
   } else if (digits.startsWith("62")) {
-    // Already normalised — including a `+62` that arrived through the strip.
-    national = digits;
+    // Already normalised — including a `+62` that arrived through the strip —
+    // with one exception: `+62 0812…` is the same mobile typed with its local
+    // leading zero still in front. That zero has to go, because `620812…` sits
+    // inside the length window below and would ship as a `wa.me` link to a
+    // number that almost certainly does not exist — silently the wrong
+    // recipient, which is worse than no button.
+    //
+    // Dropping it cannot corrupt a correct number: no Indonesian mobile starts
+    // its national number with `0`, so `62` + `0…` is never a real subscriber
+    // prefix. And the rewrite is idempotent — the result starts `628…`, so
+    // normalising it a second time leaves it alone.
+    national = digits[2] === "0" ? `62${digits.slice(3)}` : digits;
   } else {
     // `+1 555 0100` → `15550100`: no Indonesian prefix to hang it on, and the
     // guess ("maybe they meant 62") is exactly the wrong-country link above.

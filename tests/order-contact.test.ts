@@ -28,6 +28,12 @@ describe("toWhatsAppNumber", () => {
     ["0081288771042", "6281288771042"],
     ["+62 812 8877 1042", "6281288771042"],
     ["6281288771042", "6281288771042"],
+    // Country code typed with the local leading zero left in front of the
+    // mobile. Same number as the four above, and the only spelling that needs
+    // a digit REMOVED rather than a prefix swapped — `620812…` is inside the
+    // length window, so keeping the zero ships a link, not a `null`.
+    ["62 0812 8877 1042", "6281288771042"],
+    ["+62 0812-8877-1042", "6281288771042"],
   ];
 
   it("normalises every local spelling of an Indonesian number to 62…", () => {
@@ -42,11 +48,19 @@ describe("toWhatsAppNumber", () => {
     for (const [, digits] of LOCAL) {
       expect(toWhatsAppNumber(digits), digits).toBe(digits);
     }
+    // Spelled out for the trunk-zero input: one pass and two passes must land
+    // on the same digits, or a caller that re-checks shifts the number by one.
+    const once = toWhatsAppNumber("0812-8877-1042");
+    expect(once).toBe("6281288771042");
+    expect(toWhatsAppNumber(once)).toBe("6281288771042");
   });
 
   /**
    * `null` is the only acceptable answer for these: the surface drops the
    * button, so a wrong-country or half-typed number can never reach a click.
+   * `0044…` belongs in this list rather than only in the test below, because a
+   * future edit that folds the two `00` branches together has to go red HERE —
+   * that is the table a reader trusts, not the one that explains the rule.
    */
   const DEAD: readonly (string | null | undefined)[] = [
     null,
@@ -57,6 +71,7 @@ describe("toWhatsAppNumber", () => {
     "12345",
     "bukan nomor",
     "+1 555 0100",
+    "00442079460958",
   ];
 
   it("returns null rather than a dead link for anything unusable", () => {
