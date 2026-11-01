@@ -961,13 +961,15 @@ Batched only. A single-order variant would have no caller — both surfaces that
 
 ```ts
 it("normalises every local spelling of an Indonesian number to 62…", () => {
-  for (const [raw, want] of [["0812-8877-1042","628128877 1042".replace(/\s/g,"")], ["0081288771042","6281288771042"],
-    ["+62 812 8877 1042","6281288771042"], ["6281288771042","6281288771042"]] as const) {
+  for (const [raw, want] of [["0812-8877-1042","6281288771042"], ["0081288771042","6281288771042"],
+    ["+62 812 8877 1042","6281288771042"], ["6281288771042","6281288771042"],
+    ["62 0812 8877 1042","6281288771042"], ["+62 0812-8877-1042","6281288771042"]] as const) {
     expect(toWhatsAppNumber(raw)).toBe(want);
   }
 });
 it("returns null rather than a dead link for anything unusable", () => {
-  for (const raw of [null, undefined, "", "   ", "-", "12345", "bukan nomor", "+1 555 0100"]) {
+  for (const raw of [null, undefined, "", "   ", "-", "12345", "bukan nomor", "+1 555 0100",
+    "00442079460958"]) {
     expect(toWhatsAppNumber(raw)).toBeNull();
   }
 });
@@ -1005,7 +1007,11 @@ Expected: FAIL — cannot resolve `@/server/order-contact`.
 
 - [ ] **Step 4: Implement `src/server/order-contact.ts`**
 
-`toWhatsAppNumber`: strip everything but digits and a leading `+`; drop the `+`; then `008…` → `62…`, `0…` → `62…`, `62…` unchanged; anything else → `null`; also `null` when the result is shorter than 9 or longer than 15 digits. Comment why `+1…` is rejected: `wa.me` wants an Indonesian mobile and a wrong-country link silently opens a stranger's chat.
+`toWhatsAppNumber`: strip everything but digits and a leading `+`; drop the `+`; then `008…` → `62…`; any other `00…` → `null`; `0…` → `62…`; `62…` unchanged except that a trunk zero right after the country code is dropped (`62 0812…` → `62812…`); anything else → `null`; also `null` when the result is shorter than 9 or longer than 15 digits. Comment why `+1…` is rejected: `wa.me` wants an Indonesian mobile and a wrong-country link silently opens a stranger's chat.
+
+_The `00…` rule is ordered, not merged, for the same reason_ (corrected after Task 8 review — the first draft of this line read `008… → 62…, 0… → 62…`, which puts the generic `0…` rewrite ahead of the `00` rejection): `00442079460958` is a UK number dialled with an international prefix, and rewriting its leading zero produces `620442079460958` — an Indonesian-looking number we invented. That is the wrong-country link the constraint above forbids, so it must return `null`. Only `008…` (the country code itself typed as `00` + `8…`) is safe to rewrite.
+
+_The trunk zero is dropped after `62`_ because `+62 0812 8877 1042` is a common local spelling of the same mobile number, and left as-is it passes the length window and opens a link to a number that does not exist — which is worse than no button. No Indonesian mobile national number begins with `0`, so `620…` is never a valid subscriber prefix and the strip cannot corrupt a correct number. The result must be idempotent: normalising an already-normalised string returns it unchanged.
 
 `resolveCustomerContacts(db, orderIds)`: empty list → empty `Map`. Otherwise three queries, each `inArray`-batched, and only for the ids still unresolved: (1) `orders` ⋈ `contacts` on `orders.contactId`; (2) `orders` ⋈ `user` on `orders.customerId` ⋈ `contacts` on `contacts.email = user.email`; (3) `orders.recipientPhone`. Name for the message: `contacts.contactName` when a contact row was used, else `orders.recipientName`, else `null`. Normalise every candidate through `toWhatsAppNumber`; the first non-null wins, and an order with none maps to `null`. This is the same chain the confirm route walks (`src/app/api/orders/[id]/confirm/route.ts:47-75`), batched — comment that, and comment that `Hubungi CS` on the customer surface does **not** use it (spec §8.17).
 
