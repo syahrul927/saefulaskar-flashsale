@@ -38,9 +38,8 @@ export const env = createEnv({
     // stores nothing, so a public endpoint that writes to the database is always
     // a deliberate opt-in and never something a fresh clone turns on by default.
     JUBELIO_WEBHOOK_SINK_TOKEN: z.string().optional(),
-    CRON_SECRET: z.string(),
-    // Order-status sync throttle. The cron always runs a full pass; this is the
-    // floor between the "an admin opened the orders page" runs, so a busy
+    // Order-status sync throttle. This is the floor between the "an admin
+    // opened the orders page" runs — the only trigger the app has — so a busy
     // dashboard cannot sweep Jubelio on every request. 0 disables the throttle.
     ORDER_SYNC_INTERVAL_MS: z.coerce.number().int().min(0).default(300_000),
     // How long a page render will wait for a due sync before painting with
@@ -82,7 +81,6 @@ export const env = createEnv({
     WHATSAPP_NUMBER: process.env.WHATSAPP_NUMBER,
     BANK_ACCOUNTS: process.env.BANK_ACCOUNTS,
     JUBELIO_WEBHOOK_SINK_TOKEN: process.env.JUBELIO_WEBHOOK_SINK_TOKEN,
-    CRON_SECRET: process.env.CRON_SECRET,
     ORDER_SYNC_INTERVAL_MS: process.env.ORDER_SYNC_INTERVAL_MS,
     ORDER_SYNC_AWAIT_MS: process.env.ORDER_SYNC_AWAIT_MS,
     DATABASE_URL: process.env.DATABASE_URL,

@@ -61,8 +61,9 @@ export default async function AdminOrdersPage({
   );
 
   // Pull Jubelio's latest order statuses before reading the rows, so an admin
-  // opening this page sees COMPLETED and any new resi instead of waiting for the
-  // nightly cron. Throttled process-wide by `ORDER_SYNC_INTERVAL_MS` (default 5 min) —
+  // opening this page sees COMPLETED, any new resi, and the cancellations the
+  // sync found upstream. This is the sync's only trigger. Throttled
+  // process-wide by `ORDER_SYNC_INTERVAL_MS` (default 5 min) —
   // a skipped run resolves immediately. The wait is capped by
   // `ORDER_SYNC_AWAIT_MS`: when the upstream sweep is slower than that, the page
   // paints with what the DB already has and `after()` keeps the run alive past

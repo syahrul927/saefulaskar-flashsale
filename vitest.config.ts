@@ -33,7 +33,6 @@ export default defineConfig({
       WHATSAPP_NUMBER: "628123456789",
       BANK_ACCOUNTS:
         '[{"bank":"BCA","account_number":"123","account_name":"Test"}]',
-      CRON_SECRET: "test-cron-secret",
       JUBELIO_WEBHOOK_SINK_TOKEN: "test-sink-token",
       DATABASE_URL:
         "postgresql://postgres:password@localhost:5432/saefulaskar-flash-sale",

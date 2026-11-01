@@ -369,7 +369,3 @@ export function maybeRunOrderSync(): Promise<SyncRunResult | null> {
   return throttled.maybe();
 }
 
-/** Force a full pass, ignoring the throttle — what the cron route calls. */
-export function runOrderSyncNow(): Promise<SyncRunResult> {
-  return runOrderSync(createDbSyncDeps());
-}
