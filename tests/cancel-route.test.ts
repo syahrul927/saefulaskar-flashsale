@@ -1,10 +1,21 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
+import { eq } from "drizzle-orm";
+import { PgDialect } from "drizzle-orm/pg-core";
+
+import { orders } from "@/server/db/schema";
+
 // The route's own decisions are what this file pins: the 401/403 guards, the
 // 404/409 pre-checks, the input it hands the service, and the service verdict
 // → status-code mapping. So the auth seam and `cancelOrder` are mocked, and
 // `@/server/db` is a row QUEUE — the transaction semantics inside the service
 // are Task 7's file, not this one's job to re-prove.
+//
+// Every `where()` condition is CAPTURED as well as ignored: a queue that threw
+// its condition away would pass a route looking orders up by `booking_id`, by
+// nothing at all, or by the wrong id, and this file would never notice. The
+// `orders look up by id` test below decodes them with `PgDialect` (the idiom is
+// `tests/confirm-route.test.ts:55,140-149`).
 vi.mock("@/server/better-auth/server", () => ({ getSession: vi.fn() }));
 vi.mock("@/server/cancel-order", () => ({ cancelOrder: vi.fn() }));
 
@@ -14,6 +25,8 @@ const state = vi.hoisted(() => ({
   // status. `select().from(orders).where()` shifts the next row off the front;
   // an empty queue reads as "no such order".
   orderRows: [] as Record<string, unknown>[],
+  /** One entry per read the route performed, in call order. */
+  conditions: [] as unknown[],
 }));
 
 vi.mock("@/server/db", async () => {
@@ -22,8 +35,10 @@ vi.mock("@/server/db", async () => {
     db: {
       select: () => ({
         from: (table: unknown) => ({
-          where: async () =>
-            table === orders ? state.orderRows.splice(0, 1) : [],
+          where: async (condition: unknown) => {
+            state.conditions.push(condition);
+            return table === orders ? state.orderRows.splice(0, 1) : [];
+          },
         }),
       }),
     },
@@ -66,8 +81,11 @@ function post() {
   });
 }
 
+const dialect = new PgDialect();
+
 beforeEach(() => {
   state.orderRows = [];
+  state.conditions = [];
   vi.mocked(getSession).mockReset();
   vi.mocked(getSession).mockResolvedValue(ADMIN as never);
   vi.mocked(cancelOrder).mockReset();
@@ -207,5 +225,75 @@ describe("cancel route verdict mapping", () => {
     const body = (await res.json()) as { ok: false; error: string };
     expect(body.error).toBe("Pesanan tidak ditemukan");
     expect(state.orderRows).toHaveLength(1);
+  });
+
+  it("404s when the re-read after an already-ended verdict finds no row", async () => {
+    // The row was deleted outright between our read and the guarded UPDATE.
+    // Reporting `Pesanan sudah berstatus CANCEL` here would name a status we
+    // never observed — the honest answer for a vanished row is 404, the same
+    // sentence the pre-check uses.
+    state.orderRows = [orderRow()];
+    vi.mocked(cancelOrder).mockResolvedValue({
+      cancelled: false,
+      reason: "already-ended",
+    });
+    const res = await post();
+    expect(res.status).toBe(404);
+    const body = (await res.json()) as { ok: false; error: string };
+    expect(body.error).toBe("Pesanan tidak ditemukan");
+  });
+
+  it("turns a service throw into a 500 JSON sentence, stack kept server-side", async () => {
+    // The one outcome that is invisible to the admin until it breaks: every
+    // other branch has a status code the UI can show, while an escaping
+    // rejection becomes Next's non-JSON error page and the button's
+    // `data?.error` read finds nothing.
+    state.orderRows = [orderRow()];
+    vi.mocked(cancelOrder).mockRejectedValue(new Error("connection terminated"));
+    const logged = vi
+      .spyOn(console, "error")
+      .mockImplementation(() => undefined);
+    try {
+      const res = await post();
+      expect(res.status).toBe(500);
+      expect(await res.json()).toEqual({
+        ok: false,
+        error: "Gagal membatalkan pesanan, coba lagi",
+      });
+      expect(logged).toHaveBeenCalledWith(
+        "cancel: cancelOrder failed",
+        expect.any(Error),
+      );
+      expect(state.orderRows).toHaveLength(0);
+    } finally {
+      logged.mockRestore();
+    }
+  });
+});
+
+describe("cancel route lookups", () => {
+  it("reads the order up by id, both times it reads", async () => {
+    // Pre-check read and the raced re-read. A wrong column here (`booking_id`,
+    // or no predicate at all) is a cancel applied to somebody else's order, and
+    // nothing else in this file can see it — the queue hands back a row either
+    // way.
+    state.orderRows = [orderRow(), orderRow({ status: "COMPLETED" })];
+    vi.mocked(cancelOrder).mockResolvedValue({
+      cancelled: false,
+      reason: "already-ended",
+    });
+    await post();
+
+    // The expected SQL is RENDERED FROM THE SCHEMA rather than typed out as a
+    // string literal: this table's database name is `pg-drizzle_order`, not
+    // `orders`, and a hand-written expectation would be a second source of
+    // truth that drifts the moment the schema is renamed.
+    const byId = dialect.sqlToQuery(eq(orders.id, "o1"));
+    expect(state.conditions).toHaveLength(2);
+    for (const cond of state.conditions) {
+      const query = dialect.sqlToQuery(cond as never);
+      expect(query.sql).toBe(byId.sql);
+      expect(query.params).toEqual(["o1"]);
+    }
   });
 });

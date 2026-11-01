@@ -61,12 +61,15 @@ export async function POST(
     }
     // The row moved between our read and the guarded UPDATE — name what it
     // says now, because the pre-check above cannot tell a cancel from a
-    // completion.
+    // completion. If it moved to NOTHING, the honest answer is 404: reporting
+    // `CANCEL` for a row we never read would claim a status we did not observe
+    // (and a row deleted outright is not "already ended", it is gone).
     const [now] = await db
       .select({ status: orders.status })
       .from(orders)
       .where(eq(orders.id, order.id));
-    return jsonError(409, `Pesanan sudah berstatus ${now?.status ?? "CANCEL"}`);
+    if (!now) return jsonError(404, "Pesanan tidak ditemukan");
+    return jsonError(409, `Pesanan sudah berstatus ${now.status}`);
   }
 
   return Response.json({
