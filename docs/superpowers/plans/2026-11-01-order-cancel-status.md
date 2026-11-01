@@ -1107,7 +1107,8 @@ if (!result.cancelled) {
   // The row moved between our read and the guarded UPDATE — name what it says
   // now, because the pre-check above cannot tell a cancel from a completion.
   const [now] = await db.select({ status: orders.status }).from(orders).where(eq(orders.id, order.id));
-  return jsonError(409, `Pesanan sudah berstatus ${now?.status ?? "CANCEL"}`);
+  if (!now) return jsonError(404, "Pesanan tidak ditemukan");
+  return jsonError(409, `Pesanan sudah berstatus ${now.status}`);
 }
 return Response.json({ ok: true, order: {
   id: order.id, bookingId: order.bookingId, status: "CANCEL" as const, releasedUnits: result.releasedUnits,
