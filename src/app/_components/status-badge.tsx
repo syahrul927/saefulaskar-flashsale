@@ -5,7 +5,7 @@ import { Badge } from "@/components/ui/badge";
 type StatusTone = "amber" | "emerald" | "blue" | "neutral" | "red";
 
 type SessionStatus = "SCHEDULED" | "ACTIVE" | "PAUSED" | "ENDED";
-type OrderStatus = "UNPAID" | "CONFIRMED" | "SHIPPED" | "COMPLETED";
+type OrderStatus = "UNPAID" | "CONFIRMED" | "SHIPPED" | "COMPLETED" | "CANCEL";
 
 const SESSION_STATUS_TONES = {
   SCHEDULED: "blue",
@@ -19,6 +19,7 @@ const ORDER_STATUS_TONES = {
   CONFIRMED: "emerald",
   SHIPPED: "blue",
   COMPLETED: "neutral",
+  CANCEL: "red",
 } as const satisfies Record<OrderStatus, StatusTone>;
 
 function sessionStatusTone(status: SessionStatus): StatusTone {

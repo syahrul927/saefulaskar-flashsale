@@ -48,6 +48,7 @@ export const orderStatus = pgEnum("order_status", [
   "CONFIRMED",
   "SHIPPED",
   "COMPLETED",
+  "CANCEL",
 ]);
 
 export const contacts = createTable(
@@ -282,6 +283,36 @@ export const jubelioSoSnapshots = createTable(
   (t) => [
     index("jubelio_so_snapshot_so_id_idx").on(t.salesorderId, t.capturedAt),
   ],
+);
+
+/** Who caused a status transition — `order_status_history.source` (spec §4.5). */
+export const STATUS_HISTORY_SOURCES = ["checkout", "admin", "sync"] as const;
+export type StatusHistorySource = (typeof STATUS_HISTORY_SOURCES)[number];
+
+export const orderStatusHistory = createTable(
+  "order_status_history",
+  (t) => ({
+    id: t.uuid().primaryKey().defaultRandom(),
+    orderId: t
+      .uuid("order_id")
+      .notNull()
+      .references(() => orders.id, { onDelete: "cascade" }),
+    // null on the creation row: there is no status before UNPAID.
+    fromStatus: orderStatus("from_status"),
+    toStatus: orderStatus("to_status").notNull(),
+    source: t.text("source").notNull().$type<StatusHistorySource>(),
+    // Set only when `source = 'admin'`; `set null` keeps the row when the admin
+    // is deleted, which is why the display layer needs a "deleted admin" label.
+    actorUserId: t
+      .text("actor_user_id")
+      .references(() => user.id, { onDelete: "set null" }),
+    note: t.text("note"),
+    createdAt: t
+      .timestamp("created_at", { withTimezone: true })
+      .$defaultFn(() => /* @__PURE__ */ new Date())
+      .notNull(),
+  }),
+  (t) => [index("order_status_history_order_id_idx").on(t.orderId, t.createdAt)],
 );
 
 export const contactRelations = relations(contacts, ({ many }) => ({
