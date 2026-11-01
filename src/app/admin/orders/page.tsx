@@ -9,12 +9,26 @@ import {
   AdminOrdersFilter,
   type AdminOrderRow,
 } from "@/app/_components/admin-orders-filter";
+import type { CancelOrderTarget } from "@/app/_components/cancel-order-button";
+import type { OrderDetailData } from "@/app/_components/order-detail-dialog";
 import { Panel } from "@/app/_components/panel";
 import { env } from "@/env";
 import { formatRupiah } from "@/lib/format";
 import { db } from "@/server/db";
-import { orderItems, orders } from "@/server/db/schema";
+import {
+  flashSessions,
+  orderItems,
+  orders,
+} from "@/server/db/schema";
+import {
+  buildCustomerWaLink,
+  cancelMessageText,
+  resolveCustomerContacts,
+} from "@/server/order-contact";
+import { isCancellable } from "@/server/order-status";
 import { maybeRunOrderSync } from "@/server/order-sync";
+import { buildStatusSteps } from "@/server/status-steps";
+import { listStatusHistory } from "@/server/status-history";
 
 export const metadata: Metadata = {
   title: "Pesanan — Flash Studio Admin",
@@ -83,26 +97,113 @@ export default async function AdminOrdersPage({
     itemsByOrder.set(item.orderId, list);
   }
 
-  const adminRows: AdminOrderRow[] = rows.map((order) => ({
-    orderId: order.id,
-    bookingId: order.bookingId,
-    status: order.status,
-    dateLabel: order.createdAt.toLocaleString("id-ID", {
-      dateStyle: "medium",
-      timeStyle: "short",
-    }),
-    jubelioSoId: order.jubelioSoId,
-    grandTotalLabel: formatRupiah(order.grandTotal),
-    items: (itemsByOrder.get(order.id) ?? []).map((item) => ({
+  // Three more reads, all batched, all keyed by the same ids the rows already
+  // carry. Session names come from a SECOND query rather than a join on the
+  // orders select because `db.select().from(orders)` returns whole rows, and
+  // adding a `.leftJoin` would change the shape of every `order.x` access below
+  // this — the same reason `itemsByOrder` is a separate map (spec §4.6).
+  const orderIds = rows.map((r) => r.id);
+  const [historyByOrder, contactsByOrder] = await Promise.all([
+    listStatusHistory(db, orderIds),
+    resolveCustomerContacts(db, orderIds),
+  ]);
+  const sessionIds = [...new Set(rows.map((r) => r.sessionId))];
+  const sessionRows =
+    sessionIds.length === 0
+      ? []
+      : await db
+          .select({ id: flashSessions.id, name: flashSessions.name })
+          .from(flashSessions)
+          .where(inArray(flashSessions.id, sessionIds));
+  const sessionNames = new Map(sessionRows.map((s) => [s.id, s.name]));
+
+  const adminRows: AdminOrderRow[] = rows.map((order) => {
+    const items = (itemsByOrder.get(order.id) ?? []).map((item) => ({
       id: item.id,
       name: item.itemName,
       qtyPriceLabel: `${item.qty} × ${formatRupiah(item.price)}`,
       subtotalLabel: formatRupiah(item.subtotal),
-    })),
-    transferProofUrl: order.transferProofUrl,
-    trackingNumber: order.trackingNumber,
-    shipper: order.shipper,
-  }));
+    }));
+    const dateLabel = order.createdAt.toLocaleString("id-ID", {
+      dateStyle: "medium",
+      timeStyle: "short",
+    });
+
+    // The WhatsApp link is built here and nowhere else: `resolveCustomerContacts`
+    // already decided which number is dialable (and returns `null` for an order
+    // with no usable one), and `cancelMessageText` needs `wasPaid` read off the
+    // row the admin is looking at. An empty string means "no button" — the
+    // dialog and the row both check that, so a half-resolved contact can never
+    // render as a link to nowhere.
+    const contact = contactsByOrder.get(order.id) ?? null;
+    const waLink = contact
+      ? buildCustomerWaLink(
+          contact.phone,
+          cancelMessageText({
+            bookingId: order.bookingId,
+            customerName: contact.name,
+            wasPaid: order.status === "CONFIRMED",
+          }),
+        )
+      : "";
+
+    // `isCancellable` is the same predicate the route enforces, so a row that
+    // offers `Batalkan` is a row the server will accept — legacy `SHIPPED`
+    // offers nothing instead of producing a 409 toast.
+    const cancel: CancelOrderTarget | null = isCancellable(order.status)
+      ? {
+          orderId: order.id,
+          bookingId: order.bookingId,
+          status: order.status,
+          unitCount: (itemsByOrder.get(order.id) ?? []).reduce(
+            (n, i) => n + i.qty,
+            0,
+          ),
+          jubelioSoId: order.jubelioSoId,
+          customerWaLink: waLink,
+        }
+      : null;
+
+    const detail: OrderDetailData = {
+      orderId: order.id,
+      bookingId: order.bookingId,
+      status: order.status,
+      // Admin prints the raw enum (spec §3.1); the storefront prints the Bahasa
+      // label. Same dialog, two vocabularies, decided by the caller.
+      statusLabel: order.status,
+      dateLabel,
+      grandTotalLabel: formatRupiah(order.grandTotal),
+      sessionName: sessionNames.get(order.sessionId) ?? null,
+      jubelioSoId: order.jubelioSoId,
+      steps: buildStatusSteps({
+        status: order.status,
+        createdAt: order.createdAt,
+        history: historyByOrder.get(order.id) ?? [],
+      }),
+      items,
+      transferProofUrl: order.transferProofUrl,
+      trackingNumber: order.trackingNumber,
+      shipper: order.shipper,
+      contact: waLink ? { label: "Hubungi pelanggan", href: waLink } : null,
+      contactHint:
+        "Tidak ada nomor WhatsApp untuk pesanan ini — hubungi pelanggan lewat profilnya.",
+    };
+
+    return {
+      orderId: order.id,
+      bookingId: order.bookingId,
+      status: order.status,
+      dateLabel,
+      jubelioSoId: order.jubelioSoId,
+      grandTotalLabel: formatRupiah(order.grandTotal),
+      items,
+      transferProofUrl: order.transferProofUrl,
+      trackingNumber: order.trackingNumber,
+      shipper: order.shipper,
+      detail,
+      cancel,
+    };
+  });
 
   return (
     <main className="flex-1 space-y-6 p-4 md:p-6">

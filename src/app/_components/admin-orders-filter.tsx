@@ -2,9 +2,15 @@
 
 import { useState } from "react";
 
+import { Button } from "@/components/ui/button";
 import { TABS, type AdminTab } from "./admin-order-tabs";
+import { CancelOrderButton, type CancelOrderTarget } from "./cancel-order-button";
 import { ConfirmOrderButton } from "./confirm-order-button";
 import { FilterPill } from "./filter-pill";
+import {
+  OrderDetailTrigger,
+  type OrderDetailData,
+} from "./order-detail-dialog";
 import { ShipmentBand } from "./shipment-band";
 import {
   isPulseStatus,
@@ -35,6 +41,15 @@ export type AdminOrderRow = {
   /** Filled by the order-status sync from the Jubelio SO once it ships. */
   trackingNumber: string | null;
   shipper: string | null;
+  /** Everything the detail dialog shows, serialized by the page. */
+  detail: OrderDetailData;
+  /**
+   * The cancel target, or `null` when the row cannot be cancelled. The page
+   * decides this with `isCancellable`, never this island — a row parked on
+   * legacy `SHIPPED` answers 409 from the route, so offering it a button would
+   * only produce a failure toast (spec §3.3).
+   */
+  cancel: CancelOrderTarget | null;
 };
 
 // TABS/AdminTab/resolveInitialTab live in ./admin-order-tabs — the orders
@@ -162,12 +177,45 @@ function AdminOrdersFilter({
                     Belum ada bukti transfer
                   </span>
                 )}
-                {order.status === "UNPAID" && (
-                  <ConfirmOrderButton
-                    orderId={order.orderId}
-                    bookingId={order.bookingId}
+                {/* Quiet to loud, left to right (mockup A): detail, cancel,
+                    confirm. Every action stays one click from the row, and the
+                    dialog never has to be opened to reach one. */}
+                <div className="flex flex-wrap items-center gap-2">
+                  <OrderDetailTrigger
+                    order={order.detail}
+                    cancel={order.cancel}
                   />
-                )}
+                  {order.cancel && (
+                    <CancelOrderButton target={order.cancel} size="sm" />
+                  )}
+                  {order.status === "UNPAID" && (
+                    <ConfirmOrderButton
+                      orderId={order.orderId}
+                      bookingId={order.bookingId}
+                    />
+                  )}
+                  {/* The original ask for the cancelled tab, answered in the
+                      row: on a CANCEL order the admin's next move is the
+                      customer, not another status. Same link the dialog footer
+                      carries, so there is nothing to decide about which one
+                      renders. */}
+                  {order.status === "CANCEL" && order.detail.contact && (
+                    <Button
+                      variant="outline"
+                      size="xs"
+                      render={
+                        <a
+                          href={order.detail.contact.href}
+                          target="_blank"
+                          rel="noreferrer"
+                        />
+                      }
+                      nativeButton={false}
+                    >
+                      {order.detail.contact.label}
+                    </Button>
+                  )}
+                </div>
               </div>
             </li>
           ))}
