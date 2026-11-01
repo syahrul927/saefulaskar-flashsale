@@ -312,7 +312,9 @@ export const orderStatusHistory = createTable(
       .$defaultFn(() => /* @__PURE__ */ new Date())
       .notNull(),
   }),
-  (t) => [index("order_status_history_order_id_idx").on(t.orderId, t.createdAt)],
+  (t) => [
+    index("order_status_history_order_id_idx").on(t.orderId, t.createdAt),
+  ],
 );
 
 export const contactRelations = relations(contacts, ({ many }) => ({
