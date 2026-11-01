@@ -6,8 +6,9 @@ import type { StatusHistoryEntry } from "@/server/status-history";
 /**
  * One history row, in the shape `listStatusHistory` returns it. Defaults are a
  * real admin UNPAID → CONFIRMED transition (the case the dialog will most often
- * render) so each test overrides only what it is about — `id` is overridden by
- * nothing here because no test pins it, see the note in the implementation.
+ * render) so each test overrides only what it is about — including `id`, which
+ * the "skips the checkout creation row" cases override and the exact id-list
+ * assertions pin, since Task 12 uses it as the React key.
  */
 const entry = (o: Partial<StatusHistoryEntry> = {}): StatusHistoryEntry => ({
   id: "h1",

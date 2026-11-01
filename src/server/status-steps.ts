@@ -45,8 +45,10 @@ type StatusStep = {
   timestampLabel: string | null;
   /**
    * Who is credited, pre-positioned for display, or `null` for nobody:
-   * `"oleh Rina"` | `"oleh admin yang sudah dihapus"` |
-   * `"sinkronisasi Jubelio"`.
+   * `"oleh Rina"` | `"oleh admin"` (a live admin account with no name) |
+   * `"oleh admin yang sudah dihapus"` (the FK nulled the actor) |
+   * `"sinkronisasi Jubelio"`. A consumer must render whatever string arrives —
+   * this list is documentation, not a contract it may switch on.
    */
   actorLabel: string | null;
   note: string | null;
