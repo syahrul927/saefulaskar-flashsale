@@ -1,17 +1,22 @@
 import { describe, expect, it, vi } from "vitest";
 
+import { JubelioError } from "@/lib/jubelio";
+import type { LocalOrderSnapshot } from "@/server/daily-sync";
 import {
   createThrottledSync,
   runOrderSync,
   shouldRunSync,
   type SyncDeps,
 } from "@/server/order-sync";
-import type { LocalOrderSnapshot } from "@/server/daily-sync";
 
 /**
- * Order-status sync: shared by the cron route and the throttled "admin opened
- * the dashboard" hook, so both go through one implementation and one set of
- * guarantees (forward-only, failure-isolated, no duplicate writes).
+ * Order-status sync orchestration. There is one trigger now — the throttled pass
+ * an admin opening `/admin/orders` starts (spec §4.7) — so every guarantee lives
+ * in one implementation: forward-only, failure-isolated, no duplicate writes,
+ * bounded concurrency, and "only a definitive 404 cancels".
+ *
+ * The deps below are fakes, which is why the SQL the REAL deps emit is pinned in
+ * `tests/order-sync.filter.test.ts` instead.
  */
 const SHIPPED = {
   salesorder_id: 209,
@@ -86,12 +91,19 @@ describe("runOrderSync", () => {
         shipper: "SiCepat HALU",
       },
     ]);
-    expect(result).toEqual({ checked: 2, synced: 1, failed: 0 });
+    expect(result).toEqual({
+      checked: 2,
+      synced: 1,
+      cancelled: 0,
+      failed: 0,
+    });
   });
 
-  it("isolates a failed SO fetch: the rest of the run still lands", async () => {
-    // A 404 (SO deleted upstream) or a 15 s timeout must not abort the sync —
-    // that is how one bad row would silently freeze every order's status.
+  it("isolates a failed SO read: the rest of the run still lands", async () => {
+    // A timeout must not abort the sync — that is how one bad row would silently
+    // freeze every order's status. Note the message SAYS 404 and the order is
+    // still not cancelled: classification reads `JubelioError.status`, never
+    // message text, so a wrapped or merely logged 404 cannot cancel anything.
     const d = deps({
       fetchState: async (soId) => {
         if (soId === 209) throw new Error("Jubelio request failed: 404");
@@ -99,14 +111,27 @@ describe("runOrderSync", () => {
       },
     });
     const result = await runOrderSync(d);
-    expect(result).toEqual({ checked: 2, synced: 1, failed: 1 });
+    expect(result).toEqual({
+      checked: 2,
+      synced: 1,
+      cancelled: 0,
+      failed: 1,
+    });
     expect(d.applied).toEqual([{ orderId: "b", trackingNumber: "TN-1" }]);
   });
 
-  it("skips an SO whose body has no internal_status", async () => {
+  it("counts an unparseable 2xx as failed and leaves the order alone", async () => {
+    // Changed from `failed: 0`: spec §4.4 counts every `unknown` verdict, and a
+    // 2xx we could not read is one. We reached Jubelio and got no answer, which
+    // is neither proof the SO is gone nor a clean pass.
     const d = deps({ fetchState: async () => ({ salesorder_id: 1 }) });
     const result = await runOrderSync(d);
-    expect(result).toEqual({ checked: 2, synced: 0, failed: 0 });
+    expect(result).toEqual({
+      checked: 2,
+      synced: 0,
+      cancelled: 0,
+      failed: 2,
+    });
     expect(d.applied).toEqual([]);
   });
 
@@ -117,12 +142,22 @@ describe("runOrderSync", () => {
       },
     });
     const result = await runOrderSync(d);
-    expect(result).toEqual({ checked: 2, synced: 0, failed: 1 });
+    expect(result).toEqual({
+      checked: 2,
+      synced: 0,
+      cancelled: 0,
+      failed: 1,
+    });
   });
 
   it("reports zero work when nothing is linked yet", async () => {
     const d = deps({ listLinkedOrders: async () => [] });
-    expect(await runOrderSync(d)).toEqual({ checked: 0, synced: 0, failed: 0 });
+    expect(await runOrderSync(d)).toEqual({
+      checked: 0,
+      synced: 0,
+      cancelled: 0,
+      failed: 0,
+    });
   });
 
   it("bounds concurrency so a long backlog cannot stampede Jubelio", async () => {
@@ -147,6 +182,86 @@ describe("runOrderSync", () => {
     await runOrderSync(d);
     expect(peak).toBeLessThanOrEqual(4);
   });
+
+  it("classifies a definitive 404 as missing and cancels exactly that order", async () => {
+    const d = deps({
+      fetchState: async (soId) => {
+        if (soId === 209) {
+          throw new JubelioError(404, "Not Found", "SalesOrder not found");
+        }
+        return SHIPPED;
+      },
+    });
+    expect(await runOrderSync(d)).toEqual({
+      checked: 2,
+      synced: 1,
+      cancelled: 1,
+      failed: 0,
+    });
+    // Order b's SO reads SHIPPED, so it takes the resi-only patch: one cancel
+    // and one sync in the same pass, not two of either.
+    expect(d.applied).toEqual([
+      { orderId: "a", status: "CANCEL", cause: "SO #209 dihapus di Jubelio" },
+      {
+        orderId: "b",
+        trackingNumber: "001818714258",
+        shipper: "SiCepat HALU",
+      },
+    ]);
+  });
+
+  it("never cancels on a 403 — the sync reads with the system token, the SO was made with an admin's", async () => {
+    // Review Focus 1. A token that lost scope answers 403 for every SO at once;
+    // treating that as "gone" would cancel the whole book in one pass.
+    const d = deps({
+      fetchState: async () => {
+        throw new JubelioError(403, "Forbidden", "Forbidden");
+      },
+    });
+    expect(await runOrderSync(d)).toEqual({
+      checked: 2,
+      synced: 0,
+      cancelled: 0,
+      failed: 2,
+    });
+    expect(d.applied).toEqual([]);
+  });
+
+  it("never cancels on a timeout or a 5xx", async () => {
+    for (const e of [
+      new Error("TimeoutError: The operation timed out"),
+      new JubelioError(503, undefined, "Service Unavailable"),
+    ]) {
+      const d = deps({
+        fetchState: async () => {
+          throw e;
+        },
+      });
+      const result = await runOrderSync(d);
+      expect(result.cancelled).toBe(0);
+      expect(d.applied).toEqual([]);
+    }
+  });
+
+  it("does not count a cancel whose write failed", async () => {
+    // Both SOs are gone, so two cancel patches are planned and both writes
+    // throw. `cancelled` is what an operator reads as "orders we gave units
+    // back for", so a refused write must land in `failed` and never inflate it.
+    const d = deps({
+      fetchState: async () => {
+        throw new JubelioError(404, undefined, "gone");
+      },
+      apply: async () => {
+        throw new Error("db down");
+      },
+    });
+    expect(await runOrderSync(d)).toEqual({
+      checked: 2,
+      synced: 0,
+      cancelled: 0,
+      failed: 2,
+    });
+  });
 });
 
 describe("createThrottledSync", () => {
@@ -166,7 +281,9 @@ describe("createThrottledSync", () => {
   });
 
   it("collapses concurrent callers into one run", async () => {
-    let release: () => void = () => {};
+    // Reassigned by the promise below; the initial no-op keeps `release`
+    // definitely-assigned for the `release()` call at the end of the test.
+    let release: () => void = () => undefined;
     const gate = new Promise<void>((r) => (release = r));
     const d = deps({
       fetchState: async () => {
@@ -198,6 +315,11 @@ describe("createThrottledSync", () => {
     const sync = createThrottledSync(d, { intervalMs: 60_000, now: () => now });
     await expect(sync.maybe()).rejects.toThrow("db down");
     now = 60_000;
-    expect(await sync.maybe()).toEqual({ checked: 0, synced: 0, failed: 0 });
+    expect(await sync.maybe()).toEqual({
+      checked: 0,
+      synced: 0,
+      cancelled: 0,
+      failed: 0,
+    });
   });
 });

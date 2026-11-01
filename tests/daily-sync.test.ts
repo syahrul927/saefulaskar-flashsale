@@ -5,7 +5,7 @@ import {
   planSync,
   readSalesOrderState,
   type LocalOrderSnapshot,
-  type SalesOrderState,
+  type SoVerdict,
 } from "@/server/daily-sync";
 
 /**
@@ -84,13 +84,20 @@ describe("mapInternalStatus", () => {
   });
 
   it("returns null for states the local enum cannot express", () => {
-    // PENDING/PROCESSING mean "not paid yet" upstream; CANCELED has no local
-    // enum member, so both leave the order alone rather than inventing one.
+    // PENDING/PROCESSING mean "not paid yet" upstream, so neither may move a
+    // row; anything unrecognised leaves the order alone rather than guessing.
     expect(mapInternalStatus("PENDING")).toBeNull();
     expect(mapInternalStatus("PROCESSING")).toBeNull();
-    expect(mapInternalStatus("CANCELED")).toBeNull();
     expect(mapInternalStatus("UNKNOWN")).toBeNull();
     expect(mapInternalStatus("")).toBeNull();
+  });
+
+  it("maps upstream CANCELED onto the local CANCEL member", () => {
+    // Mapped, not nulled — but `planSync` turns it into a cancel PATCH rather
+    // than a ladder write, so the quota release and the history row still come
+    // from `cancelOrder` and never from a bare status update.
+    expect(mapInternalStatus("CANCELED")).toBe("CANCEL");
+    expect(mapInternalStatus("canceled")).toBe("CANCEL");
   });
 
   it("does not read the channel vocabulary as an internal status", () => {
@@ -119,6 +126,17 @@ describe("readSalesOrderState", () => {
     });
   });
 
+  it("reads a CANCELED header, shipper and all", () => {
+    // The shipper surviving the parse is what makes "a cancel patch carries no
+    // resi" worth asserting separately: the data is right there in the body, so
+    // dropping it is a choice `planSync` makes, not something the read hides.
+    expect(readSalesOrderState(CANCELED_SO)).toEqual({
+      internalStatus: "CANCELED",
+      trackingNumber: null,
+      shipper: "Grab Same Day",
+    });
+  });
+
   it("unwraps a `{ data: … }` envelope", () => {
     expect(readSalesOrderState({ data: COMPLETED_SO })?.internalStatus).toBe(
       "COMPLETED",
@@ -134,14 +152,28 @@ describe("readSalesOrderState", () => {
 });
 
 describe("planSync", () => {
-  const states = new Map<number, SalesOrderState>([
-    [209, { internalStatus: "SHIPPED", trackingNumber: "001818714258", shipper: "SiCepat HALU" }],
-    [85, { internalStatus: "COMPLETED", trackingNumber: "001830032579", shipper: "SiCepat REG" }],
-    [192297, { internalStatus: "PAID", trackingNumber: null, shipper: null }],
-    [86, { internalStatus: "CANCELED", trackingNumber: null, shipper: "Grab Same Day" }],
+  /** The `state` verdict, spelled out once — the SO ids are the live probe's. */
+  const soState = (
+    internalStatus: string,
+    trackingNumber: string | null,
+    shipper: string | null,
+  ): SoVerdict => ({
+    kind: "state",
+    state: { internalStatus, trackingNumber, shipper },
+  });
+
+  const verdicts = new Map<number, SoVerdict>([
+    [209, soState("SHIPPED", "001818714258", "SiCepat HALU")],
+    [85, soState("COMPLETED", "001830032579", "SiCepat REG")],
+    [192297, soState("PAID", null, null)],
+    [86, soState("CANCELED", null, "Grab Same Day")],
   ]);
 
-  const local = (...rows: LocalOrderSnapshot[]) => planSync(rows, states);
+  const local = (...rows: LocalOrderSnapshot[]) => planSync(rows, verdicts);
+
+  /** An ad-hoc map for the cases that are about the VERDICT, not the SO body. */
+  const verdictMap = (entries: [number, SoVerdict][]) =>
+    new Map<number, SoVerdict>(entries);
 
   it("keeps a shipped SO at CONFIRMED but still delivers the resi", () => {
     // The whole point of skipping SHIPPED (spec §4.7): the status ladder stays
@@ -155,7 +187,10 @@ describe("planSync", () => {
   it("never writes SHIPPED, from any upstream status", () => {
     for (const status of ["UNPAID", "CONFIRMED"] as const) {
       for (const soId of [209, 85, 192297, 86]) {
-        for (const patch of planSync([{ id: "a", jubelioSoId: soId, status }], states)) {
+        for (const patch of planSync(
+          [{ id: "a", jubelioSoId: soId, status }],
+          verdicts,
+        )) {
           // Widened on purpose: `SyncStatus` no longer admits "SHIPPED", so the
           // assertion is about the runtime value, not the type.
           expect(patch.status as string | undefined).not.toBe("SHIPPED");
@@ -176,9 +211,81 @@ describe("planSync", () => {
     ).toEqual([{ orderId: "a", status: "COMPLETED" }]);
   });
 
-  it("never regresses: a PAID or CANCELED SO cannot pull SHIPPED back", () => {
-    expect(local({ id: "a", jubelioSoId: 192297, status: "SHIPPED" })).toEqual([]);
-    expect(local({ id: "a", jubelioSoId: 86, status: "CONFIRMED" })).toEqual([]);
+  it("never regresses: a PAID SO cannot pull SHIPPED back", () => {
+    expect(
+      local({ id: "a", jubelioSoId: 192297, status: "SHIPPED" }),
+    ).toEqual([]);
+    // The CANCELED half of this test moved: soId 86 no longer leaves a
+    // CONFIRMED row alone, it cancels it (asserted below), because an SO that
+    // upstream marked cancelled is a cancellation we must not sit on.
+  });
+
+  it("cancels on a definitive 404 and nothing else", () => {
+    const row = { id: "a", jubelioSoId: 86, status: "CONFIRMED" };
+    expect(planSync([row], verdictMap([[86, { kind: "missing" }]]))).toEqual([
+      {
+        orderId: "a",
+        status: "CANCEL",
+        cause: "SO #86 dihapus di Jubelio",
+      },
+    ]);
+    // Review Focus 1: an unreachable upstream is not a deleted order. A 403 is
+    // the live one — the sync reads with the system token while the SO was made
+    // with an admin's, so a scope change surfaces exactly like a missing SO
+    // would if this line were `catch → cancel`.
+    expect(
+      planSync([row], verdictMap([[86, { kind: "unknown", detail: "403 Forbidden" }]])),
+    ).toEqual([]);
+  });
+
+  it("emits a cancel patch for an upstream CANCELED SO, with a cause and no resi", () => {
+    // soId 86's fixture carries `shipper: "Grab Same Day"` — a cancel must not
+    // deliver shipping detail onto the order it is cancelling (spec §4.3), so
+    // `toEqual` on exactly three keys is the assertion that pins it.
+    expect(local({ id: "a", jubelioSoId: 86, status: "CONFIRMED" })).toEqual([
+      {
+        orderId: "a",
+        status: "CANCEL",
+        cause: "Jubelio menandai SO #86 dibatalkan",
+      },
+    ]);
+  });
+
+  it("cancels a legacy SHIPPED row on a 404, where the admin door would refuse it", () => {
+    // Deliberate asymmetry, pinned here because nothing else would: `SHIPPED` is
+    // not an end state (`END_STATUSES` is COMPLETED + CANCEL) and is not
+    // cancellable by hand either (`isCancellable` is UNPAID + CONFIRMED, so
+    // Task 9's route answers 409 for this row). The sync is the only door that
+    // cleans legacy rows up, and it must not stop at CONFIRMED.
+    expect(planSync([{ id: "a", jubelioSoId: 86, status: "SHIPPED" }], verdictMap([[86, { kind: "missing" }]]))).toEqual([
+      {
+        orderId: "a",
+        status: "CANCEL",
+        cause: "SO #86 dihapus di Jubelio",
+      },
+    ]);
+  });
+
+  it("never pulls an end-state row forward, whatever the SO says", () => {
+    // soId 192297's fixture is `internalStatus: "PAID"` → CONFIRMED locally,
+    // i.e. forward from CANCEL on the ladder, and `rank("CANCEL")` is -1. Review
+    // Focus 2: without `isEndState` short-circuiting first, a stale PAID read
+    // would resurrect a cancelled order and leave its quota unreturned.
+    expect(local({ id: "a", jubelioSoId: 192297, status: "CANCEL" })).toEqual([]);
+    expect(
+      local({ id: "a", jubelioSoId: 192297, status: "COMPLETED" }),
+    ).toEqual([]);
+  });
+
+  it("never cancels a COMPLETED row on a 404", () => {
+    // The money is in and the order is done; a deleted SO upstream is now just
+    // bookkeeping, not a reason to release quota the customer already used.
+    expect(
+      planSync(
+        [{ id: "a", jubelioSoId: 86, status: "COMPLETED" }],
+        verdictMap([[86, { kind: "missing" }]]),
+      ),
+    ).toEqual([]);
   });
 
   it("emits no patch when nothing changed", () => {

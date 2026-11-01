@@ -10,17 +10,27 @@
  * true: list rows carry no `status` key at all (0 of 200 probed), the real
  * field is `internal_status` with an UPPERCASE vocabulary, and the list cannot
  * contain our orders anyway (184 072 rows, 200/page, page 1 is 2022
- * marketplace traffic, no usable sort/filter). The cron therefore reported
- * `synced: 0` every night since it was written.
+ * marketplace traffic, no usable sort/filter). It therefore reported
+ * `synced: 0` on every run since it was written — and every run back then was a
+ * nightly cron. There is no cron now (spec §4.7): one throttled pass, started
+ * when an admin opens `/admin/orders`, is the only thing that moves a status.
  */
+
+import { isEndState } from "./order-status";
 
 /**
  * What the sync may write. `SHIPPED` is deliberately absent: the customer needs
  * one post-payment state, not two (spec §4.7). The value still exists in the
  * `order_status` enum and in old rows — this says nothing can WRITE it, not that
  * it never happened.
+ *
+ * `CANCEL` is the newest member and the only one that never travels the ladder:
+ * `planSync` turns a definitive 404 or an upstream `CANCELED` into a cancel
+ * patch and returns before ranking anything, and the caller routes that patch to
+ * `cancelOrder` — the one door that releases the session quota and writes the
+ * history row with the status.
  */
-export type SyncStatus = "CONFIRMED" | "COMPLETED";
+export type SyncStatus = "CONFIRMED" | "COMPLETED" | "CANCEL";
 
 /** A local order narrowed to the fields the sync needs. */
 export type LocalOrderSnapshot = {
@@ -38,12 +48,41 @@ export type SalesOrderState = {
   shipper: string | null;
 };
 
-/** Empty unless something actually changed — the caller skips it otherwise. */
+/**
+ * What one SO fetch PROVED. Three answers, and collapsing any two of them is
+ * the bug this type exists to prevent:
+ *
+ * - `state` — we read the SO and parsed its header.
+ * - `missing` — Jubelio answered a DEFINITIVE 404 for an id we hold. Our own
+ *   checkout created that SO, so it is gone upstream: somebody deleted it, and
+ *   the customer's units are still reserved against a session that will never
+ *   pay. This is the only verdict that cancels (spec §4.3).
+ * - `unknown` — everything else that can go wrong: timeout, 401/403 from a token
+ *   that lost scope, a 5xx, a 2xx we could not parse. All of these leave the
+ *   order exactly as it was, because an unreachable upstream must never look
+ *   like a deleted order (Review Focus 1).
+ *
+ * `detail` is for the server log, not for the admin — the sync is not surfaced
+ * anywhere (spec §4.4).
+ */
+export type SoVerdict =
+  | { kind: "state"; state: SalesOrderState }
+  | { kind: "missing" }
+  | { kind: "unknown"; detail: string };
+
+/**
+ * Empty unless something actually changed — the caller skips it otherwise.
+ *
+ * `cause` rides along on a cancel patch only: the human-readable reason that
+ * becomes the note in `order_status_history`, composed here because only the
+ * pure core knows both the SO id and which verdict fired.
+ */
 export type SyncPatch = {
   orderId: string;
   status?: SyncStatus;
   trackingNumber?: string;
   shipper?: string;
+  cause?: string;
 };
 
 /**
@@ -60,6 +99,11 @@ const STATUS_RANK: Record<string, number> = {
   COMPLETED: 3,
 };
 
+// No `CANCEL` rung, deliberately. `rank()` returns -1 for it, which is harmless
+// once `planSync` short-circuits on `isEndState` before ranking anything — and
+// putting a cancel on the ladder would make a side exit look like a rung an
+// `UNPAID` row could "advance" to on a stale read.
+
 function rank(status: string): number {
   // Unknown local value ranks below everything, so an unexpected status can
   // only be corrected forward, never sideways.
@@ -71,8 +115,8 @@ function rank(status: string): number {
  *
  * Observed values (probe 2026-10-29): `PENDING, PAID, PROCESSING, SHIPPED,
  * COMPLETED, CANCELED`. Everything else returns `null` and leaves the order
- * alone — notably `CANCELED`, which has no local member, and
- * `PENDING`/`PROCESSING`, which mean "not paid upstream yet". `channel_status`
+ * alone — notably `PENDING`/`PROCESSING`, which mean "not paid upstream yet".
+ * `channel_status`
  * labels (`delivered`, `remitted`, `Ready to Ship`) are a DIFFERENT vocabulary
  * and must not be fed in here.
  *
@@ -89,6 +133,12 @@ export function mapInternalStatus(raw: string): SyncStatus | null {
       return "CONFIRMED";
     case "COMPLETED":
       return "COMPLETED";
+    // Maps onto the local member, but the LADDER never writes it: `planSync`
+    // turns `CANCEL` into a cancel patch with a cause and returns before
+    // ranking or backfilling, so the transition still goes through
+    // `cancelOrder` — quota release and history row included.
+    case "CANCELED":
+      return "CANCEL";
     default:
       return null;
   }
@@ -129,30 +179,61 @@ export function readSalesOrderState(raw: unknown): SalesOrderState | null {
  * Compute the patches to apply for one sync pass.
  *
  * Rules, each one pinned by a test:
- * - an SO we have no state for (fetch failed, SO absent) leaves the order alone;
- * - an SO whose `internal_status` we cannot express leaves the order alone —
- *   including `CANCELED`, so shipping detail is never backfilled onto it;
- * - status only moves forward along `STATUS_RANK`;
+ * - an order already in an end state gets nothing, whatever the SO says — the
+ *   query that feeds this list filters end states out for cost, and this line is
+ *   what keeps a race from rewriting a finished order (Review Focus 2);
+ * - no verdict, or an `unknown` one, leaves the order alone (Review Focus 1);
+ * - a `missing` verdict cancels it, and so does an upstream `CANCELED`;
+ * - a cancel patch carries a `cause` and no resi — shipping detail is never
+ *   backfilled onto an order we are cancelling (spec §4.3);
+ * - otherwise status only moves forward along `STATUS_RANK`;
  * - `tracking_number` / `shipper` are backfilled when they differ from what we
  *   already stored, which is how a resi reaches the customer after the fact;
  * - an order with nothing to change produces no patch at all.
  */
 export function planSync(
   localOrders: LocalOrderSnapshot[],
-  statesBySoId: Map<number, SalesOrderState>,
+  verdictsBySoId: ReadonlyMap<number, SoVerdict>,
 ): SyncPatch[] {
   const patches: SyncPatch[] = [];
 
   for (const order of localOrders) {
     if (order.jubelioSoId == null) continue;
-    const state = statesBySoId.get(order.jubelioSoId);
-    if (!state) continue;
+    // Second half of Review Focus 2: `rank()` returns -1 for `CANCEL`, so
+    // without this guard a stale `PAID` read would rewrite a cancelled order to
+    // CONFIRMED and hand back nothing to nobody.
+    if (isEndState(order.status)) continue;
 
-    const next = mapInternalStatus(state.internalStatus);
+    const verdict = verdictsBySoId.get(order.jubelioSoId);
+    if (!verdict || verdict.kind === "unknown") continue;
+
+    // The two cancel paths are one patch shape: a definitive 404 and an
+    // upstream `CANCELED` differ only in their cause, and both are exempt from
+    // the ladder (spec §4.4 — the ladder exists to stop regressions *along* it,
+    // and a cancel is not a rung).
+    if (verdict.kind === "missing") {
+      patches.push({
+        orderId: order.id,
+        status: "CANCEL",
+        cause: `SO #${order.jubelioSoId} dihapus di Jubelio`,
+      });
+      continue;
+    }
+
+    const next = mapInternalStatus(verdict.state.internalStatus);
     if (!next) continue;
+    if (next === "CANCEL") {
+      patches.push({
+        orderId: order.id,
+        status: "CANCEL",
+        cause: `Jubelio menandai SO #${order.jubelioSoId} dibatalkan`,
+      });
+      continue;
+    }
 
     const patch: SyncPatch = { orderId: order.id };
     if (rank(next) > rank(order.status)) patch.status = next;
+    const state = verdict.state;
     if (
       state.trackingNumber !== null &&
       state.trackingNumber !== (order.trackingNumber ?? null)

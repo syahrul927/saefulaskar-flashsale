@@ -1,37 +1,49 @@
-import { eq, isNotNull } from "drizzle-orm";
+import { and, eq, isNotNull, notInArray } from "drizzle-orm";
 
 import { env } from "@/env";
+import { JubelioError } from "@/lib/jubelio";
+import { cancelOrder } from "@/server/cancel-order";
 import {
   planSync,
   readSalesOrderState,
   type LocalOrderSnapshot,
-  type SalesOrderState,
+  type SoVerdict,
   type SyncPatch,
 } from "@/server/daily-sync";
 import { db } from "@/server/db";
 import { orders } from "@/server/db/schema";
 import { withSystemClient } from "@/server/jubelio-token";
+import { END_STATUSES } from "@/server/order-status";
+import { recordStatusChange } from "@/server/status-history";
 
 /**
  * Order-status sync orchestration (spec §4.6).
  *
- * One implementation, two triggers: the Vercel cron (`POST
- * /api/cron/daily-sync`, midnight UTC), an external hourly pinger hitting the
- * same route, and a throttled run when an admin opens the orders page — so
- * statuses are fresh at the moment someone looks, without a page render ever
- * paying for the full upstream sweep.
+ * One implementation, one trigger: a throttled pass when an admin opens
+ * `/admin/orders`, kept alive past the response by `after()` so a slow sweep
+ * still lands its writes (`src/app/admin/orders/page.tsx:53-62`). There is no
+ * cron and no external pinger — an admin opening that page is the only thing
+ * that moves a status (spec §4.7).
  *
  * The I/O is injected (`SyncDeps`) because the interesting guarantees —
- * forward-only, failure-isolated, no duplicate writes, bounded concurrency —
- * are pure and belong in tests, not in a cron nobody can run locally.
+ * forward-only, failure-isolated, no duplicate writes, bounded concurrency, and
+ * "only a definitive 404 cancels" — are pure and belong in tests, not in a page
+ * load nobody can force on demand locally.
  */
 
 export type SyncRunResult = {
   /** Local orders that have a linked Jubelio SO. */
   checked: number;
-  /** Patches written. */
+  /** Non-cancel patches written. */
   synced: number;
-  /** SO fetches or patch writes that threw. */
+  /**
+   * Orders this pass moved to `CANCEL` — disjoint from `synced`, since a cancel
+   * is a different kind of write (quota released, history row written). Not
+   * rendered anywhere: the admin page discards the result (spec §4.4), so this
+   * is for the log line beside it.
+   */
+  cancelled: number;
+  /** SO reads we could not decide anything from, plus patch writes that threw. */
   failed: number;
 };
 
@@ -70,14 +82,20 @@ export function shouldRunSync(opts: {
 /**
  * One sync pass: read every linked SO by id, plan the patches, write them.
  *
- * A failed SO fetch is counted and skipped, never rethrown — one deleted or
- * timing-out sales order must not freeze every other order's status, which is
- * what an `await` in a plain `for` loop would do. Same for a failed write.
+ * A failed SO read is classified, counted and skipped, never rethrown — one
+ * deleted or timing-out sales order must not freeze every other order's status,
+ * which is what an `await` in a plain `for` loop would do. Same for a failed
+ * write.
+ *
+ * The classification is the part that decides whether an order survives: only a
+ * DEFINITIVE 404 becomes `missing`, and only `missing` cancels. Timeouts,
+ * 401/403, 5xx and unparseable bodies are all `unknown` and leave the order
+ * exactly as it was (Review Focus 1).
  */
 export async function runOrderSync(deps: SyncDeps): Promise<SyncRunResult> {
   const localOrders = await deps.listLinkedOrders();
   const limit = Math.max(1, deps.concurrency ?? DEFAULT_CONCURRENCY);
-  const states = new Map<number, SalesOrderState>();
+  const verdicts = new Map<number, SoVerdict>();
   let failed = 0;
 
   for (let i = 0; i < localOrders.length; i += limit) {
@@ -86,42 +104,77 @@ export async function runOrderSync(deps: SyncDeps): Promise<SyncRunResult> {
       .map((o) => o.jubelioSoId)
       .filter((v): v is number => v !== null);
     const results = await Promise.all(
-      ids.map(async (salesorderId) => {
-        try {
-          return {
-            salesorderId,
-            fetched: true,
-            state: readSalesOrderState(await deps.fetchState(salesorderId)),
-          };
-        } catch (e) {
-          console.error(
-            `order-sync: SO ${salesorderId} fetch failed — order left untouched`,
-            e,
-          );
-          return { salesorderId, fetched: false, state: null };
-        }
-      }),
+      ids.map(
+        async (
+          salesorderId,
+        ): Promise<{ salesorderId: number; verdict: SoVerdict }> => {
+          try {
+            const state = readSalesOrderState(
+              await deps.fetchState(salesorderId),
+            );
+            return {
+              salesorderId,
+              // A 2xx we could not parse is `unknown`, never `missing`: we
+              // reached Jubelio and could not read the answer, which is not
+              // proof the SO is gone.
+              verdict: state
+                ? { kind: "state", state }
+                : { kind: "unknown", detail: "unparseable body" },
+            };
+          } catch (e) {
+            if (e instanceof JubelioError && e.status === 404) {
+              // The line an admin reads when an order silently cancels, written
+              // before any write happens and naming the SO that disappeared.
+              console.warn(
+                `order-sync: SO ${salesorderId} is gone upstream — its order will be cancelled`,
+              );
+              return { salesorderId, verdict: { kind: "missing" } };
+            }
+            console.error(
+              `order-sync: SO ${salesorderId} unreadable — order left untouched`,
+              e,
+            );
+            return {
+              salesorderId,
+              verdict: { kind: "unknown", detail: describeError(e) },
+            };
+          }
+        },
+      ),
     );
-    for (const { salesorderId, fetched, state } of results) {
-      if (state) states.set(salesorderId, state);
-      // An unparseable body (no `internal_status`) is not a failure — it is a
-      // row we deliberately leave alone, and counting it would hide real ones.
-      else if (!fetched) failed += 1;
+    for (const { salesorderId, verdict } of results) {
+      verdicts.set(salesorderId, verdict);
+      // Spec §4.4 counts every `unknown` as a failure — it is a row this pass
+      // could decide nothing about, and hiding it would hide the token or the
+      // network problem behind it. `missing` is a decision, not a failure.
+      if (verdict.kind === "unknown") failed += 1;
     }
   }
 
   let synced = 0;
-  for (const patch of planSync(localOrders, states)) {
+  let cancelled = 0;
+  for (const patch of planSync(localOrders, verdicts)) {
     try {
       await deps.apply(patch);
-      synced += 1;
+      if (patch.status === "CANCEL") cancelled += 1;
+      else synced += 1;
     } catch (e) {
       failed += 1;
       console.error(`order-sync: patch for order ${patch.orderId} failed`, e);
     }
   }
 
-  return { checked: localOrders.length, synced, failed };
+  return { checked: localOrders.length, synced, cancelled, failed };
+}
+
+/**
+ * The log-friendly half of an `unknown` verdict. Deliberately thin: the stack is
+ * already on its own `console.error`, and `detail` only has to say what KIND of
+ * failure it was so a log scan can tell a dead token from a dead network.
+ */
+function describeError(e: unknown): string {
+  if (e instanceof JubelioError) return `${e.status} ${e.message}`;
+  return e instanceof Error ? e.name : "error";
 }
 
 /**
@@ -181,7 +234,17 @@ export function createDbSyncDeps(): SyncDeps {
           shipper: orders.shipper,
         })
         .from(orders)
-        .where(isNotNull(orders.jubelioSoId));
+        // End states are excluded, not merely skipped later: a COMPLETED or
+        // CANCEL row would otherwise cost an upstream read on every pass,
+        // forever, to produce a patch `planSync` refuses to emit (spec §4.4).
+        // This is the query behind "only select the orders that are not complete
+        // or cancelled".
+        .where(
+          and(
+            isNotNull(orders.jubelioSoId),
+            notInArray(orders.status, [...END_STATUSES]),
+          ),
+        );
     },
     async fetchState(salesorderId) {
       // System account, not the viewing admin's token: the cron has no session,
@@ -190,14 +253,64 @@ export function createDbSyncDeps(): SyncDeps {
       return withSystemClient((client) => client.getSalesOrder(salesorderId));
     },
     async apply(patch) {
-      await db
-        .update(orders)
-        .set({
-          ...(patch.status ? { status: patch.status } : {}),
-          ...(patch.trackingNumber ? { trackingNumber: patch.trackingNumber } : {}),
-          ...(patch.shipper ? { shipper: patch.shipper } : {}),
-        })
-        .where(eq(orders.id, patch.orderId));
+      // A `const` copy: narrowing a parameter's property does not survive into
+      // the transaction callback below, and the callback is where it is needed.
+      const status = patch.status;
+      if (status === "CANCEL") {
+        // One service owns the transition (spec §4.2): the guarded flip, the
+        // clamped quota release and the history row all live in `cancelOrder`,
+        // so the sync must not write a CANCEL itself. `note` carries the cause
+        // the planner composed — do NOT append the "unit kembali ke kuota sesi"
+        // sentence here, `composeCancelNote` adds it inside the service and a
+        // second copy would show up twice in the stepper.
+        const result = await cancelOrder(db, {
+          orderId: patch.orderId,
+          source: "sync",
+          note: patch.cause ?? null,
+        });
+        if (!result.cancelled) {
+          console.warn(
+            `order-sync: cancel for ${patch.orderId} skipped (${result.reason})`,
+          );
+        }
+        return;
+      }
+
+      await db.transaction(async (tx) => {
+        const [before] = await tx
+          .select({ status: orders.status })
+          .from(orders)
+          .where(eq(orders.id, patch.orderId));
+        const flipped = await tx
+          .update(orders)
+          .set({
+            ...(status ? { status } : {}),
+            ...(patch.trackingNumber
+              ? { trackingNumber: patch.trackingNumber }
+              : {}),
+            ...(patch.shipper ? { shipper: patch.shipper } : {}),
+          })
+          // Guarded, where this used to be a bare update: a sync racing an admin
+          // cancel could otherwise overwrite CANCEL with CONFIRMED, and
+          // `flipped` being empty is how the loser of that race finds out.
+          .where(
+            and(
+              eq(orders.id, patch.orderId),
+              notInArray(orders.status, [...END_STATUSES]),
+            ),
+          )
+          .returning({ id: orders.id });
+        // A resi-only pass changes no status and writes no history (spec §4.5) —
+        // a shipping label arriving late is not a transition.
+        if (status && before && flipped.length === 1) {
+          await recordStatusChange(tx, {
+            orderId: patch.orderId,
+            fromStatus: before.status,
+            toStatus: status,
+            source: "sync",
+          });
+        }
+      });
     },
   };
 }
