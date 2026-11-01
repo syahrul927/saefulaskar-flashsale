@@ -211,10 +211,13 @@ type ContactCandidate = {
  * normalises to `null`, so step 1 declines the order and the mobile the buyer
  * typed at checkout is still consulted at step 3.
  *
- * The name follows the phone — `contacts.contact_name` when the winning contact
- * row carries one, else the order's own `recipient_name`, else `null` — because
- * greeting a buyer by the name on a company's CRM record is wrong, and a blank
- * name is not a name.
+ * The name follows the phone: `contacts.contact_name` when the winning step
+ * reached a contact row, else the order's own `recipient_name` when the step
+ * resolved through the order, else `null`. Taking both from the same row is the
+ * rule — a name from one record and a number from another can describe two
+ * different parties, and the message the admin sends then opens with somebody
+ * the recipient has never heard of. A blank name is not a name, so it falls
+ * through too.
  *
  * Both joins are on unique keys (`orders.contact_id → contacts.id`,
  * `contacts.email` is UNIQUE), so a step returns at most one row per order; the
