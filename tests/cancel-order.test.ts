@@ -149,7 +149,62 @@ describe("cancelOrder", () => {
       releasedUnits: 3,
     });
     expect(calls.filter((c) => c.kind === "update-product")).toHaveLength(1); // summed, one UPDATE
-    expect(calls.filter((c) => c.kind === "insert-history")).toHaveLength(1);
+    const history = calls.filter((c) => c.kind === "insert-history");
+    expect(history).toHaveLength(1);
+    // The admin door's row is the ONLY record of who cancelled this order
+    // (spec §4.5), so `source` and `actorUserId` must be asserted at the INSERT,
+    // not at the call — a hard-coded `actorUserId: null` (or `source: "sync"`)
+    // would still cancel the order correctly and leave the stepper unable to
+    // tell "oleh Rina" from a Jubelio sync, or an admin cancel from a sync one.
+    expect(history[0]?.arg).toEqual({
+      table: orderStatusHistory,
+      row: {
+        orderId: "o1",
+        fromStatus: "UNPAID",
+        toStatus: "CANCEL",
+        source: "admin",
+        actorUserId: "u1",
+        note: "3 unit kembali ke kuota sesi",
+      },
+    });
+  });
+
+  it("releases every planned line, so two different products cost two UPDATEs", async () => {
+    // Every other case here carries one distinct product, so a loop that
+    // stopped at `lines[0]` would cancel fine and silently keep the second
+    // product's units held. Two same-product lines plus a third product pins
+    // both halves at once: summed to one UPDATE, and one UPDATE PER product.
+    const { db, calls } = makeDb({
+      order: { id: "o1", status: "UNPAID" },
+      items: [
+        { sessionProductId: "sp1", qty: 2 },
+        { sessionProductId: "sp1", qty: 1 },
+        { sessionProductId: "sp2", qty: 4 },
+      ],
+    });
+    const res = await cancelOrder(db, { orderId: "o1", source: "sync" });
+    expect(res).toEqual({
+      cancelled: true,
+      fromStatus: "UNPAID",
+      releasedUnits: 7,
+    });
+    const releases = calls.filter((c) => c.kind === "update-product");
+    expect(releases).toHaveLength(2);
+    expect(
+      releases.map((c) => {
+        const { value, cond } = c.arg as {
+          value: { claimed: SQL };
+          cond: SQL;
+        };
+        return {
+          product: dialect.sqlToQuery(cond).params,
+          units: dialect.sqlToQuery(value.claimed).params,
+        };
+      }),
+    ).toEqual([
+      { product: ["sp1"], units: [3] },
+      { product: ["sp2"], units: [4] },
+    ]);
   });
 
   it("clamps the release at zero with GREATEST, never a negative claimed", async () => {
@@ -168,6 +223,11 @@ describe("cancelOrder", () => {
     const q = dialect.sqlToQuery(captured.value.claimed);
     expect(q.sql).toContain("GREATEST(");
     expect(q.sql).toContain("- ");
+    // Direction, not just shape: `GREATEST($1 - "claimed", 0)` satisfies every
+    // assertion above and releases quota DOWNWARD, taking stock from every
+    // other customer of the session. The emitted SQL spells the column
+    // `"…"."claimed" - $1`, so this pins which side the subtraction is on.
+    expect(q.sql).toContain('"claimed" - ');
     expect(q.params).toEqual([9]); // the 0 floor is literal SQL, not a parameter
   });
 
