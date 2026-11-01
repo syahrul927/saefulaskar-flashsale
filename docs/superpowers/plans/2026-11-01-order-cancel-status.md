@@ -1495,6 +1495,15 @@ Expected: PASS (no new tests; every decision this task renders was pinned in Tas
 
 - [ ] **Step 6: Manual pass, then commit**
 
+**Apply `drizzle/0009_past_tana_nile.sql` before running anything against a database.** From Task
+5 onward the checkout INSERT and the confirm UPDATE share a transaction with the history row, so on
+a schema without `order_status_history` checkout fails with 409 "Checkout gagal, silakan coba lagi"
+and — the worse half — confirm creates the sales order in Jubelio and *then* 500s, leaving a paid SO
+with no local link (the 2026-10-28 failure class) that a retry would double. The migration is not
+optional at this point in the plan; it is a release gate. It also begins with
+`ALTER TYPE "public"."order_status" ADD VALUE 'CANCEL'`, which on older PostgreSQL versions cannot
+run inside a transaction block — apply it as its own step, not wrapped in `BEGIN`.
+
 `yarn dev` → `/admin/orders`: open `Lihat detail` on an order created before this feature (stepper shows creation + the muted "Tercatat sebelum riwayat status aktif" step, no invented times); on a fresh order (creation row from checkout present); on a `CANCEL` row (red last step, the note with the released units, `Hubungi pelanggan`); `?status=CANCEL` lands on the new tab; an order with no phone shows the hint instead of a button. Then run Task 11 Step 5's list.
 
 ```bash
