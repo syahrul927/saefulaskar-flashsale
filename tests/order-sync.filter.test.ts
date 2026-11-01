@@ -154,11 +154,37 @@ describe("createDbSyncDeps().apply", () => {
     expect(state.history).toEqual([]);
   });
 
+  it("reports a refused cancel as not landed, so the pass cannot over-count it", async () => {
+    // An admin cancelled the row between our read and this call. The service
+    // says no, `apply` says `landed: false`, and `runOrderSync` files it under
+    // `skipped` — the counter an operator reads as "orders whose units went
+    // back" stays honest. Not thrown: a refusal is a race, not an outage.
+    vi.mocked(cancelOrder).mockResolvedValue({
+      cancelled: false,
+      reason: "already-ended",
+    });
+
+    const outcome = await createDbSyncDeps().apply({
+      orderId: "o1",
+      status: "CANCEL",
+      cause: "SO #86 dihapus di Jubelio",
+    });
+
+    expect(outcome).toEqual({ landed: false });
+    expect(state.updates).toEqual([]);
+    expect(state.history).toEqual([]);
+  });
+
   it("writes a status patch under the end-state guard, audit row in the same transaction", async () => {
     state.selectRows = [[{ status: "UNPAID" }]];
     state.returning = [{ id: "o1" }];
 
-    await createDbSyncDeps().apply({ orderId: "o1", status: "CONFIRMED" });
+    const outcome = await createDbSyncDeps().apply({
+      orderId: "o1",
+      status: "CONFIRMED",
+    });
+
+    expect(outcome).toEqual({ landed: true });
 
     expect(state.updates).toEqual([{ status: "CONFIRMED" }]);
     expect(state.updateConditions).toHaveLength(1);
@@ -185,8 +211,33 @@ describe("createDbSyncDeps().apply", () => {
     state.selectRows = [[{ status: "UNPAID" }]];
     state.returning = [];
 
-    await createDbSyncDeps().apply({ orderId: "o1", status: "CONFIRMED" });
+    const outcome = await createDbSyncDeps().apply({
+      orderId: "o1",
+      status: "CONFIRMED",
+    });
 
+    expect(outcome).toEqual({ landed: false });
+    expect(state.history).toEqual([]);
+  });
+
+  it("records no audit row for a status the row already held", async () => {
+    // The case the end-state guard cannot catch. Two instances both read the row
+    // as UNPAID, both plan CONFIRMED; the first write lands, then the second
+    // pre-reads CONFIRMED and its UPDATE still matches, because CONFIRMED is not
+    // an end state, so `flipped` comes back with a row again. Without the
+    // `before.status !== status` term the stepper gains a CONFIRMED → CONFIRMED
+    // step, which spec §4.5 says describes no transition. The write is still
+    // reported as landed: it did touch the row, and `updated_at` moves.
+    state.selectRows = [[{ status: "CONFIRMED" }]];
+    state.returning = [{ id: "o1" }];
+
+    const outcome = await createDbSyncDeps().apply({
+      orderId: "o1",
+      status: "CONFIRMED",
+    });
+
+    expect(outcome).toEqual({ landed: true });
+    expect(state.updates).toEqual([{ status: "CONFIRMED" }]);
     expect(state.history).toEqual([]);
   });
 

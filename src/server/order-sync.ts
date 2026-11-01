@@ -34,23 +34,37 @@ import { recordStatusChange } from "@/server/status-history";
 export type SyncRunResult = {
   /** Local orders that have a linked Jubelio SO. */
   checked: number;
-  /** Non-cancel patches written. */
+  /** Status/resi patches that landed a write. */
   synced: number;
   /**
    * Orders this pass moved to `CANCEL` — disjoint from `synced`, since a cancel
-   * is a different kind of write (quota released, history row written). Not
-   * rendered anywhere: the admin page discards the result (spec §4.4), so this
-   * is for the log line beside it.
+   * is a different kind of write (quota released, history row written). Counts
+   * only the cancels the service ACCEPTED; a refused one is in `skipped`, so an
+   * operator reading this number knows that many orders gave their units back.
    */
   cancelled: number;
+  /**
+   * Patches that changed nothing because the row had already moved on: the
+   * cancel service refused it (an admin cancelled between our read and our
+   * write) or the guarded UPDATE matched no row. A race, not a failure — no
+   * retry would help, and filing it under `failed` would read as an outage.
+   */
+  skipped: number;
   /** SO reads we could not decide anything from, plus patch writes that threw. */
   failed: number;
 };
 
+/**
+ * What `apply` did with one patch, so the counters say what their docs claim.
+ * Reporting is optional: a dep that returns nothing counts as landed, which is
+ * what a test fake that only records the patch wants.
+ */
+export type SyncApplyOutcome = { landed: boolean };
+
 export type SyncDeps = {
   listLinkedOrders(): Promise<LocalOrderSnapshot[]>;
   fetchState(salesorderId: number): Promise<unknown>;
-  apply(patch: SyncPatch): Promise<void>;
+  apply(patch: SyncPatch): Promise<SyncApplyOutcome | void>;
   /** Upstream calls in flight at once. */
   concurrency?: number;
 };
@@ -153,10 +167,14 @@ export async function runOrderSync(deps: SyncDeps): Promise<SyncRunResult> {
 
   let synced = 0;
   let cancelled = 0;
+  let skipped = 0;
   for (const patch of planSync(localOrders, verdicts)) {
     try {
-      await deps.apply(patch);
-      if (patch.status === "CANCEL") cancelled += 1;
+      const outcome = await deps.apply(patch);
+      // Only an explicit `landed: false` is a refusal: a dep that reports
+      // nothing (every test fake) wrote the patch, as far as we can tell.
+      if (outcome?.landed === false) skipped += 1;
+      else if (patch.status === "CANCEL") cancelled += 1;
       else synced += 1;
     } catch (e) {
       failed += 1;
@@ -164,7 +182,7 @@ export async function runOrderSync(deps: SyncDeps): Promise<SyncRunResult> {
     }
   }
 
-  return { checked: localOrders.length, synced, cancelled, failed };
+  return { checked: localOrders.length, synced, cancelled, skipped, failed };
 }
 
 /**
@@ -208,6 +226,15 @@ export function createThrottledSync(
       try {
         const result = await runOrderSync(deps);
         lastRunAt = clock();
+        // The only observability this sync has left: the admin page discards the
+        // result (spec §4.4) and the cron route that used to return it as JSON is
+        // gone. One line per COMPLETED pass — a skipped pass logs nothing, so a
+        // quiet log means the throttle did its job, not that the sync is dead.
+        console.info(
+          `order-sync: checked ${result.checked}, synced ${result.synced}, ` +
+            `cancelled ${result.cancelled}, skipped ${result.skipped}, ` +
+            `failed ${result.failed}`,
+        );
         return result;
       } finally {
         inFlight = false;
@@ -273,9 +300,12 @@ export function createDbSyncDeps(): SyncDeps {
             `order-sync: cancel for ${patch.orderId} skipped (${result.reason})`,
           );
         }
-        return;
+        // Reported, not thrown: the row is already where it needs to be, so this
+        // is the `skipped` counter and never `failed`.
+        return { landed: result.cancelled };
       }
 
+      let landed = false;
       await db.transaction(async (tx) => {
         const [before] = await tx
           .select({ status: orders.status })
@@ -300,9 +330,17 @@ export function createDbSyncDeps(): SyncDeps {
             ),
           )
           .returning({ id: orders.id });
-        // A resi-only pass changes no status and writes no history (spec §4.5) —
-        // a shipping label arriving late is not a transition.
-        if (status && before && flipped.length === 1) {
+        landed = flipped.length === 1;
+        // Four gates, each with its own reason. `status`: a resi-only pass is not
+        // a transition (spec §4.5). `before`: the row may have been deleted
+        // between the pre-read and the write. `landed`: the guarded UPDATE may
+        // have matched nothing, so a lost race writes no audit row. And
+        // `before.status !== status`, which is the term a review caught: the
+        // end-state guard alone does NOT stop a second pass recording
+        // CONFIRMED → CONFIRMED, because a CONFIRMED row still matches that
+        // guard — and a stepper row for a transition that never happened is
+        // exactly what spec §4.5 forbids.
+        if (status && before && landed && before.status !== status) {
           await recordStatusChange(tx, {
             orderId: patch.orderId,
             fromStatus: before.status,
@@ -311,6 +349,7 @@ export function createDbSyncDeps(): SyncDeps {
           });
         }
       });
+      return { landed };
     },
   };
 }

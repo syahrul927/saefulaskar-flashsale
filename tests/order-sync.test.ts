@@ -95,6 +95,7 @@ describe("runOrderSync", () => {
       checked: 2,
       synced: 1,
       cancelled: 0,
+      skipped: 0,
       failed: 0,
     });
   });
@@ -115,6 +116,7 @@ describe("runOrderSync", () => {
       checked: 2,
       synced: 1,
       cancelled: 0,
+      skipped: 0,
       failed: 1,
     });
     expect(d.applied).toEqual([{ orderId: "b", trackingNumber: "TN-1" }]);
@@ -130,6 +132,7 @@ describe("runOrderSync", () => {
       checked: 2,
       synced: 0,
       cancelled: 0,
+      skipped: 0,
       failed: 2,
     });
     expect(d.applied).toEqual([]);
@@ -146,6 +149,7 @@ describe("runOrderSync", () => {
       checked: 2,
       synced: 0,
       cancelled: 0,
+      skipped: 0,
       failed: 1,
     });
   });
@@ -156,6 +160,7 @@ describe("runOrderSync", () => {
       checked: 0,
       synced: 0,
       cancelled: 0,
+      skipped: 0,
       failed: 0,
     });
   });
@@ -196,6 +201,7 @@ describe("runOrderSync", () => {
       checked: 2,
       synced: 1,
       cancelled: 1,
+      skipped: 0,
       failed: 0,
     });
     // Order b's SO reads SHIPPED, so it takes the resi-only patch: one cancel
@@ -222,6 +228,7 @@ describe("runOrderSync", () => {
       checked: 2,
       synced: 0,
       cancelled: 0,
+      skipped: 0,
       failed: 2,
     });
     expect(d.applied).toEqual([]);
@@ -259,8 +266,40 @@ describe("runOrderSync", () => {
       checked: 2,
       synced: 0,
       cancelled: 0,
+      skipped: 0,
       failed: 2,
     });
+  });
+
+  it("counts a cancel the service refused as skipped, never as cancelled", async () => {
+    // The race `cancelled` must not paper over: SO 209 is gone upstream, the
+    // planner emits a cancel patch, but by the time `apply` runs an admin has
+    // already cancelled the row and the service refuses it. No units were
+    // released by THIS pass, so the number an operator reads as "orders we gave
+    // units back for" stays 0 — and it is not a failure either, because a retry
+    // would refuse again. Order b's resi-only patch still lands.
+    const d = deps({
+      fetchState: async (soId) => {
+        if (soId === 209) throw new JubelioError(404, undefined, "gone");
+        return SHIPPED;
+      },
+      apply: async (patch) =>
+        patch.status === "CANCEL" ? { landed: false } : undefined,
+    });
+    expect(await runOrderSync(d)).toEqual({
+      checked: 2,
+      synced: 1,
+      cancelled: 0,
+      skipped: 1,
+      failed: 0,
+    });
+  });
+
+  it("counts a dep that reports nothing as landed", async () => {
+    // The other half of the `SyncApplyOutcome | void` contract: every fake in
+    // this file returns `undefined`, and `skipped` must not swallow their work.
+    const d = deps();
+    expect(await runOrderSync(d)).toMatchObject({ synced: 1, skipped: 0 });
   });
 });
 
@@ -278,6 +317,30 @@ describe("createThrottledSync", () => {
     now = 300_000;
     expect(await sync.maybe()).not.toBeNull();
     expect(listSpy).toHaveBeenCalledTimes(2);
+  });
+
+  it("logs one summary line per completed pass, none for a throttled one", async () => {
+    // The admin page discards the result (spec §4.4) and the cron route that
+    // used to return it as JSON is gone, so this line is the only place an
+    // operator can see what a pass did — and the whole reason `cancelled` and
+    // `skipped` are separate numbers is that a human reads them here.
+    const info = vi
+      .spyOn(console, "info")
+      .mockImplementation(() => undefined);
+    const sync = createThrottledSync(deps(), {
+      intervalMs: 60_000,
+      now: () => 0,
+    });
+
+    await sync.maybe();
+    expect(info).toHaveBeenCalledTimes(1);
+    expect(info).toHaveBeenCalledWith(
+      "order-sync: checked 2, synced 1, cancelled 0, skipped 0, failed 0",
+    );
+
+    await sync.maybe(); // inside the interval: no pass ran, so nothing is logged
+    expect(info).toHaveBeenCalledTimes(1);
+    info.mockRestore();
   });
 
   it("collapses concurrent callers into one run", async () => {
@@ -319,6 +382,7 @@ describe("createThrottledSync", () => {
       checked: 0,
       synced: 0,
       cancelled: 0,
+      skipped: 0,
       failed: 0,
     });
   });
