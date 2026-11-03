@@ -4,13 +4,13 @@ import { createJubelioClient, isJubelioAuthError, type JubelioClient } from "@/l
 
 /**
  * System-account token for Jubelio calls that don't run under a logged-in
- * (Jubelio) user — e.g. the daily sync cron and customer onboarding. The
+ * (Jubelio) user — the order-status sync and customer onboarding. The
  * account is the "default" system user: `JUBELIO_SYSTEM_EMAIL` +
  * `JUBELIO_SYSTEM_PASSWORD` (no static API token).
  *
  * The token is cached in-memory; a Jubelio 401 invalidates it and re-logs in
  * (the login endpoint is idempotent), so a token rotation doesn't wedge the
- * cron.
+ * sync.
  */
 
 let cached: string | null = null;

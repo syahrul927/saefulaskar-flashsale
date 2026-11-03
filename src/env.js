@@ -21,8 +21,9 @@ export const env = createEnv({
     JUBELIO_HOST: z.string().url(),
     SAFAR_COMPANY_ID: z.coerce.number().default(59325),
     // "Default" system account for Jubelio calls with no logged-in user
-    // (cron, customer onboarding). Login (not a static token) issues the
-    // bearer used for those calls — see src/server/jubelio-token.ts.
+    // (the order-status sync, customer onboarding). Login (not a static
+    // token) issues the bearer used for those calls — see
+    // src/server/jubelio-token.ts.
     JUBELIO_SYSTEM_EMAIL: z.string(),
     JUBELIO_SYSTEM_PASSWORD: z.string(),
     JUBELIO_LOCATION_ID: z.coerce.number(),

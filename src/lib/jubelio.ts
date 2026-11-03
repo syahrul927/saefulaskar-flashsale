@@ -6,9 +6,9 @@ import { env } from "@/env";
  * The client is **token-injected** (`createJubelioClient(token)`); there is no
  * static API token. Token sources depend on the caller:
  *   - Admin routes (Jubelio login) use the signed-in admin's `user.token`.
- *   - No-user callers (cron, customer contact creation) log in with the
- *     "system" account (`JUBELIO_SYSTEM_EMAIL`/`JUBELIO_SYSTEM_PASSWORD`) via
- *     `src/server/jubelio-token.ts`.
+ *   - No-user callers (the order-status sync, customer contact creation) log
+ *     in with the "system" account (`JUBELIO_SYSTEM_EMAIL`/
+ *     `JUBELIO_SYSTEM_PASSWORD`) via `src/server/jubelio-token.ts`.
  *
  * A 401 (`JubelioError.status === 401`) means the token expired:
  *   - For an admin caller, the route surfaces `SESSION_EXPIRED` and the app

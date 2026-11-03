@@ -274,9 +274,10 @@ export function createDbSyncDeps(): SyncDeps {
         );
     },
     async fetchState(salesorderId) {
-      // System account, not the viewing admin's token: the cron has no session,
-      // and the throttled admin-view run must not depend on whose JWT is in
-      // scope.
+      // System account, not the viewing admin's token: the pass runs from
+      // whoever's page-load triggered it, and must not depend on whose JWT is
+      // in scope — an expired admin session cannot be allowed to stall the
+      // sync mid-sweep.
       return withSystemClient((client) => client.getSalesOrder(salesorderId));
     },
     async apply(patch) {
