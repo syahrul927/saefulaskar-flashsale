@@ -291,7 +291,13 @@ describe("confirm route write race guard", () => {
     expect(state.updatedSets).toEqual([]);
     expect(state.history).toEqual([]);
     const body = (await res.json()) as { error: string };
-    expect(body.error).toBe("Pesanan sudah berstatus CANCEL");
+    // The SO was already created upstream when this 409 fires — the copy
+    // must disclose it AND name it, this route's own precedent at the no-id
+    // 502. A bare "sudah berstatus CANCEL" would leave a paid sales order
+    // nobody was told about.
+    expect(body.error).toContain("sudah berstatus CANCEL");
+    expect(body.error).toContain("SO #555");
+    expect(body.error).toMatch(/batalkan SO/i);
   });
 
   it("409s without marking the order when another admin already confirmed", async () => {

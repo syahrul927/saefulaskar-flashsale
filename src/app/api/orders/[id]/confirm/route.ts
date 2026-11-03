@@ -172,7 +172,11 @@ export async function POST(
       .for("update");
     if (!current) return { code: 404 as const };
     if (current.status !== "UNPAID") {
-      return { code: 409 as const, status: current.status };
+      return {
+        code: 409 as const,
+        status: current.status,
+        createdSoId: salesorderId,
+      };
     }
     const rows = await tx
       .update(orders)
@@ -188,7 +192,11 @@ export async function POST(
       // Unreachable while the lock holds. Answered as a 409, never as
       // `{ ok: true }`: an admin must not get a success toast for a write
       // that did not happen.
-      return { code: 409 as const, status: current.status };
+      return {
+        code: 409 as const,
+        status: current.status,
+        createdSoId: salesorderId,
+      };
     }
     await recordStatusChange(tx, {
       orderId: order.id,
@@ -203,10 +211,19 @@ export async function POST(
 
   if (outcome.code === 404) return jsonError(404, "Pesanan tidak ditemukan");
   if (outcome.code === 409) {
-    // The SO created above now exists upstream for an order that ended in the
-    // window — the status in this message is what tells the admin to go and
-    // cancel it in Jubelio instead of clicking again.
-    return jsonError(409, `Pesanan sudah berstatus ${outcome.status}`);
+    // This 409 runs AFTER the SO create, unlike the pre-check's at the top of
+    // the handler — so a paid sales order now exists upstream for an order
+    // that ended in the window. Disclose it and name it, per this file's own
+    // precedent at the no-id 502 ("SO mungkin sudah dibuat, cek Jubelio"):
+    // the admin must be told which SO to cancel there, and the id in the log
+    // survives even if this response is not read closely.
+    console.error(
+      `confirm: SO #${outcome.createdSoId} created upstream for ${order.id}, which ended ${outcome.status} in the race window — cancel it in Jubelio`,
+    );
+    return jsonError(
+      409,
+      `Pesanan sudah berstatus ${outcome.status}, tetapi SO #${outcome.createdSoId} terlanjur dibuat di Jubelio — batalkan SO itu di Jubelio, jangan klik ulang`,
+    );
   }
   return Response.json({ ok: true, order: outcome.order });
 }
