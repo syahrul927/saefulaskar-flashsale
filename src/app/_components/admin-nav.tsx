@@ -21,13 +21,26 @@ function under(href: string) {
     pathname === href || pathname.startsWith(`${href}/`);
 }
 
+/**
+ * Konsol's own territory: `/admin` itself plus the session editor nested
+ * under it — and deliberately NOT `under("/admin")`. A prefix match on
+ * `/admin` swallows every sibling segment, so the Konsol tab stayed active
+ * while the user sat on Pesanan or Jubelio (reported 2026-11-03). The
+ * trailing slash is load-bearing: it keeps a future `/admin/sessions-legacy`
+ * from counting as Konsol. Exported so the predicate is testable without a
+ * DOM harness.
+ */
+export function isKonsolPath(pathname: string): boolean {
+  return pathname === "/admin" || pathname.startsWith("/admin/sessions/");
+}
+
 const NAV_ITEMS: NavItem[] = [
   {
     href: "/admin",
     label: "Konsol",
     Icon: GearIcon,
     // Session config lives at /admin itself; every other segment owns its label.
-    isActive: under("/admin"),
+    isActive: isKonsolPath,
   },
   {
     href: "/admin/orders",
