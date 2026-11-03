@@ -37,6 +37,13 @@ const state = vi.hoisted(() => ({
   history: [] as Record<string, unknown>[],
   /** Parallel to `history`: was that insert made on a `tx`, not on `db`? */
   historyInTransaction: [] as boolean[],
+  /** Lock modes passed to a select's `.for()`, in call order. */
+  locks: [] as unknown[],
+  /**
+   * When set, the LOCKED re-read of the order row sees this status while the
+   * handler-top read still sees UNPAID — the race window the SO create opens.
+   */
+  lockedStatus: null as string | null,
 }));
 
 vi.mock("@/server/db", async () => {
@@ -84,7 +91,26 @@ vi.mock("@/server/db", async () => {
                       ]
                     : []
                   : [];
-        return Promise.resolve(rows);
+        const base = Promise.resolve(rows);
+        // The route's final write chains `.for("update")` onto its in-tx
+        // re-read: the live status is checked under a row lock before
+        // committing, because "a row in CANCEL must never be pulled back"
+        // (spec §5) is absolute and the SO create takes seconds. `lockedStatus`
+        // lets a test make the locked read disagree with the top read.
+        return Object.assign(base, {
+          for: (lock: unknown) => {
+            state.locks.push(lock);
+            if (table === orders && state.lockedStatus !== null) {
+              return Promise.resolve(
+                (rows as unknown as Record<string, unknown>[]).map((r) => ({
+                  ...r,
+                  status: state.lockedStatus,
+                })),
+              );
+            }
+            return base;
+          },
+        });
       },
     }),
   });
@@ -169,6 +195,8 @@ beforeEach(() => {
   state.orderExists = true;
   state.history = [];
   state.historyInTransaction = [];
+  state.locks = [];
+  state.lockedStatus = null;
   vi.mocked(getSession).mockReset();
   vi.mocked(getSession).mockResolvedValue(ADMIN as never);
   client.createSalesOrder.mockClear();
@@ -237,6 +265,45 @@ describe("confirm route refused transitions", () => {
     const res = await request();
     expect(res.status).toBe(404);
     expect(state.history).toEqual([]);
+  });
+});
+
+/**
+ * The race the final review graded Important I-1: between the pre-check at the
+ * handler top and the write, the route spends seconds in Jubelio (per-SKU
+ * lookups + the SO create). An admin `Batalkan`, or the background sync's
+ * definitive-404 pass running while the admin clicks, can land in that window.
+ * Without the locked re-read the route committed CANCEL → CONFIRMED, linked a
+ * SO created AFTER we told the customer the order was cancelled, left the
+ * released quota released (the session oversells), and wrote a
+ * UNPAID → CONFIRMED history row that erased the cancel from the audit trail.
+ */
+describe("confirm route write race guard", () => {
+  it("re-reads the live status under FOR UPDATE before committing the write", async () => {
+    await request();
+    expect(state.locks).toContain("update");
+  });
+
+  it("409s and writes nothing when a cancel lands during the SO create", async () => {
+    state.lockedStatus = "CANCEL";
+    const res = await request();
+    expect(res.status).toBe(409);
+    expect(state.updatedSets).toEqual([]);
+    expect(state.history).toEqual([]);
+    const body = (await res.json()) as { error: string };
+    expect(body.error).toBe("Pesanan sudah berstatus CANCEL");
+  });
+
+  it("409s without marking the order when another admin already confirmed", async () => {
+    state.lockedStatus = "CONFIRMED";
+    const res = await request();
+    expect(res.status).toBe(409);
+    expect(state.updatedSets).toEqual([]);
+    expect(state.history).toEqual([]);
+    // Never `{ok: true, order: undefined}` — a success toast for a write that
+    // did not happen would send the admin off to check Jubelio for nothing.
+    const body = (await res.json()) as { ok?: unknown };
+    expect(body.ok).toBe(false);
   });
 });
 

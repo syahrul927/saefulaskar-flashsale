@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq, notInArray } from "drizzle-orm";
 
 import { createJubelioClient, isJubelioAuthError } from "@/lib/jubelio";
 import { getSession } from "@/server/better-auth/server";
@@ -11,6 +11,7 @@ import {
 import { resolveUnits } from "@/server/confirm-units";
 import { db } from "@/server/db";
 import { contacts, orderItems, orders, user } from "@/server/db/schema";
+import { END_STATUSES } from "@/server/order-status";
 import { recordStatusChange } from "@/server/status-history";
 
 export const runtime = "nodejs";
@@ -151,26 +152,61 @@ export async function POST(
 
   // The status update and its audit row commit together (spec §4.5): a history
   // row must never exist for an order that stayed UNPAID, and vice versa.
-  // `order.status` is the pre-update value read at the top of the handler —
-  // `markConfirmed` returns a patch, it does not mutate `order`.
-  const [updated] = await db.transaction(async (tx) => {
+  //
+  // The `order` read at the top of the handler is seconds stale by now — the
+  // SKU lookups and the SO create were multi-second upstream round trips, and
+  // a cancel (an admin's `Batalkan`, or the sync's definitive-404 pass, which
+  // runs in the background precisely while an admin is clicking) may have
+  // landed in between. Spec §5 states the invariant absolutely: a row in
+  // `CANCEL` must never be pulled back. So the write re-reads the LIVE status
+  // under `FOR UPDATE` and commits only from it — the guard the sync's `apply`
+  // and `cancelOrder` already carry, plus the lock that makes the audit row's
+  // `fromStatus` authoritative. The end-state predicate stays on the UPDATE
+  // too: a belt if the lock is ever widened away, and today an unreachable
+  // second line of defence rather than a resurrection.
+  const outcome = await db.transaction(async (tx) => {
+    const [current] = await tx
+      .select({ status: orders.status })
+      .from(orders)
+      .where(eq(orders.id, order.id))
+      .for("update");
+    if (!current) return { code: 404 as const };
+    if (current.status !== "UNPAID") {
+      return { code: 409 as const, status: current.status };
+    }
     const rows = await tx
       .update(orders)
       .set(markConfirmed(order, salesorderId))
-      .where(eq(orders.id, order.id))
+      .where(
+        and(
+          eq(orders.id, order.id),
+          notInArray(orders.status, [...END_STATUSES]),
+        ),
+      )
       .returning();
-    if (rows[0]) {
-      await recordStatusChange(tx, {
-        orderId: order.id,
-        fromStatus: order.status,
-        toStatus: "CONFIRMED",
-        source: "admin",
-        actorUserId: auth.user.id,
-        note: `SO #${salesorderId} dibuat`,
-      });
+    if (!rows[0]) {
+      // Unreachable while the lock holds. Answered as a 409, never as
+      // `{ ok: true }`: an admin must not get a success toast for a write
+      // that did not happen.
+      return { code: 409 as const, status: current.status };
     }
-    return rows;
+    await recordStatusChange(tx, {
+      orderId: order.id,
+      fromStatus: current.status,
+      toStatus: "CONFIRMED",
+      source: "admin",
+      actorUserId: auth.user.id,
+      note: `SO #${salesorderId} dibuat`,
+    });
+    return { code: 200 as const, order: rows[0] };
   });
 
-  return Response.json({ ok: true, order: updated });
+  if (outcome.code === 404) return jsonError(404, "Pesanan tidak ditemukan");
+  if (outcome.code === 409) {
+    // The SO created above now exists upstream for an order that ended in the
+    // window — the status in this message is what tells the admin to go and
+    // cancel it in Jubelio instead of clicking again.
+    return jsonError(409, `Pesanan sudah berstatus ${outcome.status}`);
+  }
+  return Response.json({ ok: true, order: outcome.order });
 }
