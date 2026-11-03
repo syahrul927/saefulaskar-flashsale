@@ -342,12 +342,16 @@ every night. Status lives in three fields, each with its own vocabulary:
 | `PAID` | CONFIRMED |
 | `SHIPPED` | **CONFIRMED** — SHIPPED is skipped (§4.6); the resi from the same response is what says "shipped" |
 | `COMPLETED` | COMPLETED |
-| `PENDING` / `PROCESSING` / `CANCELED` / anything else | left as-is (no local equivalent) |
+| `CANCELED` | **CANCEL** — a cancel patch through the cancel service (§4.7): quota released, audit row written |
+| `PENDING` / `PROCESSING` / anything else | left as-is (no local equivalent) |
 
-The sync only ever moves a local status FORWARD — a stale SO reading `PAID`
-cannot pull an order back, and a row already sitting on a legacy `SHIPPED` is
-never pulled back to `CONFIRMED` either (`STATUS_RANK` keeps that value ranked so
-history stays ahead of the two-state ladder).
+The sync only ever moves a local status FORWARD along the ladder — a stale SO
+reading `PAID` cannot pull an order back, and a row already sitting on a legacy
+`SHIPPED` is never pulled back to `CONFIRMED` either (`STATUS_RANK` keeps that
+value ranked so history stays ahead of the two-state ladder). The ladder's one
+exemption is cancellation (§4.7): a definitive 404 on the by-id read, or an
+upstream `CANCELED`, produces a cancel patch that bypasses ranking — a cancel is
+not a rung.
 
 **Reads are per-SO by id, never the list.** `GET /sales/orders/` holds 184 072
 rows at 200/page, page 1 is 2022-era marketplace traffic, and `page_size` /
@@ -355,9 +359,11 @@ rows at 200/page, page 1 is 2022-era marketplace traffic, and `page_size` /
 not reachable through it. `GET /sales/orders/{id}` returns the header (status +
 `tracking_number` + `shipper`) and is the only usable read.
 
-Save to local DB on every sync. Triggers: the Vercel daily cron, an optional
-external hourly pinger, and a throttled pass when an admin opens the orders page
-(`ORDER_SYNC_INTERVAL_MS`, default 5 min).
+Save to local DB on every sync. One trigger: a throttled pass when an admin
+opens `/admin/orders` (`ORDER_SYNC_INTERVAL_MS`, default 5 min), kept alive past
+the response by `after()`. The Vercel daily cron, the external pinger and
+`CRON_SECRET` were retired with plan 2026-11-01 — an admin opening that page is
+now the only thing that moves a status.
 
 ### 4.3 Resi / AWB Tracking
 
@@ -423,15 +429,20 @@ Displayed to customer at checkout. Customer uploads proof of transfer via WhatsA
    than click again.
 9. Status sync (§4.2/§4.3) reads the SO by id and moves the local row
    CONFIRMED → COMPLETED, filling `tracking_number`/`shipper` on the way.
-   Forward-only; a CANCELED SO leaves the local row untouched. There is no
-   SHIPPED step any more (§4.6) — a shipped SO keeps the row at CONFIRMED and
-   delivers the resi.
+   Forward-only along the ladder; there is no SHIPPED step any more (§4.6) — a
+   shipped SO keeps the row at CONFIRMED and delivers the resi. Two upstream
+   readings end the order instead (§4.7): a definitive 404 (SO deleted) or
+   `internal_status: CANCELED` — both cancel the local row through the cancel
+   service, releasing its quota and writing the audit row.
 
 ### 4.6 Status Ladder & Jubelio Observation Rig
 
-**The customer ladder is three steps:** `UNPAID → CONFIRMED → COMPLETED`. SHIPPED
-was dropped from it on request — one status per thing the customer needs to know,
-and "paid" and "out of our hands" are the two they asked about.
+**The customer ladder is three steps, plus one side exit:**
+`UNPAID → CONFIRMED → COMPLETED`, with `CANCEL` reachable from `UNPAID` and
+`CONFIRMED` (§4.7). SHIPPED was dropped from the ladder on request — one status
+per thing the customer needs to know, and "paid" and "out of our hands" are the
+two they asked about. `CANCEL` is not a rung: it is an end state, never written
+by the ladder itself.
 
 **Skipped, not deleted.** The `order_status` PG enum keeps `SHIPPED`, the columns
 keep their values, `ShipmentBand` stays, and rows already written as `SHIPPED`
@@ -465,7 +476,49 @@ Neither is read by any order flow, and neither can write `orders.status`. The si
 is closed unless `JUBELIO_WEBHOOK_SINK_TOKEN` is set.
 
 **Held until the rig answers:** wiring a faktur-created webhook into the status
-sync, and whether the daily cron stays once a manual sync button exists.
+sync. (The cron question is closed: the daily cron, the pinger and
+`CRON_SECRET` are deleted — the throttled page-load pass of §4.2 is the only
+trigger.)
+
+### 4.7 Order Cancellation & Status History
+
+**`CANCEL` is a fourth local status.** Migration `drizzle/0009` adds it to the
+`order_status` enum and creates `order_status_history`. Customer surfaces label
+it **DIBATALKAN**; the detail stepper shows `Dibatalkan` as its own step. It is
+an end state: the ladder never writes it, and no sync reading can pull a row
+back out of it.
+
+**Two doors, one transition owner.** `cancelOrder` (`src/server/cancel-order.ts`)
+is the only writer of `CANCEL`:
+
+- **Admin** — `Batalkan` on `/admin/orders`, behind a contact-first warning
+  dialog: call the buyer on WhatsApp before cancelling. The number is resolved
+  customer-first and normalised to a mobile `628…` shape, so the link is either
+  correct or absent — never a stranger's chat.
+- **Sync** — a `GET /sales/orders/{id}` answering a definitive 404, or an SO
+  reading `internal_status: CANCELED`, becomes a cancel patch through the same
+  service. Every other upstream outcome leaves the row alone. There is no
+  customer-facing cancel button.
+
+**What a cancel does atomically:** flips the status under an end-state guard
+(`NOT IN (COMPLETED, CANCEL)`, so two racing doors produce exactly one
+transition), releases the order's units back to the session quota
+(`GREATEST(claimed − qty, 0)`, never below zero), and writes one
+`order_status_history` row (`from_status`, `to_status`, source `admin`/`sync`,
+actor, note). A refused cancel counts as `skipped`, never `cancelled`. The
+confirm route and the sync's status write re-read the live status under
+`FOR UPDATE` before committing, so a transition is never recorded twice under
+READ COMMITTED and a cancelled order can never be resurrected by a confirm that
+started before the cancel landed.
+
+**Evidence is kept.** `jubelio_so_id`, `tracking_number` and `shipper` are
+untouched on cancel — "SO #192626 dihapus di Jubelio" is exactly what the
+history note is for, and the storefront keeps its receipt link.
+
+**Accepted consequence:** the first sync pass after `CANCEL` shipped cancels the
+live `CONFIRMED` orders whose SOs are already gone upstream (SO 192626,
+SO 192297 — the dead rows of 2026-10-28). Designed and accepted; their quota
+returns to the session the moment an admin next opens `/admin/orders`.
 
 ---
 
