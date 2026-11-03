@@ -298,7 +298,7 @@ Used when we need to reserve quota outside of order flow:
 | Data | Sync Method | When |
 |---|---|---|
 | Products / SKUs | **Live fetch** (on-demand) | Admin creates session + at checkout CO |
-| Orders / Sales Orders | **Polling, `GET /sales/orders/{id}`** | Vercel daily cron + optional external pinger (hourly) + throttled pass when an admin opens the orders page (`ORDER_SYNC_INTERVAL_MS`, default 5 min) |
+| Orders / Sales Orders | **Polling, `GET /sales/orders/{id}`** | Throttled pass when an admin opens `/admin/orders` (`ORDER_SYNC_INTERVAL_MS`, default 5 min). The Vercel daily cron and the external pinger were retired with plan 2026-11-01 (§4.2/§4.7) |
 | Stock | **Live fetch** at session setup and at checkout | No webhook receiver — `/inventory/items/all-stocks/` on demand |
 | Invoices | not synced | No invoice surface in this app |
 | Order status | **same poll as above** | no webhook receiver exists in `src/` (§3.6) |
@@ -665,12 +665,9 @@ ORDER_SYNC_INTERVAL_MS=300000
 # DB already has; the run finishes in the background via after(). 0 = never
 # block, statuses appear on the next reload.
 ORDER_SYNC_AWAIT_MS=4000
-# Guards /api/cron/daily-sync (GET and POST). Vercel's own cron sender presents
-# it as `Authorization: Bearer <CRON_SECRET>` on a GET; external pingers can use
-# either that or `x-cron-secret: <CRON_SECRET>`.
-# Required and non-empty — `emptyStringAsUndefined` in src/env.js means
-# `CRON_SECRET=""` fails validation at boot, not "no auth".
-CRON_SECRET="<random string>"
+# (Retired with plan 2026-11-01: the `/api/cron/daily-sync` route, its
+# `CRON_SECRET` guard and the `vercel.json` schedule are deleted — there is no
+# external trigger to guard anymore.)
 # Jubelio probe sink (§4.6). Optional, and `""` is the same as unset: the public
 # POST endpoint then answers 503 and stores nothing. Set it only while probing,
 # copy the URL from /admin/jubelio into Jubelio's dashboard, clear it afterwards.
@@ -678,9 +675,9 @@ JUBELIO_WEBHOOK_SINK_TOKEN=""
 ```
 
 Both sync vars are `z.coerce.number()` and have defaults, so they are optional in
-`.env`. Vercel Hobby allows one daily cron (`vercel.json`: `0 0 * * *`); for
-hourly freshness point an external pinger (cron-job.org, GitHub Actions schedule)
-at `POST /api/cron/daily-sync` with the `x-cron-secret` header.
+`.env`. There is no external pinger and no `vercel.json` cron any more: the
+throttled page-load pass is the only trigger (§4.2), and `CRON_SECRET` is gone
+from `src/env.js` — do not add it back.
 
 ---
 

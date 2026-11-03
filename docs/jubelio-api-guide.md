@@ -293,8 +293,11 @@ The field name is **`shipper`**, not `courier`. ⚠ `is_shipped` and
 them; use `internal_status` plus a non-empty `tracking_number`.
 
 This is what the app reads and copies into `orders.tracking_number` /
-`orders.shipper`, forward-only (a lower-ranked status never overwrites a higher
-one, and a CANCELED SO is not written back at all).
+`orders.shipper`, forward-only along the ladder (a lower-ranked status never
+overwrites a higher one). Two readings are the exception since plan
+2026-11-01: `internal_status: CANCELED` and a definitive 404 both cancel the
+local order through the cancel service — quota released, audit row written
+(PRD §4.7).
 
 There is no shipment webhook to fall back on (§8): the only real webhook endpoint
 *resends* the sales-order callback, and it is unverified what that payload
@@ -428,9 +431,10 @@ for path, methods in paths.items():
    verbatim except credential ones (§8, spec §4.7), so the first real delivery
    answers it. Until then the sink authenticates itself by a secret path segment
    (`JUBELIO_WEBHOOK_SINK_TOKEN`), because the dashboard gives no place to put a
-   header. Our own `/api/cron/daily-sync` is guarded by the `CRON_SECRET` shared
-   secret, accepted as either `x-cron-secret: <secret>` or `Authorization: Bearer
-   <secret>`.
+   header. (The old `/api/cron/daily-sync` route and its `CRON_SECRET` shared
+   secret were deleted with plan 2026-11-01 — the only sync trigger is the
+   throttled page-load pass, PRD §4.2, so there is nothing external to
+   authenticate any more.)
 6. **Multiple warehouses** — does `location_id` matter for flash sale context?
 
 ---
