@@ -311,7 +311,20 @@ export function createDbSyncDeps(): SyncDeps {
         const [before] = await tx
           .select({ status: orders.status })
           .from(orders)
-          .where(eq(orders.id, patch.orderId));
+          .where(eq(orders.id, patch.orderId))
+          // The read must be LOCK-stable, not merely inside the transaction:
+          // under READ COMMITTED the guarded UPDATE re-evaluates its predicate
+          // after any other writer releases the row, so an admin confirm that
+          // commits between this read and that update still passes
+          // `NOT IN (end states)` — and `before.status !== status` below is
+          // ALSO true against the stale read, recording the same transition a
+          // second time, once for the admin and once for the sync. Spec §4.5
+          // forbids a history row for a transition that never happened, and
+          // `tests/status-steps.test.ts` pins that two steps never say the
+          // same thing. `FOR UPDATE` makes `before` authoritative for the rest
+          // of the transaction; the ledger parked this until migration 0009
+          // landed, and it has.
+          .for("update");
         const flipped = await tx
           .update(orders)
           .set({

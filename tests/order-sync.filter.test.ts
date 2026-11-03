@@ -36,6 +36,8 @@ const state = vi.hoisted(() => ({
   history: [] as Record<string, unknown>[],
   /** Parallel to `history`: did that insert run on a `tx`, not on `db`? */
   historyInTransaction: [] as boolean[],
+  /** Lock modes passed to `.for()`, in call order. */
+  locks: [] as unknown[],
 }));
 
 vi.mock("@/server/db", async () => {
@@ -43,9 +45,19 @@ vi.mock("@/server/db", async () => {
 
   const select = () => ({
     from: () => ({
-      where: async (condition: unknown) => {
+      where: (condition: unknown) => {
         state.selectConditions.push(condition);
-        return state.selectRows.shift() ?? [];
+        const rows = state.selectRows.shift() ?? [];
+        // The guarded write's pre-read chains `.for("update")` on this; the
+        // plain reads never reach it. The thenable still awaits to the same
+        // rows, so the shape every existing test relied on is unchanged.
+        const base = Promise.resolve(rows);
+        return Object.assign(base, {
+          for: (lock: unknown) => {
+            state.locks.push(lock);
+            return base;
+          },
+        });
       },
     }),
   });
@@ -106,6 +118,7 @@ beforeEach(() => {
   state.returning = [];
   state.history = [];
   state.historyInTransaction = [];
+  state.locks = [];
   vi.mocked(cancelOrder).mockReset();
 });
 
@@ -202,6 +215,38 @@ describe("createDbSyncDeps().apply", () => {
         note: null,
       },
     ]);
+  });
+
+  it("locks the row before the guarded write, so the audit row's fromStatus is live", async () => {
+    // The staleness class the final review re-graded from parked: without the
+    // lock, READ COMMITTED lets an admin confirm slip in between this pre-read
+    // and the guarded UPDATE — the UPDATE still passes the end-state filter
+    // (CONFIRMED is not an end state), and `before.status !== status` is still
+    // true against the stale read, so the same transition is recorded TWICE,
+    // once credited to the admin and once to the sync. Spec §4.5 forbids a
+    // history row for a transition that never happened, and
+    // `tests/status-steps.test.ts` pins that two steps never say the same
+    // thing. Deleting the `.for("update")` turns this red.
+    state.selectRows = [[{ status: "UNPAID" }]];
+    state.returning = [{ id: "o1" }];
+
+    await createDbSyncDeps().apply({ orderId: "o1", status: "CONFIRMED" });
+
+    expect(state.locks).toEqual(["update"]);
+  });
+
+  it("takes no row lock for a cancel patch — the service owns that transaction", async () => {
+    // The cancel branch delegates to `cancelOrder`, which runs its own
+    // transaction; a lock here would be a second, pointless one.
+    vi.mocked(cancelOrder).mockResolvedValue({
+      cancelled: true,
+      fromStatus: "CONFIRMED",
+      releasedUnits: 1,
+    });
+
+    await createDbSyncDeps().apply({ orderId: "o1", status: "CANCEL" });
+
+    expect(state.locks).toEqual([]);
   });
 
   it("writes no audit row when the guard refused the update", async () => {
