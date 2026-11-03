@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { formatSalesOrderCode } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import {
   Dialog,
@@ -104,7 +105,7 @@ function OrderDetailDialog({
             )}
             {order.jubelioSoId !== null && (
               <span className="font-mono text-[11px] text-neutral-500 dark:text-neutral-400">
-                SO #{order.jubelioSoId}
+                {formatSalesOrderCode(order.jubelioSoId)}
               </span>
             )}
           </div>

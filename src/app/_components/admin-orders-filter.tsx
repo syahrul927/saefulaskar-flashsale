@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 
+import { formatSalesOrderCode } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { TABS, type AdminTab } from "./admin-order-tabs";
 import { CancelOrderButton, type CancelOrderTarget } from "./cancel-order-button";
@@ -119,10 +120,13 @@ function AdminOrdersFilter({
                       {order.status}
                     </StatusBadge>
                   </div>
+                  {/* `SO-000192626`, the shape Jubelio's console prints — the
+                      admin compares this string against upstream, so it must
+                      be upstream's format, not ours. */}
                   <p className="mt-1 font-mono text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400">
                     {order.dateLabel}
                     {order.jubelioSoId !== null
-                      ? ` · SO #${order.jubelioSoId}`
+                      ? ` · ${formatSalesOrderCode(order.jubelioSoId)}`
                       : ""}
                   </p>
                 </div>

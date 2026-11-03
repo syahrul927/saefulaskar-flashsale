@@ -48,3 +48,15 @@ export function formatStepTimestamp(date: Date): string {
   );
   return `${p.day} ${p.month} ${p.year}, ${p.hour}.${p.minute}`;
 }
+
+/**
+ * Jubelio's own `salesorder_no` for an SO we created: `SO-` plus the numeric
+ * id zero-padded to 9 digits — the dead rows of 2026-10-28 print as
+ * `SO-000192297` upstream (PRD §6 row 16: our SOs carry the `SO-000…` shape,
+ * marketplace ones the `SP-<ref_no>` shape). The admin compares this string
+ * against the Jubelio console, so it matches upstream character for character,
+ * not just numerically. `padStart` degrades gracefully past 9 digits.
+ */
+export function formatSalesOrderCode(jubelioSoId: number): string {
+  return `SO-${String(jubelioSoId).padStart(9, "0")}`;
+}
