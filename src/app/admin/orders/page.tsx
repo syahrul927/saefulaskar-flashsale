@@ -12,6 +12,7 @@ import {
 import type { CancelOrderTarget } from "@/app/_components/cancel-order-button";
 import type { OrderDetailData } from "@/app/_components/order-detail-dialog";
 import { Panel } from "@/app/_components/panel";
+import { SyncNowButton } from "@/app/_components/sync-now-button";
 import { env } from "@/env";
 import { formatRupiah } from "@/lib/format";
 import { db } from "@/server/db";
@@ -211,13 +212,18 @@ export default async function AdminOrdersPage({
 
   return (
     <main className="flex-1 space-y-6 p-4 md:p-6">
-      <div>
-        <h1 className="font-heading text-lg font-black uppercase tracking-wider text-neutral-950 sm:text-xl dark:text-neutral-50">
-          Pesanan
-        </h1>
-        <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
-          Verifikasi bukti transfer dan konfirmasi pembayaran.
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="font-heading text-lg font-black uppercase tracking-wider text-neutral-950 sm:text-xl dark:text-neutral-50">
+            Pesanan
+          </h1>
+          <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
+            Verifikasi bukti transfer dan konfirmasi pembayaran.
+          </p>
+        </div>
+        {/* Manual sync: with no webhook and no cron, statuses move on this
+            page's throttled pass (once per 5 min) or on this button (now). */}
+        <SyncNowButton className="mt-1" />
       </div>
 
       <Panel title="TRANSAKSI MASUKAN" count={`${rows.length} transaksi`}>

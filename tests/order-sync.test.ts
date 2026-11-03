@@ -386,4 +386,66 @@ describe("createThrottledSync", () => {
       failed: 0,
     });
   });
+
+  it("force runs inside the interval and stamps the clock like a due pass", async () => {
+    // The `Sinkron sekarang` contract: the button never waits for the
+    // throttle, and a completed forced pass counts as a run — the next
+    // page load must not sweep the same SOs twice for nothing.
+    let now = 0;
+    const d = deps();
+    const sync = createThrottledSync(d, { intervalMs: 300_000, now: () => now });
+
+    expect(await sync.maybe()).toMatchObject({ checked: 2 }); // first pass: due
+    expect(await sync.maybe()).toBeNull(); // 0 ms later: throttled
+    expect(await sync.force()).toMatchObject({ checked: 2 }); // the button does not wait
+    expect(await sync.maybe()).toBeNull(); // force stamped lastRunAt
+    now = 300_000;
+    expect(await sync.maybe()).toMatchObject({ checked: 2 }); // due pass still runs after
+  });
+
+  it("force joins an in-flight pass instead of starting a second sweep", async () => {
+    // Two admins clicking at once read each upstream SO ONCE: the second
+    // force gets the SAME promise, not a queued second pass — and a page
+    // load racing a forced pass still skips rather than doubling.
+    let release: () => void = () => undefined;
+    const gate = new Promise<void>((r) => (release = r));
+    const d = deps({
+      fetchState: async () => {
+        await gate;
+        return SHIPPED;
+      },
+    });
+    const listSpy = vi.spyOn(d, "listLinkedOrders");
+    const sync = createThrottledSync(d, { intervalMs: 1, now: () => 0 });
+
+    const first = sync.force();
+    expect(sync.force()).toBe(first); // the join is the promise itself
+    expect(await sync.maybe()).toBeNull(); // a racing page load skips, as always
+    release();
+    await expect(first).resolves.toMatchObject({ checked: 2 });
+    expect(listSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it("a failed force leaves the clock unstamped and the lane free", async () => {
+    // Mirrors the `maybe` failure test: the summary and `lastRunAt` are only
+    // written when the pass COMPLETES, so a dead pass (system login, DB)
+    // neither throttles the next attempt nor caches its error.
+    let calls = 0;
+    const d = deps({
+      listLinkedOrders: async () => {
+        calls += 1;
+        if (calls === 1) throw new Error("jubelio down");
+        return [];
+      },
+    });
+    const sync = createThrottledSync(d, { intervalMs: 60_000, now: () => 0 });
+    await expect(sync.force()).rejects.toThrow("jubelio down");
+    expect(await sync.force()).toEqual({
+      checked: 0,
+      synced: 0,
+      cancelled: 0,
+      skipped: 0,
+      failed: 0,
+    });
+  });
 });

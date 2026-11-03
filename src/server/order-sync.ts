@@ -19,11 +19,12 @@ import { recordStatusChange } from "@/server/status-history";
 /**
  * Order-status sync orchestration (spec §4.6).
  *
- * One implementation, one trigger: a throttled pass when an admin opens
- * `/admin/orders`, kept alive past the response by `after()` so a slow sweep
- * still lands its writes (`src/app/admin/orders/page.tsx:53-62`). There is no
- * cron and no external pinger — an admin opening that page is the only thing
- * that moves a status (spec §4.7).
+ * One implementation, two triggers, no webhook: the throttled pass when an
+ * admin opens `/admin/orders` (`maybe()`), and the manual `Sinkron sekarang`
+ * button (`force()` behind `POST /api/admin/sync`), which ignores the interval
+ * and JOINs an in-flight pass instead of doubling the upstream sweep. Both are
+ * admin page actions — the cron and the external pinger were retired with
+ * plan 2026-11-01 (PRD §4.2).
  *
  * The I/O is injected (`SyncDeps`) because the interesting guarantees —
  * forward-only, failure-isolated, no duplicate writes, bounded concurrency, and
@@ -207,7 +208,36 @@ export function createThrottledSync(
 ) {
   const clock = opts.now ?? (() => Date.now());
   let lastRunAt: number | null = null;
-  let inFlight = false;
+  // The promise rather than a boolean: the MANUAL door joins an in-flight pass
+  // instead of starting a second sweep over the same SOs; the throttled door
+  // still skips concurrent callers exactly as before.
+  let running: Promise<SyncRunResult> | null = null;
+
+  /**
+   * One pass, shared by both doors. Stamps the throttle clock on success only
+   * — a failed pass leaves `lastRunAt` where it was, so the next due call
+   * retries — and logs the summary once per completed pass.
+   */
+  function start(): Promise<SyncRunResult> {
+    const run = (async () => {
+      const result = await runOrderSync(deps);
+      lastRunAt = clock();
+      // The only observability the throttled door has left: the admin page
+      // discards the result (spec §4.4). One line per COMPLETED pass — a
+      // skipped pass logs nothing, so a quiet log means the throttle did its
+      // job, not that the sync is dead.
+      console.info(
+        `order-sync: checked ${result.checked}, synced ${result.synced}, ` +
+          `cancelled ${result.cancelled}, skipped ${result.skipped}, ` +
+          `failed ${result.failed}`,
+      );
+      return result;
+    })().finally(() => {
+      running = null;
+    });
+    running = run;
+    return run;
+  }
 
   return {
     /** Runs when due, otherwise resolves `null` immediately. */
@@ -217,33 +247,27 @@ export function createThrottledSync(
           now: clock(),
           lastRunAt,
           intervalMs: opts.intervalMs,
-          inFlight,
+          inFlight: running !== null,
         })
       ) {
         return null;
       }
-      inFlight = true;
-      try {
-        const result = await runOrderSync(deps);
-        lastRunAt = clock();
-        // The only observability this sync has left: the admin page discards the
-        // result (spec §4.4) and the cron route that used to return it as JSON is
-        // gone. One line per COMPLETED pass — a skipped pass logs nothing, so a
-        // quiet log means the throttle did its job, not that the sync is dead.
-        console.info(
-          `order-sync: checked ${result.checked}, synced ${result.synced}, ` +
-            `cancelled ${result.cancelled}, skipped ${result.skipped}, ` +
-            `failed ${result.failed}`,
-        );
-        return result;
-      } finally {
-        inFlight = false;
-      }
+      return start();
     },
-    /** Test/reset hook — clears both the clock and the in-flight flag. */
+    /**
+     * The manual door (`Sinkron sekarang`): runs NOW even inside the throttle
+     * interval. An in-flight pass — page-load or another admin's click — is
+     * joined, not doubled: two overlapping sweeps would read every SO upstream
+     * twice for nothing. Stamps `lastRunAt` like a due pass, so the page load
+     * right after a manual sync is throttled too.
+     */
+    force(): Promise<SyncRunResult> {
+      return running ?? start();
+    },
+    /** Test/reset hook — clears both the clock and the in-flight run. */
     reset(): void {
       lastRunAt = null;
-      inFlight = false;
+      running = null;
     },
   };
 }
@@ -381,5 +405,14 @@ const throttled = createThrottledSync(createDbSyncDeps(), {
 /** Sync if the interval has elapsed; `null` when it was skipped. */
 export function maybeRunOrderSync(): Promise<SyncRunResult | null> {
   return throttled.maybe();
+}
+
+/**
+ * The manual pass behind `POST /api/admin/sync`: the SAME instance as the
+ * page-load door, so a manual run stamps the throttle clock and a click while
+ * a sweep is in flight joins it instead of starting a second one.
+ */
+export function forceRunOrderSync(): Promise<SyncRunResult> {
+  return throttled.force();
 }
 
