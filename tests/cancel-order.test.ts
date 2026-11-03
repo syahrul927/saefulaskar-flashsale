@@ -78,14 +78,30 @@ function makeDb(opts: {
   flipped?: number; // rows the guarded status UPDATE returns
 }) {
   const calls: Captured[] = [];
+  /** Lock modes passed to a select's `.for()`, in call order. */
+  const locks: unknown[] = [];
   const tx = {
     select: () => ({
       from: (table: unknown) => ({
-        where: async () => {
+        where: () => {
           const items = table === orderItems;
           calls.push({ kind: items ? "select-items" : "select-order" });
-          if (items) return opts.items ?? [];
-          return opts.order ? [opts.order] : [];
+          const rows = items
+            ? (opts.items ?? [])
+            : opts.order
+              ? [opts.order]
+              : [];
+          // The order pre-read chains `.for("update")`: the audit row's
+          // predecessor must be the LIVE status, not one a concurrent
+          // confirm already replaced. Awaitable shape preserved for the
+          // plain reads.
+          const base = Promise.resolve(rows);
+          return Object.assign(base, {
+            for: (lock: unknown) => {
+              locks.push(lock);
+              return base;
+            },
+          });
         },
       }),
     }),
@@ -123,6 +139,7 @@ function makeDb(opts: {
       transaction: async (fn: (t: unknown) => unknown) => fn(tx),
     } as never,
     calls,
+    locks,
     writes,
   };
 }
@@ -167,6 +184,21 @@ describe("cancelOrder", () => {
         note: "3 unit kembali ke kuota sesi",
       },
     });
+  });
+
+  it("reads the order row under a row lock, so the audit predecessor is live", async () => {
+    // The final review's third write site, same staleness class as the sync
+    // pre-read (I-2) and the confirm route (I-1): the guarded flip decides
+    // the outcome with or without this lock — the cancel still wins and the
+    // quota still releases exactly once — but a stale read mislabels the
+    // history row UNPAID → CANCEL when the row was really CONFIRMED, and
+    // "was a refund owed" is the fact the ledger exists to preserve.
+    const { db, locks } = makeDb({
+      order: { id: "o1", status: "UNPAID" },
+      items: [],
+    });
+    await cancelOrder(db, { orderId: "o1", source: "admin", actorUserId: "u1" });
+    expect(locks).toEqual(["update"]);
   });
 
   it("releases every planned line, so two different products cost two UPDATEs", async () => {

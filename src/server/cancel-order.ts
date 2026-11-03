@@ -89,7 +89,16 @@ export async function cancelOrder(
     const [order] = await tx
       .select({ id: orders.id, status: orders.status })
       .from(orders)
-      .where(eq(orders.id, input.orderId));
+      .where(eq(orders.id, input.orderId))
+      // Lock-stable, per the final review's third write site: the guarded
+      // UPDATE below still decides the OUTCOME (cancel wins either way, quota
+      // releases exactly once), but without the lock an interleaved admin
+      // confirm leaves this read stale, and the history row would record
+      // `UNPAID → CANCEL` when the true predecessor was CONFIRMED. "Was a
+      // refund owed" is exactly the fact the ledger exists to preserve
+      // (spec §4.5; PRD §4.7). Same primitive as the sync pre-read and the
+      // confirm route.
+      .for("update");
     if (!order) return { cancelled: false, reason: "not-found" } as const;
     // Cheap early-out; the guarded UPDATE below is the real race guard.
     if (isEndState(order.status)) {
