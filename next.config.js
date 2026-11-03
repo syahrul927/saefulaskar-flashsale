@@ -5,6 +5,14 @@
 import "./src/env.js";
 
 /** @type {import("next").NextConfig} */
-const config = {};
+const config = {
+  images: {
+    // Vercel rejects `images.unoptimized` in vercel.json ("should NOT have
+    // additional property") — for Next.js it reads this file instead.
+    // Originals pass through: no platform resize, no per-request image
+    // optimization billing.
+    unoptimized: true,
+  },
+};
 
 export default config;
