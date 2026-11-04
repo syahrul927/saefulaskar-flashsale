@@ -277,6 +277,16 @@ function canSaveRow(drafts: {
 }
 
 /**
+ * Guard for the search rows' `+ Tambah` button (Task 8): a product the ERP
+ * reports as zero stock must not enter a session — it could never sell.
+ * Unknown stock (`null`, rendered "—") stays addable: unknown ≠ zero, the
+ * v2 map simply had no row for it.
+ */
+function canAddRow(stock: number | null): boolean {
+  return stock !== 0;
+}
+
+/**
  * One roster row's unsaved edit values (the Save-bar draft model). The three
  * numeric fields stay strings so a cleared/typing cell is representable;
  * `dirtyPatches` parses them and compares against the saved row.
@@ -1469,6 +1479,13 @@ function ProductPicker({
                 results.map((r) => {
                   const label = r.itemGroupName || r.skuCode;
                   const isAdded = selected.has(r.itemId);
+                  // Task 8: the zero-stock guard bites the ADD side only — a
+                  // rostered row (✓ Ditambah) must stay hide/remove-able.
+                  // In live sessions a hidden roster row shows `+ Tambah`
+                  // (re-add = unhide), so it is guarded too: it re-enters
+                  // the sale.
+                  const stockBlocked =
+                    !isAdded && canAddRow(r.stock) === false;
                   return (
                     <div
                       key={r.itemId}
@@ -1487,7 +1504,15 @@ function ProductPicker({
                             <span className="text-neutral-400 line-through dark:text-neutral-500">
                               {formatRupiah(r.price)}
                             </span>
-                            <span className="font-mono tabular-nums">
+                            {/* Zero stock turns the cell red so the
+                                disabled `+ Tambah` reads as caused (Task 8). */}
+                            <span
+                              className={cn(
+                                "font-mono tabular-nums",
+                                r.stock === 0 &&
+                                  "font-bold text-red-600 dark:text-red-400",
+                              )}
+                            >
                               Stok {r.stock ?? "—"}
                             </span>
                           </div>
@@ -1505,7 +1530,8 @@ function ProductPicker({
                             : `Tambah ${label} ke roster`
                         }
                         isLoading={busyItem === r.itemId}
-                        disabled={busyItem !== null}
+                        disabled={stockBlocked || busyItem !== null}
+                        title={stockBlocked ? "Stok 0" : undefined}
                         onClick={() =>
                           isAdded
                             ? isLive
@@ -1680,6 +1706,7 @@ function ProductPicker({
 // itemId-keyed selection/merge helpers (pure, no React).
 export {
   ProductPicker,
+  canAddRow,
   canSaveRow,
   categoryText,
   selectedItemIds,

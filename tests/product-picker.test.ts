@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import {
+  canAddRow,
   canSaveRow,
   categoryText,
   dirtyPatches,
@@ -58,6 +59,21 @@ describe("canSaveRow", () => {
     expect(canSaveRow({ ...valid, quota: "1.5" })).toBe(false);
     expect(canSaveRow({ ...valid, flashPrice: "abc" })).toBe(false);
     expect(canSaveRow({ ...valid, flashPrice: "Infinity" })).toBe(false);
+  });
+});
+
+describe("canAddRow", () => {
+  it("blocks a zero-stock catalog row from entering the session", () => {
+    expect(canAddRow(0)).toBe(false);
+  });
+
+  it("keeps unknown stock addable — null renders \"—\", not 0 (spec: unknown ≠ zero)", () => {
+    expect(canAddRow(null)).toBe(true);
+  });
+
+  it("allows any positive stock through", () => {
+    expect(canAddRow(1)).toBe(true);
+    expect(canAddRow(1775)).toBe(true);
   });
 });
 
