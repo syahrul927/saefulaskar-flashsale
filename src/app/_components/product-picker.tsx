@@ -1389,6 +1389,13 @@ function ProductPicker({
       const data = (await res.json().catch(() => null)) as
         | { ok?: boolean; error?: string }
         | null;
+      if (res.status === 401) {
+        // Same routing as every other fetch in this island: a 401 is token
+        // expiry, not a failed delete — sign out instead of toasting a raw
+        // failure the admin cannot act on.
+        await signOutOnExpiry();
+        return;
+      }
       if (!res.ok || !data?.ok) {
         toast.error(data?.error ?? "Gagal menghapus produk.");
         return;
