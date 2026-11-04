@@ -43,6 +43,9 @@ export type ProductState = {
   sessionQuota: number;
   minOrder: number;
   flashPrice: number;
+  /** Admin removed this product from the live sale (`session_products.hidden`).
+   * Hidden rows stay for audit but must never check out. */
+  hidden: boolean;
 };
 
 /** A persisted order line (mirrors `order_items` columns). */
@@ -59,6 +62,7 @@ export type CheckoutLine = {
 export type CheckoutErrorCode =
   | "SESSION_NOT_ACTIVE"
   | "UNKNOWN_PRODUCT"
+  | "PRODUCT_HIDDEN"
   | "STOCK_INSUFFICIENT"
   | "QUOTA_EXCEEDED"
   | "BELOW_MIN_ORDER";
@@ -83,9 +87,14 @@ export type EvaluateCheckoutResult =
 /**
  * Validate a cart against a session. Check order matters (spec §4.4):
  *   1. session ACTIVE
- *   2. DB-stored `availableStock >= qty`
- *   3. `claimed + qty <= sessionQuota`
- *   4. `qty >= minOrder`
+ *   2. the requested product exists in the session roster
+ *   3. the product is not hidden — admin "remove from sale" on a live session
+ *      sets `session_products.hidden`; the row survives for audit, the money
+ *      path refuses it (checked BEFORE stock so a sold-out hidden product
+ *      still reports the real reason)
+ *   4. DB-stored `availableStock >= qty`
+ *   5. `claimed + qty <= sessionQuota`
+ *   6. `qty >= minOrder`
  *
  * Stock is the local DB snapshot (`session_products.jubelio_stock`) — customers
  * don't hold a Jubelio account, so there is no live per-cart recheck here.
@@ -112,6 +121,16 @@ export function evaluateCheckout(
       };
     }
 
+    if (product.hidden) {
+      return {
+        ok: false,
+        error: {
+          code: "PRODUCT_HIDDEN",
+          itemId: product.itemId,
+          sessionProductId: product.sessionProductId,
+        },
+      };
+    }
     if (product.availableStock < req.qty) {
       return {
         ok: false,

@@ -63,6 +63,12 @@ function errorResponse(error: CheckoutError): Response {
         400,
         "Ada produk yang sudah tidak tersedia. Refresh dan pilih ulang, ya.",
       );
+    case "PRODUCT_HIDDEN":
+      return jsonError(
+        409,
+        "Salah satu produk sudah tidak dijual. Buang dari keranjang, ya.",
+        error.itemId,
+      );
     case "STOCK_INSUFFICIENT":
       return jsonError(
         409,
@@ -89,7 +95,8 @@ function errorResponse(error: CheckoutError): Response {
  * Body: { sessionId, items: [{ sessionProductId, qty }], recipientName?,
  * recipientPhone?, recipientAddress? } — the recipient fields snapshot onto
  * the order row (undefined → null) via `buildOrderValues`.
- * Checks: session ACTIVE → DB stock ≥ qty → claimed+qty ≤ quota → qty ≥ minOrder.
+ * Checks: session ACTIVE → not hidden → DB stock ≥ qty → claimed+qty ≤ quota
+ * → qty ≥ minOrder (order owned by `evaluateCheckout`).
  * On pass (one transaction): claimed += qty per product, insert `order` + items.
  * Responds { bookingId, orderId, grandTotal, bankAccounts, waLink }.
  */
@@ -130,6 +137,7 @@ export async function POST(request: Request) {
       sessionQuota: row.sessionQuota,
       minOrder: row.minOrder,
       flashPrice: row.flashPrice,
+      hidden: row.hidden,
     });
   }
 

@@ -1,4 +1,4 @@
-import { eq } from "drizzle-orm";
+import { and, eq } from "drizzle-orm";
 import type { Metadata } from "next";
 
 import { db } from "@/server/db";
@@ -36,10 +36,17 @@ export default async function HomePage() {
     );
   }
 
+  // Hidden products (admin "remove from sale" on a live session) leave the
+  // grid — the row stays in the DB for audit, and checkout refuses it too.
   const rows = await db
     .select()
     .from(sessionProducts)
-    .where(eq(sessionProducts.sessionId, active.id));
+    .where(
+      and(
+        eq(sessionProducts.sessionId, active.id),
+        eq(sessionProducts.hidden, false),
+      ),
+    );
 
   const products: StorefrontProduct[] = rows.map((row) => ({
     id: row.id,

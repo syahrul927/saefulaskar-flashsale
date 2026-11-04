@@ -19,6 +19,7 @@ function product(overrides: Partial<ProductState> = {}): ProductState {
     sessionQuota: 10,
     minOrder: 1,
     flashPrice: 50_000,
+    hidden: false,
     ...overrides,
   };
 }
@@ -94,6 +95,55 @@ describe("evaluateCheckout", () => {
     expect(result).toEqual({
       ok: false,
       error: { code: "UNKNOWN_PRODUCT", sessionProductId: "missing" },
+    });
+  });
+
+  it("blocks a hidden product even when stock and quota would pass", () => {
+    const p = product({
+      sessionProductId: "sp-1",
+      itemId: 1,
+      availableStock: 100,
+      claimed: 0,
+      sessionQuota: 100,
+      minOrder: 1,
+      hidden: true,
+    });
+    const result = evaluateCheckout(
+      deps({
+        products: new Map([[p.sessionProductId, p]]),
+        requested: [{ sessionProductId: p.sessionProductId, qty: 1 }],
+      }),
+    );
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "PRODUCT_HIDDEN",
+        itemId: 1,
+        sessionProductId: "sp-1",
+      },
+    });
+  });
+
+  it("checks hidden before the stock rule", () => {
+    const p = product({
+      sessionProductId: "sp-1",
+      itemId: 1,
+      availableStock: 0,
+      hidden: true,
+    });
+    const result = evaluateCheckout(
+      deps({
+        products: new Map([[p.sessionProductId, p]]),
+        requested: [{ sessionProductId: p.sessionProductId, qty: 1 }],
+      }),
+    );
+    expect(result).toEqual({
+      ok: false,
+      error: {
+        code: "PRODUCT_HIDDEN",
+        itemId: 1,
+        sessionProductId: "sp-1",
+      },
     });
   });
 
