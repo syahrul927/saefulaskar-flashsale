@@ -3,13 +3,17 @@ import { eq } from "drizzle-orm";
 import { getSession } from "@/server/better-auth/server";
 import { db } from "@/server/db";
 import { flashSessions } from "@/server/db/schema";
-import { canActivate } from "@/server/session-rules";
+import { activationBlockMessage, canActivate } from "@/server/session-rules";
 import { z } from "zod";
 
 export const runtime = "nodejs";
 
-function jsonError(status: number, error: string) {
-  return Response.json({ ok: false, error }, { status });
+function jsonError(
+  status: number,
+  error: string,
+  extra?: Record<string, unknown>,
+) {
+  return Response.json({ ok: false, error, ...extra }, { status });
 }
 
 /**
@@ -21,31 +25,43 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const auth = await getSession();
-  if (!auth) return jsonError(401, "Unauthorized");
+  if (!auth)
+    return jsonError(401, "Anda belum masuk. Masuk dulu untuk mengubah sesi.");
   const user = auth.user;
-  if (user.role !== "OWNER") return jsonError(403, "Forbidden");
+  if (user.role !== "OWNER")
+    return jsonError(403, "Hanya admin yang bisa mengubah sesi ini.");
 
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success)
-    return jsonError(400, "Invalid session id");
+    return jsonError(400, "ID sesi tidak valid.");
 
   const [target] = await db
     .select()
     .from(flashSessions)
     .where(eq(flashSessions.id, id));
-  if (!target) return jsonError(404, "Session not found");
+  if (!target) return jsonError(404, "Sesi tidak ditemukan.");
   if (target.status !== "SCHEDULED")
-    return jsonError(409, "Only SCHEDULED sessions can be activated");
+    return jsonError(
+      409,
+      "Hanya sesi berstatus SCHEDULED yang bisa diaktifkan.",
+    );
 
   if (target.startTime === null || target.endTime === null)
-    return jsonError(409, "Session is missing times and cannot be activated");
+    return jsonError(
+      409,
+      "Jam sesi belum dilengkapi. Isi jam mulai dan jam selesai dulu sebelum mengaktifkan sesi.",
+    );
 
   const verdict = await canActivate(db, {
     id: target.id,
     startTime: target.startTime,
     endTime: target.endTime,
   });
-  if (!verdict.ok) return jsonError(409, verdict.reason);
+  // `reason` stays machine-readable for the client; `error` is the copy.
+  if (!verdict.ok)
+    return jsonError(409, activationBlockMessage(verdict.reason), {
+      reason: verdict.reason,
+    });
 
   const [updated] = await db
     .update(flashSessions)

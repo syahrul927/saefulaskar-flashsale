@@ -3,7 +3,7 @@ import { and, eq, ne } from "drizzle-orm";
 import { getSession } from "@/server/better-auth/server";
 import { db } from "@/server/db";
 import { flashSessions } from "@/server/db/schema";
-import { hasOverlap } from "@/server/session-rules";
+import { activationBlockMessage, hasOverlap } from "@/server/session-rules";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -24,8 +24,12 @@ const UpdateSession = z
     },
   );
 
-function jsonError(status: number, error: string) {
-  return Response.json({ ok: false, error }, { status });
+function jsonError(
+  status: number,
+  error: string,
+  extra?: Record<string, unknown>,
+) {
+  return Response.json({ ok: false, error, ...extra }, { status });
 }
 
 /**
@@ -40,9 +44,11 @@ export async function PATCH(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const auth = await getSession();
-  if (!auth) return jsonError(401, "Unauthorized");
+  if (!auth)
+    return jsonError(401, "Anda belum masuk. Masuk dulu untuk mengubah sesi.");
   const user = auth.user;
-  if (user.role !== "OWNER") return jsonError(403, "Forbidden");
+  if (user.role !== "OWNER")
+    return jsonError(403, "Hanya admin yang bisa mengubah sesi ini.");
 
   const { id } = await params;
 
@@ -50,18 +56,24 @@ export async function PATCH(
   try {
     body = UpdateSession.parse(await request.json());
   } catch {
-    return jsonError(400, "Invalid body: name, startTime (ISO), endTime (ISO)");
+    return jsonError(
+      400,
+      "Data yang dikirim tidak valid. Sertakan name, startTime (ISO), atau endTime (ISO).",
+    );
   }
 
   const [target] = await db
     .select()
     .from(flashSessions)
     .where(eq(flashSessions.id, id));
-  if (!target) return jsonError(404, "Session not found");
+  if (!target) return jsonError(404, "Sesi tidak ditemukan.");
 
   // Config frozen after scheduling (spec §5.9): only SCHEDULED is editable.
   if (target.status !== "SCHEDULED") {
-    return jsonError(409, "Only SCHEDULED sessions can be updated");
+    return jsonError(
+      409,
+      "Hanya sesi berstatus SCHEDULED yang bisa diubah.",
+    );
   }
 
   const nextStart = body.startTime
@@ -70,9 +82,12 @@ export async function PATCH(
   const nextEnd = body.endTime ? new Date(body.endTime) : target.endTime;
 
   if (nextStart === null || nextEnd === null)
-    return jsonError(409, "Session is missing times and cannot be rescheduled");
+    return jsonError(
+      409,
+      "Jam sesi belum dilengkapi. Isi jam mulai dan jam selesai dulu sebelum mengubah jadwal sesi.",
+    );
   if (nextEnd <= nextStart)
-    return jsonError(400, "endTime must be after startTime");
+    return jsonError(400, "Jam selesai harus setelah jam mulai.");
 
   // A reschedule must not create an overlap with another SCHEDULED/ACTIVE
   // session. Run the check + update in a transaction.
@@ -109,7 +124,11 @@ export async function PATCH(
     return { ok: true as const, updated };
   });
 
-  if (!result.ok) return jsonError(409, result.reason);
+  // `reason` stays machine-readable for the client; `error` is the copy.
+  if (!result.ok)
+    return jsonError(409, activationBlockMessage(result.reason), {
+      reason: result.reason,
+    });
 
   return Response.json({ ok: true, session: result.updated });
 }
@@ -120,9 +139,11 @@ export async function DELETE(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const auth = await getSession();
-  if (!auth) return jsonError(401, "Unauthorized");
+  if (!auth)
+    return jsonError(401, "Anda belum masuk. Masuk dulu untuk mengubah sesi.");
   const user = auth.user;
-  if (user.role !== "OWNER") return jsonError(403, "Forbidden");
+  if (user.role !== "OWNER")
+    return jsonError(403, "Hanya admin yang bisa mengubah sesi ini.");
 
   const { id } = await params;
 
@@ -130,9 +151,12 @@ export async function DELETE(
     .select()
     .from(flashSessions)
     .where(eq(flashSessions.id, id));
-  if (!target) return jsonError(404, "Session not found");
+  if (!target) return jsonError(404, "Sesi tidak ditemukan.");
   if (target.status !== "SCHEDULED")
-    return jsonError(409, "Only SCHEDULED sessions can be deleted");
+    return jsonError(
+      409,
+      "Hanya sesi berstatus SCHEDULED yang bisa dihapus.",
+    );
 
   await db.delete(flashSessions).where(eq(flashSessions.id, id));
   return Response.json({ ok: true });

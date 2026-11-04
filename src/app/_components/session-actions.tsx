@@ -5,6 +5,10 @@ import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 
+import {
+  activationBlockMessage,
+  type ActivationBlockReason,
+} from "@/server/session-rules";
 import { Button } from "@/components/ui/button";
 
 type ActionKey = "activate" | "pause" | "resume" | "end" | "delete";
@@ -32,13 +36,19 @@ function sessionActionRequest(
  * - PAUSED    → Resume / End
  * - ENDED     → (none)
  * Every mutation sets `isLoading`, fires a sonner toast, then refreshes.
+ *
+ * `blockReason` is the admin list's pre-computed `activationPreview` verdict:
+ * when set, Aktifkan is disabled up front (tooltip + quiet inline hint say
+ * WHY) instead of letting the click bounce off the API's 409.
  */
 function SessionActions({
   sessionId,
   status,
+  blockReason = null,
 }: {
   sessionId: string;
   status: string;
+  blockReason?: ActivationBlockReason | null;
 }) {
   const router = useRouter();
   const [busy, setBusy] = useState<ActionKey | null>(null);
@@ -75,39 +85,55 @@ function SessionActions({
   }
 
   return (
-    <div className="flex flex-wrap items-center gap-2">
-      {status === "SCHEDULED" && (
-        <>
-          <Button size="sm" disabled={busy !== null} onClick={() => run("activate")}>
-            {busy === "activate" ? "Mengaktifkan..." : "Aktifkan"}
-          </Button>
-          <Button size="sm" variant="outline" nativeButton={false} render={<Link href={`/admin/sessions/${sessionId}/edit`} />}>
-            Edit
-          </Button>
-          <Button size="sm" variant="ghost" disabled={busy !== null} onClick={handleDelete}>
-            Hapus
-          </Button>
-        </>
-      )}
-      {status === "ACTIVE" && (
-        <>
-          <Button size="sm" disabled={busy !== null} onClick={() => run("pause")}>
-            {busy === "pause" ? "Menjeda..." : "Jeda"}
-          </Button>
-          <Button size="sm" variant="destructive" disabled={busy !== null} onClick={() => run("end")}>
-            Akhiri
-          </Button>
-        </>
-      )}
-      {status === "PAUSED" && (
-        <>
-          <Button size="sm" disabled={busy !== null} onClick={() => run("resume")}>
-            {busy === "resume" ? "Melanjutkan..." : "Lanjutkan"}
-          </Button>
-          <Button size="sm" variant="destructive" disabled={busy !== null} onClick={() => run("end")}>
-            Akhiri
-          </Button>
-        </>
+    <div className="flex flex-col gap-1.5">
+      <div className="flex flex-wrap items-center gap-2">
+        {status === "SCHEDULED" && (
+          <>
+            <Button
+              size="sm"
+              disabled={busy !== null || blockReason !== null}
+              title={
+                blockReason ? activationBlockMessage(blockReason) : undefined
+              }
+              onClick={() => run("activate")}
+            >
+              {busy === "activate" ? "Mengaktifkan..." : "Aktifkan"}
+            </Button>
+            <Button size="sm" variant="outline" nativeButton={false} render={<Link href={`/admin/sessions/${sessionId}/edit`} />}>
+              Edit
+            </Button>
+            <Button size="sm" variant="ghost" disabled={busy !== null} onClick={handleDelete}>
+              Hapus
+            </Button>
+          </>
+        )}
+        {status === "ACTIVE" && (
+          <>
+            <Button size="sm" disabled={busy !== null} onClick={() => run("pause")}>
+              {busy === "pause" ? "Menjeda..." : "Jeda"}
+            </Button>
+            <Button size="sm" variant="destructive" disabled={busy !== null} onClick={() => run("end")}>
+              Akhiri
+            </Button>
+          </>
+        )}
+        {status === "PAUSED" && (
+          <>
+            <Button size="sm" disabled={busy !== null} onClick={() => run("resume")}>
+              {busy === "resume" ? "Melanjutkan..." : "Lanjutkan"}
+            </Button>
+            <Button size="sm" variant="destructive" disabled={busy !== null} onClick={() => run("end")}>
+              Akhiri
+            </Button>
+          </>
+        )}
+      </div>
+      {/* Quiet inline reason for the greyed-out Aktifkan — the disabled
+          button's title is invisible to touch, so the copy lives here too. */}
+      {status === "SCHEDULED" && blockReason && (
+        <p className="text-xs text-neutral-500 dark:text-neutral-400">
+          {activationBlockMessage(blockReason)}
+        </p>
       )}
     </div>
   );

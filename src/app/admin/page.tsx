@@ -17,6 +17,7 @@ import { Button } from "@/components/ui/button";
 import { formatGmvDelta, getGlobalKpis } from "@/server/console-kpi";
 import { db } from "@/server/db";
 import { flashSessions } from "@/server/db/schema";
+import { activationPreview, type ActivationBlockReason } from "@/server/session-rules";
 import { getSessionKpis } from "@/server/session-query";
 
 export const metadata: Metadata = {
@@ -35,12 +36,16 @@ function formatRange(start: Date | null, end: Date | null): string {
 /**
  * One session row — server-rendered, handed to the client filter island as a
  * ReactNode prop (same pattern as the admin orders list). Markup unchanged
- * from the pre-filter inline version.
+ * from the pre-filter inline version, except `blockReason`: the proactive
+ * activation verdict (see `activationPreview`) so a doomed Aktifkan is
+ * disabled before the click instead of failing with a 409 toast after it.
  */
 function SessionListItem({
   s,
+  blockReason,
 }: {
   s: typeof flashSessions.$inferSelect;
+  blockReason: ActivationBlockReason | null;
 }) {
   return (
     <li className="p-4 sm:p-5">
@@ -72,7 +77,11 @@ function SessionListItem({
       </div>
 
       <div className="mt-4">
-        <SessionActions sessionId={s.id} status={s.status} />
+        <SessionActions
+          sessionId={s.id}
+          status={s.status}
+          blockReason={blockReason}
+        />
       </div>
     </li>
   );
@@ -194,7 +203,20 @@ export default async function AdminSessionsPage() {
             rows={rows.map((s) => ({
               id: s.id,
               status: s.status,
-              node: <SessionListItem key={s.id} s={s} />,
+              // Pre-compute the activation verdict from the already-loaded
+              // list (same rules as the API's `canActivate`) — only SCHEDULED
+              // rows render an Aktifkan button, so only they need it.
+              node: (
+                <SessionListItem
+                  key={s.id}
+                  s={s}
+                  blockReason={
+                    s.status === "SCHEDULED"
+                      ? activationPreview(rows, s.id)
+                      : null
+                  }
+                />
+              ),
             }))}
             counts={rows.reduce<Record<"ALL" | SessionStatus, number>>(
               (acc, s) => {

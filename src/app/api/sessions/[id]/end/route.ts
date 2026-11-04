@@ -21,22 +21,24 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const auth = await getSession();
-  if (!auth) return jsonError(401, "Unauthorized");
+  if (!auth)
+    return jsonError(401, "Anda belum masuk. Masuk dulu untuk mengubah sesi.");
   const user = auth.user;
-  if (user.role !== "OWNER") return jsonError(403, "Forbidden");
+  if (user.role !== "OWNER")
+    return jsonError(403, "Hanya admin yang bisa mengubah sesi ini.");
 
   const { id } = await params;
   if (!z.string().uuid().safeParse(id).success)
-    return jsonError(400, "Invalid session id");
+    return jsonError(400, "ID sesi tidak valid.");
 
   const [target] = await db
     .select()
     .from(flashSessions)
     .where(eq(flashSessions.id, id));
-  if (!target) return jsonError(404, "Session not found");
+  if (!target) return jsonError(404, "Sesi tidak ditemukan.");
 
   if (target.status === "ENDED")
-    return jsonError(409, "Session is already ended");
+    return jsonError(409, "Sesi ini sudah berakhir.");
 
   const [updated] = await db
     .update(flashSessions)
