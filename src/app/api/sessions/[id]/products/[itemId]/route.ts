@@ -107,7 +107,11 @@ export async function GET(
  * live session: `sessionQuota` can never go below `claimed` (sold units are
  * history — 400 naming the floor), and a quota write refreshes the
  * `jubelio_stock` snapshot from the cached v2 map because checkout validates
- * against the snapshot, so a raised quota must not leave it behind. OWNER-only.
+ * against the snapshot, so a raised quota must not leave it behind. Neither
+ * rule applies to a SCHEDULED session — its quota is written directly with no
+ * stock-map read, so a pre-launch edit never depends on the ERP (an expired
+ * token must not 401 a write that needs no live stock; the import path keeps
+ * those snapshots fresh). OWNER-only.
  */
 export async function PUT(
   request: Request,
@@ -168,50 +172,58 @@ export async function PUT(
     );
   if (!row) return jsonError(404, "Produk tidak ditemukan di sesi ini");
 
-  // Quota is the one field a live session cannot set freely, so it gets its own
-  // decision before anything is written (`quotaUpdateDecision`, pure + tested):
+  // Quota is the one field a LIVE session cannot set freely, so its decision
+  // runs before anything is written (`quotaUpdateDecision`, pure + tested):
   // the floor is what already sold, and the v2 refresh keeps `jubelio_stock`
   // from falling below the new quota (checkout validates against the snapshot).
-  // The stock map is read ONLY on a quota write — hiding a product never waits
-  // on the ERP, which is what keeps a live session operable during an outage.
-  // Auth contract matches every sibling route: expired token → 401
-  // SESSION_EXPIRED; any other failure is `liveStock = undefined`, i.e.
-  // "unknown", which allows the edit and warns instead of blocking it on an
-  // outage (and never zeroes the stored snapshot).
+  // Both rules exist for a running sale, so they are scoped to ACTIVE/PAUSED —
+  // a SCHEDULED session has sold nothing (claimed = 0) and no checkout reads
+  // it, and making its quota edit wait on the ERP would only let an expired
+  // token 401 a pre-launch change (the import path keeps those snapshots
+  // fresh). The stock map is read ONLY on a live quota write — hiding a
+  // product never waits on the ERP, which is what keeps a live session operable
+  // during an outage. Auth contract matches every sibling route on that path:
+  // expired token → 401 SESSION_EXPIRED; any other failure is
+  // `liveStock = undefined`, i.e. "unknown", which allows the edit and warns
+  // instead of blocking it on an outage (and never zeroes the stored snapshot).
   let quotaPatch: { sessionQuota?: number; jubelioStock?: number } = {};
   let warning: "UNKNOWN_STOCK" | undefined;
   if (body.sessionQuota !== undefined) {
-    let liveStock: number | null | undefined;
-    try {
-      const map = await getStockMap(createJubelioClient(auth.user.token));
-      liveStock = map.get(itemId)?.available ?? null;
-    } catch (e) {
-      if (isJubelioAuthError(e)) return jsonError(401, "SESSION_EXPIRED");
-      liveStock = undefined;
-      console.error(
-        "session-product: getStockMap failed, quota saved with unknown stock",
-        e,
-      );
+    if (session.status === "SCHEDULED") {
+      quotaPatch = { sessionQuota: body.sessionQuota };
+    } else {
+      let liveStock: number | null | undefined;
+      try {
+        const map = await getStockMap(createJubelioClient(auth.user.token));
+        liveStock = map.get(itemId)?.available ?? null;
+      } catch (e) {
+        if (isJubelioAuthError(e)) return jsonError(401, "SESSION_EXPIRED");
+        liveStock = undefined;
+        console.error(
+          "session-product: getStockMap failed, quota saved with unknown stock",
+          e,
+        );
+      }
+      const decision = quotaUpdateDecision({
+        claimed: row.claimed,
+        requestedQuota: body.sessionQuota,
+        liveStock,
+      });
+      if (!decision.ok)
+        return jsonError(
+          400,
+          `Kuota minimal ${decision.floor} (sudah terjual ${decision.floor}).`,
+        );
+      quotaPatch = {
+        sessionQuota: body.sessionQuota,
+        // `null` means "don't overwrite" — the previous snapshot survives, so a
+        // v2 outage can't blank a live ERP number (missing ≠ empty).
+        ...(decision.jubelioStock !== null
+          ? { jubelioStock: decision.jubelioStock }
+          : {}),
+      };
+      if (decision.warnUnknownStock) warning = "UNKNOWN_STOCK";
     }
-    const decision = quotaUpdateDecision({
-      claimed: row.claimed,
-      requestedQuota: body.sessionQuota,
-      liveStock,
-    });
-    if (!decision.ok)
-      return jsonError(
-        400,
-        `Kuota minimal ${decision.floor} (sudah terjual ${decision.floor}).`,
-      );
-    quotaPatch = {
-      sessionQuota: body.sessionQuota,
-      // `null` means "don't overwrite" — the previous snapshot survives, so a
-      // v2 outage can't blank a live ERP number (missing ≠ empty).
-      ...(decision.jubelioStock !== null
-        ? { jubelioStock: decision.jubelioStock }
-        : {}),
-    };
-    if (decision.warnUnknownStock) warning = "UNKNOWN_STOCK";
   }
 
   const [updated] = await db

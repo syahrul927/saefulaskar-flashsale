@@ -8,9 +8,11 @@ import { JubelioError } from "@/lib/jubelio";
  * `session-products-edit.test.ts`; what is covered HERE is that the route ASKS
  * them in the right place — the floor rejects before anything is written, a
  * v2 miss keeps the stored snapshot instead of zeroing it, an expired token
- * still 401s a quota write, and a hide/show write never waits on the ERP at
- * all. That last one is the point of the feature: a live session must stay
- * operable while Jubelio is down.
+ * still 401s a LIVE quota write, and a hide/show write never waits on the ERP
+ * at all. That last one is the point of the feature: a live session must stay
+ * operable while Jubelio is down — and by the same logic a SCHEDULED quota
+ * edit is ERP-free (review Finding 1: floor + snapshot refresh are live-sale
+ * rules, so pre-launch quota writes skip the stock map entirely).
  *
  * The plan's ruling said route wiring would ride on the pure tests + gate, so
  * this file is an addition, not a requirement — kept because this repo already
@@ -127,6 +129,25 @@ describe("PUT /api/sessions/[id]/products/[itemId]", () => {
     const res = await PUT(putRequest({ minOrder: 2 }), params);
     expect(res.status).toBe(200);
     expect(state.updated).toEqual([{ minOrder: 2 }]);
+  });
+
+  it("SCHEDULED quota write is ERP-free: no stock map, quota alone, no warning", async () => {
+    // Review Finding 1: the floor + snapshot rules exist for a running sale
+    // (checkout coherence), so they are scoped to ACTIVE/PAUSED. A pre-launch
+    // quota edit must never reach Jubelio — an expired token may not 401 it.
+    state.sessionRows = [{ id: "s-1", status: "SCHEDULED" }];
+    const res = await PUT(putRequest({ sessionQuota: 10 }), params);
+    expect(res.status).toBe(200);
+    expect(getStockMap).not.toHaveBeenCalled();
+    // `jubelioStock` absent = the import path keeps the snapshot; the patch is
+    // the quota and nothing else.
+    expect(state.updated).toEqual([{ sessionQuota: 10 }]);
+    const body = await jsonOf(res);
+    expect(body).toEqual({
+      ok: true,
+      product: { id: "p-1", sessionQuota: 10 },
+    });
+    expect(body).not.toHaveProperty("warning");
   });
 
   it("quota below what already sold → Bahasa 400 naming the floor, nothing written", async () => {

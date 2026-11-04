@@ -271,9 +271,12 @@ export async function POST(
                 minOrder: 1,
                 category: "",
                 // Deliberately NOT `hidden`: Ruling 1 pins SCHEDULED to today's
-                // reset (price/minOrder/category/quota), and a SCHEDULED admin
-                // who wants a product gone has the trash button — visibility is
-                // PUT's field, so the reset must not silently change it here.
+                // reset (price/minOrder/category/quota only). This IS reachable
+                // — PUT accepts `hidden` while SCHEDULED, so re-adding that row
+                // upserts it back still-hidden — and that is the spec's chosen
+                // semantics, not a gap: Task 7's picker will not offer hide for
+                // SCHEDULED rows (visibility stays PUT's field either way,
+                // never something the reset writes here).
               },
             })
             .returning(),

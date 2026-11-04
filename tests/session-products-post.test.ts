@@ -24,12 +24,10 @@ vi.mock("@/lib/jubelio", async (importOriginal) => {
 
 const state = vi.hoisted(() => ({
   sessionRows: [] as { id: string; status: string }[],
-  existingRows: [] as {
-    itemId: number;
-    jubelioStock: number;
-    sessionQuota: number;
-    imageUrl: string | null;
-  }[],
+  // Loose on purpose: POST's existing-row select reads four columns, but the
+  // list GET's row select gets WHOLE rows (`hidden` included), so the fixtures
+  // are shaped per-test, not per-column-list.
+  existingRows: [] as Record<string, unknown>[],
   inserted: [] as Record<string, unknown>[],
   // The `"unhide_only"` branch (Task 4) writes through `db.update`, so the
   // builder mock records those patches the same way it records inserts.
@@ -100,7 +98,7 @@ vi.mock("@/server/db", async () => {
   };
 });
 
-import { POST } from "@/app/api/sessions/[id]/products/route";
+import { GET, POST } from "@/app/api/sessions/[id]/products/route";
 import { getSession } from "@/server/better-auth/server";
 import { getStockMap } from "@/server/jubelio-catalog";
 import { resolveImportRow } from "@/server/jubelio-import";
@@ -420,6 +418,92 @@ describe("POST /api/sessions/[id]/products", () => {
       expect(res.status).toBe(201);
       expect(await res.json()).toMatchObject({ ok: true, skipped: [] });
       expect(state.updated).toEqual([{ hidden: false }]);
+    });
+  });
+});
+
+// Task 4 Step 4 (review Minor-3): the list GET is the payload Task 7's roster
+// consumes and `hidden` is the exact field it reads — until now nothing even
+// imported this handler. One `toEqual` on the mapped rows pins the whole shape.
+describe("GET /api/sessions/[id]/products", () => {
+  // The list GET selects WHOLE rows (unlike POST's four-column re-add read),
+  // so these fixtures are whole rows too; only the two `hidden` states and
+  // the map hit/miss vary.
+  const rosterRow = (itemId: number, hidden: boolean) => ({
+    id: 100 + itemId,
+    sessionId: "s-1",
+    itemId,
+    skuCode: `SKU-${itemId}`,
+    itemGroupName: `Group ${itemId}`,
+    originalPrice: 100000,
+    sessionQuota: 10,
+    jubelioStock: 40,
+    imageUrl: null,
+    claimed: 2,
+    minOrder: 1,
+    flashPrice: 90000,
+    category: "",
+    hidden,
+  });
+
+  beforeEach(() => {
+    state.sessionRows = [{ id: "s-1", status: "ACTIVE" }];
+    state.existingRows = [rosterRow(1, false), rosterRow(2, true)];
+    state.inserted = [];
+    state.updated = [];
+    state.echoSeq = 0;
+    state.insertFails = false;
+    vi.mocked(getSession).mockReset();
+    vi.mocked(getSession).mockResolvedValue(owner as never);
+    vi.mocked(getStockMap).mockReset();
+    vi.mocked(getStockMap).mockResolvedValue(
+      new Map([[1, { available: 40, image: null }]]),
+    );
+  });
+
+  it("maps every row with `hidden` intact and `availableStock` from the map (miss → null)", async () => {
+    const res = await GET(
+      new Request("http://localhost/api/sessions/s-1/products"),
+      params,
+    );
+    expect(res.status).toBe(200);
+    const body = (await res.json()) as Record<string, unknown>;
+    // `hidden` present for BOTH states — this is the ADMIN list, it must see
+    // what the storefront no longer does. `jubelioStock`/`imageUrl` are
+    // deliberately NOT part of the mapped row; the v2 join gives item 1 its
+    // live number and item 2 `null` (unknown is never shown as `0`).
+    expect(body).toEqual({
+      ok: true,
+      products: [
+        {
+          id: 101,
+          itemId: 1,
+          skuCode: "SKU-1",
+          itemGroupName: "Group 1",
+          originalPrice: 100000,
+          sessionQuota: 10,
+          claimed: 2,
+          minOrder: 1,
+          flashPrice: 90000,
+          category: "",
+          hidden: false,
+          availableStock: 40,
+        },
+        {
+          id: 102,
+          itemId: 2,
+          skuCode: "SKU-2",
+          itemGroupName: "Group 2",
+          originalPrice: 100000,
+          sessionQuota: 10,
+          claimed: 2,
+          minOrder: 1,
+          flashPrice: 90000,
+          category: "",
+          hidden: true,
+          availableStock: null,
+        },
+      ],
     });
   });
 });
