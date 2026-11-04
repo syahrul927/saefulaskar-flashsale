@@ -26,6 +26,7 @@ function dbRow(
     sessionQuota: 5,
     claimed: 1,
     minOrder: 1,
+    hidden: false,
     flashPrice: 2500000,
     category: "Skincare",
     type: "single",

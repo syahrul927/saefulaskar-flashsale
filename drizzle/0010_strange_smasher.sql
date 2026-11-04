@@ -1,0 +1,1 @@
+ALTER TABLE "pg-drizzle_session_product" ADD COLUMN "hidden" boolean DEFAULT false NOT NULL;

@@ -136,6 +136,8 @@ export const sessionProducts = createTable(
     sessionQuota: t.integer("session_quota").notNull(),
     claimed: t.integer("claimed").default(0).notNull(),
     minOrder: t.integer("min_order").default(1).notNull(),
+    // Mid-session removal hides from the storefront; row kept (order-item FK).
+    hidden: t.boolean("hidden").default(false).notNull(),
     flashPrice: t.integer("flash_price").notNull(),
     category: t.text("category"),
     type: t.text("type").notNull().default("single").$type<ProductType>(),

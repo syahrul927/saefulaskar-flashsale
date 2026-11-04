@@ -71,6 +71,13 @@
       "when": 1793528583788,
       "tag": "0009_past_tana_nile",
       "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1793772752804,
+      "tag": "0010_strange_smasher",
+      "breakpoints": true
     }
   ]
 }
