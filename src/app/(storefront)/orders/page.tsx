@@ -22,7 +22,7 @@ import { OrdersList, type TransactionRow } from "@/app/_components/orders-list";
 import type { ReceiptOrderData } from "@/app/_components/receipt-dialog";
 
 export const metadata: Metadata = {
-  title: "Riwayat Pesanan — Flash Studio",
+  title: "Riwayat Pesanan — Flash Sale Grosir",
 };
 
 export const revalidate = 0;
@@ -32,7 +32,7 @@ export const dynamic = "force-dynamic";
  *  pre-filled with the transfer-proof message for an UNPAID order, and sending
  *  a customer a payment script for an order already on its way is wrong. */
 function buildCsLink(bookingId: string): string {
-  const text = `Halo CS Flash Studio, saya ingin menanyakan status pesanan ${bookingId}.`;
+  const text = `Halo CS Flash Sale Grosir, saya ingin menanyakan status pesanan ${bookingId}.`;
   return `https://wa.me/${env.WHATSAPP_NUMBER}?text=${encodeURIComponent(text)}`;
 }
 

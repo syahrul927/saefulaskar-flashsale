@@ -1,19 +1,27 @@
 // SSR entry: this logo renders inside server components (admin + storefront
 // headers); the main icon entry relies on React Context, which RSC forbids.
-import { LightningIcon } from "@phosphor-icons/react/ssr";
 import { cn } from "cn";
 
+/**
+ * Tile footprint per scale — unchanged from the bolt-tile version, so the
+ * brand swap moves pixels inside the box and nothing around it (spec Ruling
+ * 4: marks + name only, theme untouched).
+ */
 const SIZES = {
   /** Header rail scale — mockup's 32px tile, 36px from `sm` up. */
-  sm: { tile: "size-8 sm:size-9", icon: "size-4 sm:size-5" },
+  sm: "size-8 sm:size-9",
   /** Hero / empty-state scale. */
-  md: { tile: "size-9 sm:size-10", icon: "size-5 sm:size-6" },
+  md: "size-9 sm:size-10",
 } as const;
 
 /**
- * Brand bolt tile — the yellow mark shared by the admin header (Task 5) and
- * the customer header (Task 10). Decorative: the wordmark next to it carries
- * the name, so the tile is hidden from assistive tech.
+ * Brand mark — the supplied Flash Sale Grosir app icon, square-cropped into
+ * the same rounded tile the bolt used to fill. Decorative: the wordmark next
+ * to it carries the name, so the tile is hidden from assistive tech.
+ *
+ * Plain `<img>`: `next.config.js` runs `images.unoptimized`, so `next/image`
+ * buys nothing here, and the repo already renders raster marks this way
+ * (`product-thumb.tsx`).
  */
 function AdminLogo({
   size = "sm",
@@ -22,22 +30,18 @@ function AdminLogo({
   size?: "sm" | "md";
   className?: string;
 }) {
-  const scale = SIZES[size];
-
   return (
-    <span
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src="/brand/logo-square.png"
+      alt=""
       aria-hidden="true"
       className={cn(
-        "flex shrink-0 items-center justify-center rounded-xl border border-brand-primary/40 bg-brand-primary text-neutral-950 shadow-sm",
-        scale.tile,
+        "shrink-0 rounded-xl object-cover shadow-sm",
+        SIZES[size],
         className,
       )}
-    >
-      <LightningIcon
-        weight="fill"
-        className={cn("text-neutral-950", scale.icon)}
-      />
-    </span>
+    />
   );
 }
 

@@ -2,12 +2,12 @@ import { AuthForm } from "@/components/auth-form";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
 
 export const metadata = {
-  title: "Masuk - Saeful Askar",
+  title: "Masuk — Flash Sale Grosir",
 };
 
 /**
  * Split brand layout:
- * - md+: left 45% yellow brand panel (wordmark, price-tag outline, "-70%"
+ * - md+: left 45% yellow brand panel (brand lockup, price-tag outline, "-70%"
  *   starburst — flash-sale vernacular), right white panel with the form
  *   sitting directly on the paper, no floating card.
  * - mobile: yellow band on top, white body below, form full-width.
@@ -33,11 +33,17 @@ export default function LoginPage() {
           <circle cx="7.5" cy="7.5" r=".5" fill="currentColor" />
         </svg>
 
-        {/* Wordmark */}
+        {/* Brand lockup — the supplied export (image, not text) carries the
+            name and the mark together, so this slot renders it verbatim.
+            Plain `<img>`: `images.unoptimized` is on, `next/image` adds
+            nothing. */}
         <header className="relative z-10">
-          <p className="font-heading text-xl font-semibold tracking-tight md:text-2xl">
-            Saeful Askar
-          </p>
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src="/brand/logo-lockup.png"
+            alt="Flash Sale Grosir"
+            className="w-40 rounded-xl md:w-52"
+          />
         </header>
 
         {/* "-70%" starburst sticker — flash-sale price flash. SVG only,

@@ -8,7 +8,7 @@ import { StorefrontView } from "@/app/_components/storefront-view";
 import type { StorefrontProduct } from "@/app/_components/product-card";
 
 export const metadata: Metadata = {
-  title: "Flash Studio — Flash Sale",
+  title: "Flash Sale Grosir",
   description:
     "Belanja produk flash sale dengan harga spesial selagi stok dan kuota masih ada.",
 };

@@ -11,7 +11,7 @@ import {
 import { getSession } from "@/server/better-auth/server";
 
 export const metadata = {
-  title: "Login Berhasil - Saeful Askar",
+  title: "Login Berhasil — Flash Sale Grosir",
 };
 
 export default async function LoginSuccessPage() {
@@ -30,7 +30,7 @@ export default async function LoginSuccessPage() {
     <main className="flex min-h-svh flex-col items-center justify-center bg-background px-4">
       <div className="w-full max-w-sm">
         <p className="mb-8 text-center font-heading text-xl font-semibold text-foreground">
-          Saeful Askar
+          Flash Sale Grosir
         </p>
         <Card>
           <CardHeader>

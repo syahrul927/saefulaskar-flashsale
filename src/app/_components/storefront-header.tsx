@@ -140,7 +140,7 @@ function CartButton({ className }: { className?: string }) {
 
 /**
  * Customer header — the storefront variant of the admin rail (Task 5).
- * Static brand cluster (logo + FLASHSTUDIO + emerald "SALE RESMI" verified
+ * Static brand cluster (logo + FLASH SALE GROSIR + emerald "SALE RESMI" verified
  * badge, no Jubelio mention per design.html:71-76) over the mockup sub-tabs;
  * right cluster is the clipboard jump + cart trigger. Mounts exactly once in
  * `(storefront)/layout.tsx`; renders no server data so the rail paints
@@ -163,11 +163,11 @@ function StorefrontHeader({ className }: { className?: string }) {
             <Link
               href="/"
               className="flex min-w-0 items-center gap-2 sm:gap-3"
-              aria-label="FlashStudio — Toko"
+              aria-label="Flash Sale Grosir — Toko"
             >
               <AdminLogo />
               <span className="truncate font-heading text-sm font-extrabold uppercase tracking-tight text-neutral-950 sm:text-base dark:text-neutral-50">
-                FLASHSTUDIO
+                Flash Sale Grosir
               </span>
             </Link>
             <span className="flex shrink-0">

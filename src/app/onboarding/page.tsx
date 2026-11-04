@@ -7,7 +7,7 @@ import { contacts } from "@/server/db/schema";
 import { OnboardingForm } from "./onboarding-form";
 
 export const metadata = {
-  title: "Lengkapi Profil — Flash Studio",
+  title: "Lengkapi Profil — Flash Sale Grosir",
 };
 
 export const dynamic = "force-dynamic";
