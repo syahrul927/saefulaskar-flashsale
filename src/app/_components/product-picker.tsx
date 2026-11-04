@@ -1268,7 +1268,12 @@ function ProductPicker({
    * through the shared hook, leave the drafts untouched.
    */
   async function flush() {
-    if (flushRows.length === 0 || hasInvalidDraft || savingAll) return;
+    // An in-flight row action (hide/show PUT) merges its response after the
+    // fact; a concurrent flush on the same row would last-write-win the client
+    // state until remount. Wait for the single-flight slot instead (Task 7
+    // review).
+    if (flushRows.length === 0 || hasInvalidDraft || savingAll || busyItem !== null)
+      return;
     setSavingAll(true);
     type FlushResult =
       | { itemId: number; ok: true; product?: SessionProduct; warning?: string }
@@ -1654,7 +1659,9 @@ function ProductPicker({
                 <Button
                   variant="ink"
                   isLoading={savingAll}
-                  disabled={dirtyIds.size === 0 || hasInvalidDraft}
+                  disabled={
+                    dirtyIds.size === 0 || hasInvalidDraft || busyItem !== null
+                  }
                   onClick={flush}
                 >
                   Simpan semua perubahan
