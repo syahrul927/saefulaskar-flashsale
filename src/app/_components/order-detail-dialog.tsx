@@ -33,7 +33,7 @@ export type OrderDetailData = {
   orderId: string;
   bookingId: string;
   status: OrderStatus;
-  /** Raw enum on the admin surface, `CUSTOMER_STATUS_LABEL` on the storefront. */
+  /** Bahasa on every surface: `ADMIN_STATUS_LABEL` here, `CUSTOMER_STATUS_LABEL` on the storefront (final review I-1 — no raw enums). */
   statusLabel: string;
   dateLabel: string;
   grandTotalLabel: string;

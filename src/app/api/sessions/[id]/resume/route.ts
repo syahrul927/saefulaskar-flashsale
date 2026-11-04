@@ -41,7 +41,7 @@ export async function POST(
     .where(eq(flashSessions.id, id));
   if (!target) return jsonError(404, "Sesi tidak ditemukan.");
   if (target.status !== "PAUSED")
-    return jsonError(409, "Hanya sesi berstatus PAUSED yang bisa dilanjutkan.");
+    return jsonError(409, "Hanya sesi yang dijeda yang bisa dilanjutkan.");
 
   if (target.startTime === null || target.endTime === null)
     return jsonError(

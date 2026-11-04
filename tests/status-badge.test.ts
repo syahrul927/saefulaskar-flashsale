@@ -3,8 +3,21 @@ import { describe, expect, it } from "vitest";
 import {
   isPulseStatus,
   orderStatusTone,
+  sessionStatusLabel,
   sessionStatusTone,
 } from "@/app/_components/status-badge";
+
+describe("sessionStatusLabel", () => {
+  // The badges beside the console's filter pills must read the SAME words the
+  // pills read (final review I-1) — this map is the single source the pills
+  // (`session-list-filter.tsx` TABS) and every session badge derive from.
+  it("spells every session status with the pill glossary, never the raw enum", () => {
+    expect(sessionStatusLabel("SCHEDULED")).toBe("Terjadwal");
+    expect(sessionStatusLabel("ACTIVE")).toBe("Aktif");
+    expect(sessionStatusLabel("PAUSED")).toBe("Dijeda");
+    expect(sessionStatusLabel("ENDED")).toBe("Selesai");
+  });
+});
 
 describe("sessionStatusTone", () => {
   it("maps every session status to its badge tone", () => {

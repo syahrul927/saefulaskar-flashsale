@@ -14,6 +14,20 @@ const SESSION_STATUS_TONES = {
   ENDED: "neutral",
 } as const satisfies Record<SessionStatus, StatusTone>;
 
+/**
+ * The session-status glossary — the words the console's filter pills already
+ * read (final review I-1: a badge under a pill that says "Terjadwal" cannot
+ * shout `SCHEDULED`). One map, single source: `session-list-filter.tsx` builds
+ * its TABS labels from it and every session badge renders through
+ * `sessionStatusLabel`, so there is nothing to drift.
+ */
+const SESSION_STATUS_LABEL = {
+  SCHEDULED: "Terjadwal",
+  ACTIVE: "Aktif",
+  PAUSED: "Dijeda",
+  ENDED: "Selesai",
+} as const satisfies Record<SessionStatus, string>;
+
 const ORDER_STATUS_TONES = {
   UNPAID: "amber",
   CONFIRMED: "emerald",
@@ -24,6 +38,11 @@ const ORDER_STATUS_TONES = {
 
 function sessionStatusTone(status: SessionStatus): StatusTone {
   return SESSION_STATUS_TONES[status];
+}
+
+/** Bahasa word for a session status — the pill glossary above, never the enum. */
+function sessionStatusLabel(status: SessionStatus): string {
+  return SESSION_STATUS_LABEL[status];
 }
 
 function orderStatusTone(status: OrderStatus): StatusTone {
@@ -69,6 +88,8 @@ function StatusBadge({
 export {
   isPulseStatus,
   orderStatusTone,
+  SESSION_STATUS_LABEL,
+  sessionStatusLabel,
   sessionStatusTone,
   StatusBadge,
 };

@@ -72,7 +72,7 @@ export async function PATCH(
   if (target.status !== "SCHEDULED") {
     return jsonError(
       409,
-      "Hanya sesi berstatus SCHEDULED yang bisa diubah.",
+      "Hanya sesi terjadwal yang bisa diubah.",
     );
   }
 
@@ -155,7 +155,7 @@ export async function DELETE(
   if (target.status !== "SCHEDULED")
     return jsonError(
       409,
-      "Hanya sesi berstatus SCHEDULED yang bisa dihapus.",
+      "Hanya sesi terjadwal yang bisa dihapus.",
     );
 
   await db.delete(flashSessions).where(eq(flashSessions.id, id));

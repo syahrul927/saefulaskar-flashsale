@@ -3,6 +3,7 @@ import type { Metadata } from "next";
 import { after } from "next/server";
 
 import {
+  ADMIN_STATUS_LABEL,
   resolveInitialTab,
 } from "@/app/_components/admin-order-tabs";
 import {
@@ -173,9 +174,11 @@ export default async function AdminOrdersPage({
       orderId: order.id,
       bookingId: order.bookingId,
       status: order.status,
-      // Admin prints the raw enum (spec §3.1); the storefront prints the Bahasa
-      // label. Same dialog, two vocabularies, decided by the caller.
-      statusLabel: order.status,
+      // Both surfaces print a Bahasa label now (final review I-1: Goal 6
+      // admits no raw enum in user-visible copy); only the VOCABULARY differs
+      // per surface — the admin keeps the per-status words it filters by, the
+      // storefront collapses them into "Selesai". Same dialog, decided here.
+      statusLabel: ADMIN_STATUS_LABEL[order.status],
       dateLabel,
       grandTotalLabel: formatRupiah(order.grandTotal),
       sessionName: sessionNames.get(order.sessionId) ?? null,

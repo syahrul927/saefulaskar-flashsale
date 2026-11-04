@@ -66,10 +66,13 @@ function isCancellable(status: string): boolean {
  * `SHIPPED` is not a label anyone writes any more; it stays so legacy rows get
  * a word instead of the raw enum.
  *
- * Admin surfaces keep raw-enum labels — the documented admin precedent — and so
- * do the storefront's FILTER pills (`orders-list.tsx` TABS), which must tell
- * UNPAID/CONFIRMED/COMPLETED apart to be clickable filters and therefore cannot
- * all say "Selesai". Only the badge on a customer's own order follows this map.
+ * The ADMIN surfaces have their own map — `ADMIN_STATUS_LABEL` in
+ * `admin-order-tabs.ts` — because they must tell apart the three states this
+ * one lumps into "Selesai"; the raw-enum "admin precedent" was retired by the
+ * final review (Goal 6 admits no enum token in user-visible copy anywhere).
+ * The storefront's FILTER pills keep their per-status words (`orders-list.tsx`
+ * TABS), which are Bahasa already. Only the badge on a customer's own order
+ * follows this map.
  */
 const CUSTOMER_STATUS_LABEL: Record<OrderStatus, string> = {
   UNPAID: "Belum Bayar",

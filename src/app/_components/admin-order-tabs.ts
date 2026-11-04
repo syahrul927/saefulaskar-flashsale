@@ -13,8 +13,11 @@ import type { OrderStatus } from "./status-badge";
  */
 
 /**
- * Raw-enum uppercase chips — the admin label precedent (Tasks 6/9), widened
- * to the full status enum so no admin row can become unreachable.
+ * Chips over the full status enum so no admin row can become unreachable —
+ * the VALUES stay raw (they are the `?status=` deep-link contract and the
+ * filter key); only the LABELS are Bahasa (final review I-1, "Admin prints
+ * the raw enum" precedent retired — Goal 6 allows no raw enum anywhere in
+ * user-visible copy).
  */
 const TABS: readonly ("ALL" | OrderStatus)[] = [
   "ALL",
@@ -24,6 +27,23 @@ const TABS: readonly ("ALL" | OrderStatus)[] = [
   "COMPLETED",
   "CANCEL",
 ];
+
+/**
+ * The admin's Bahasa words for the order statuses — words the app already
+ * used, none invented: "Belum Bayar"/"Dibatalkan" are `CUSTOMER_STATUS_LABEL`
+ * and "Dikonfirmasi"/"Diproses"/"Dikirim" are the customer pill set's own
+ * words (`orders-list.tsx` TABS). The admin keeps per-status words because it
+ * must tell apart the three states the customer map lumps into "Selesai".
+ * Server-safe file, so the page (dialog `statusLabel`), the chips and the row
+ * badges all read from this one map.
+ */
+const ADMIN_STATUS_LABEL: Record<OrderStatus, string> = {
+  UNPAID: "Belum Bayar",
+  CONFIRMED: "Dikonfirmasi",
+  SHIPPED: "Dikirim",
+  COMPLETED: "Diproses",
+  CANCEL: "Dibatalkan",
+};
 
 type AdminTab = (typeof TABS)[number];
 
@@ -39,5 +59,5 @@ function resolveInitialTab(raw: string | undefined): AdminTab {
     : "ALL";
 }
 
-export { TABS, resolveInitialTab };
+export { ADMIN_STATUS_LABEL, TABS, resolveInitialTab };
 export type { AdminTab };

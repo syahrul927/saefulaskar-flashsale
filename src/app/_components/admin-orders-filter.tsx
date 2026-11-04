@@ -4,7 +4,7 @@ import { useState } from "react";
 
 import { formatSalesOrderCode } from "@/lib/format";
 import { Button } from "@/components/ui/button";
-import { TABS, type AdminTab } from "./admin-order-tabs";
+import { ADMIN_STATUS_LABEL, TABS, type AdminTab } from "./admin-order-tabs";
 import { CancelOrderButton, type CancelOrderTarget } from "./cancel-order-button";
 import { ConfirmOrderButton } from "./confirm-order-button";
 import { FilterPill } from "./filter-pill";
@@ -88,7 +88,7 @@ function AdminOrdersFilter({
         {TABS.map((t) => (
           <FilterPill
             key={t}
-            label={t}
+            label={t === "ALL" ? "Semua" : ADMIN_STATUS_LABEL[t]}
             count={t === "ALL" ? rows.length : rows.filter((r) => r.status === t).length}
             active={tab === t}
             emphasis={t === "UNPAID"}
@@ -99,8 +99,9 @@ function AdminOrdersFilter({
 
       {visible.length === 0 ? (
         <p className="p-10 text-center text-sm text-neutral-500 dark:text-neutral-400">
-          {/* Chips are raw-enum labels — interpolating `tab` here once
-              rendered "Tidak ada pesanan ALL"; plain copy instead (R2). */}
+          {/* Plain copy on purpose: interpolating `tab` once rendered
+              "Tidak ada pesanan ALL" (R2). The chips themselves are Bahasa
+              now, but the empty state still reads better without one. */}
           Tidak ada pesanan
         </p>
       ) : (
@@ -117,7 +118,7 @@ function AdminOrdersFilter({
                       tone={orderStatusTone(order.status)}
                       pulse={isPulseStatus(order.status)}
                     >
-                      {order.status}
+                      {ADMIN_STATUS_LABEL[order.status]}
                     </StatusBadge>
                   </div>
                   {/* `SO-000192626`, the shape Jubelio's console prints — the

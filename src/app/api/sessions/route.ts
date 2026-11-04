@@ -5,7 +5,6 @@ import { db } from "@/server/db";
 import { flashSessions } from "@/server/db/schema";
 import {
   activationBlockMessage,
-  canActivate,
   hasOverlap,
 } from "@/server/session-rules";
 import { z } from "zod";

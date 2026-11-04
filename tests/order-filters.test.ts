@@ -115,3 +115,33 @@ describe("resolveInitialTab (admin deep link)", () => {
     expect(resolveInitialTab(undefined)).toBe("ALL");
   });
 });
+
+describe("ADMIN_STATUS_LABEL (admin Bahasa chips, badges, and detail dialog)", () => {
+  // Vocabulary is NOT invented here: these are the words the customer pill
+  // set already carries (orders-list.tsx TABS — "DIKIRIM" was SHIPPED's word
+  // before §4.7 folded it into DIPROSES) plus "Belum Bayar"/"Dibatalkan" from
+  // CUSTOMER_STATUS_LABEL. Admin must distinguish the states the customer
+  // lumps into "Selesai", so it keeps the per-status pill words.
+  it("labels every order status with the existing pill vocabulary", async () => {
+    const { ADMIN_STATUS_LABEL } = await import(
+      "@/app/_components/admin-order-tabs"
+    );
+    expect(ADMIN_STATUS_LABEL).toEqual({
+      UNPAID: "Belum Bayar",
+      CONFIRMED: "Dikonfirmasi",
+      SHIPPED: "Dikirim",
+      COMPLETED: "Diproses",
+      CANCEL: "Dibatalkan",
+    });
+  });
+
+  it("never renders a raw enum token as an admin label", async () => {
+    const { ADMIN_STATUS_LABEL } = await import(
+      "@/app/_components/admin-order-tabs"
+    );
+    for (const [status, label] of Object.entries(ADMIN_STATUS_LABEL)) {
+      expect(label).not.toBe(status);
+      expect(label.toUpperCase()).not.toBe(status);
+    }
+  });
+});

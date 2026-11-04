@@ -43,7 +43,7 @@ export async function POST(
   if (target.status !== "SCHEDULED")
     return jsonError(
       409,
-      "Hanya sesi berstatus SCHEDULED yang bisa diaktifkan.",
+      "Hanya sesi terjadwal yang bisa diaktifkan.",
     );
 
   if (target.startTime === null || target.endTime === null)

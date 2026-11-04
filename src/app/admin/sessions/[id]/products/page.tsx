@@ -3,6 +3,7 @@ import Link from "next/link";
 import { eq } from "drizzle-orm";
 import { notFound } from "next/navigation";
 
+import { sessionStatusLabel } from "@/app/_components/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { getSession } from "@/server/better-auth/server";
 import { db } from "@/server/db";
@@ -20,8 +21,9 @@ export const metadata: Metadata = {
 export const dynamic = "force-dynamic";
 
 /**
- * Products for one session (spec §4.3). Editable while SCHEDULED, read-only
- * after activation (config frozen, spec §5.9). Local rows carry the config;
+ * Products for one session (spec §4.3). Editable while SCHEDULED, ACTIVE and
+ * PAUSED — the live edit window (spec §5.9 relaxed, `canEditProducts`); ENDED
+ * is a record and the roster freezes there. Local rows carry the config;
  * stock and thumbnails come from the shared cached v2 map, so the roster can
  * never show a number the admin dashboard has already moved past (imports use
  * the same map, guarded by `resolveImportRow`).
@@ -83,7 +85,7 @@ export default async function SessionProductsPage({
           <h1 className="mt-1 flex items-center gap-2 text-2xl font-bold tracking-tight text-foreground">
             {session.name}
             <Badge variant={session.status === "ACTIVE" ? "default" : "outline"}>
-              {session.status}
+              {sessionStatusLabel(session.status)}
             </Badge>
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
@@ -91,7 +93,7 @@ export default async function SessionProductsPage({
               ? session.status === "SCHEDULED"
                 ? "Pilih dan atur produk untuk sesi ini."
                 : "Perubahan tersimpan lewat tombol Simpan. Produk yang disembunyikan hilang dari toko, pesanan lama tetap aman."
-              : "Konfigurasi produk terkunci setelah sesi aktif."}
+              : "Sesi ini sudah selesai — konfigurasi produk terkunci dan tidak bisa diubah lagi."}
           </p>
         </div>
       </div>

@@ -36,7 +36,7 @@ export async function POST(
     .where(eq(flashSessions.id, id));
   if (!target) return jsonError(404, "Sesi tidak ditemukan.");
   if (target.status !== "ACTIVE")
-    return jsonError(409, "Hanya sesi berstatus ACTIVE yang bisa dijeda.");
+    return jsonError(409, "Hanya sesi yang sedang jalan yang bisa dijeda.");
 
   const [updated] = await db
     .update(flashSessions)

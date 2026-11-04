@@ -3,7 +3,7 @@
 import { useState, type ReactNode } from "react";
 
 import { FilterPill } from "./filter-pill";
-import type { SessionStatus } from "./status-badge";
+import { SESSION_STATUS_LABEL, type SessionStatus } from "./status-badge";
 
 /**
  * Session status tabs (spec decision 2): the console list arrives as
@@ -14,12 +14,12 @@ import type { SessionStatus } from "./status-badge";
  */
 type Tab = "ALL" | SessionStatus;
 
+// The labels come from `SESSION_STATUS_LABEL` — the same glossary the row
+// badges render through (final review I-1: pill and badge must read the same
+// word; here it is literally the same string, keyed by the enum value).
 const TABS: [Tab, string][] = [
   ["ALL", "Semua"],
-  ["SCHEDULED", "Terjadwal"],
-  ["ACTIVE", "Aktif"],
-  ["PAUSED", "Dijeda"],
-  ["ENDED", "Selesai"],
+  ...(Object.entries(SESSION_STATUS_LABEL) as [SessionStatus, string][]),
 ];
 
 function SessionListFilter({

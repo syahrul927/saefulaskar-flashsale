@@ -7,6 +7,7 @@ import { Panel } from "@/app/_components/panel";
 import { SessionActions } from "@/app/_components/session-actions";
 import { SessionListFilter } from "@/app/_components/session-list-filter";
 import {
+  sessionStatusLabel,
   sessionStatusTone,
   StatusBadge,
   type SessionStatus,
@@ -59,7 +60,7 @@ function SessionListItem({
               tone={sessionStatusTone(s.status)}
               pulse={s.status === "ACTIVE"}
             >
-              {s.status}
+              {sessionStatusLabel(s.status)}
             </StatusBadge>
           </div>
           <p className="mt-1 font-mono text-xs tabular-nums text-neutral-500 dark:text-neutral-400">
@@ -188,7 +189,8 @@ export default async function AdminSessionsPage() {
 
       {paused && (
         <div className="rounded-2xl border border-neutral-200 bg-neutral-50 p-4 text-sm text-neutral-600 dark:border-border dark:bg-muted dark:text-neutral-300">
-          Ada sesi berstatus <span className="font-medium">PAUSED</span>.
+          Ada sesi berstatus{" "}
+          <span className="font-medium">{sessionStatusLabel("PAUSED")}</span>.
           Akhiri sesi yang sedang dijeda sebelum membuat sesi baru.
         </div>
       )}

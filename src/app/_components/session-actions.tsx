@@ -42,7 +42,11 @@ function sessionActionRequest(
  * - ACTIVE    → Pause / End
  * - PAUSED    → Resume / End
  * - ENDED     → (none)
- * Every mutation sets `isLoading`, fires a sonner toast, then refreshes.
+ * A running action parks the WHOLE row: the shared `busy` key disables every
+ * button in the group (no second transition can start mid-request) and the
+ * trigger swaps its own label for a gerund — deliberately not the `Button`
+ * `isLoading` spinner, which would only grey the one clicked button. A sonner
+ * toast then reports the outcome and the router refreshes.
  *
  * `blockReason` is the admin list's pre-computed `activationPreview` verdict:
  * when set, Aktifkan is disabled up front (tooltip + quiet inline hint say
