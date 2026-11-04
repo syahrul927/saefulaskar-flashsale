@@ -62,7 +62,7 @@ describe("buildStatusSteps", () => {
       history: [entry()],
     });
     expect(steps[1]).toMatchObject({
-      label: "Dibayar — sales order dibuat",
+      label: "Selesai",
       actorLabel: "oleh Rina",
       note: "SO #192626 dibuat",
       timestampLabel: "28 Okt 2026, 20.11",
@@ -90,6 +90,34 @@ describe("buildStatusSteps", () => {
       actorLabel: "sinkronisasi Jubelio",
       tone: "cancel",
     });
+  });
+
+  it("ends on Dibatalkan for an order that was paid first, never on Selesai", () => {
+    // The case Ruling 3 is really about: this order DID reach the paid
+    // "Selesai" step, and then Jubelio deleted it. Cancel must read as the last
+    // word — a customer who paid and got nothing must not be left on "Selesai".
+    const steps = buildStatusSteps({
+      status: "CANCEL",
+      createdAt: new Date(2026, 9, 28),
+      history: [
+        entry(),
+        entry({
+          id: "h2",
+          fromStatus: "CONFIRMED",
+          toStatus: "CANCEL",
+          source: "sync",
+          actorName: null,
+          note: "SO #192626 dihapus di Jubelio — 2 unit kembali ke kuota sesi",
+        }),
+      ],
+    });
+    expect(steps.map((s) => s.label)).toEqual([
+      "Pesanan dibuat",
+      "Selesai",
+      "Dibatalkan",
+    ]);
+    expect(steps.at(-1)).toMatchObject({ tone: "cancel" });
+    expect(steps.some((s) => s.tone === "pending")).toBe(false);
   });
 
   it("names a deleted admin instead of dropping the step", () => {
@@ -131,14 +159,14 @@ describe("buildStatusSteps", () => {
       createdAt: new Date(2026, 9, 28),
       history: [],
     });
-    // Three, not two: the pre-history `current` step and the `pending` step are
-    // different statements (spec §4.5 vs §4.6.3) and both apply to a live order
-    // that has no rows — the same thing the live-order test below asserts for
-    // UNPAID. A cancelled order is the one that stops at two.
-    expect(steps).toHaveLength(3);
+    // Two, not three: the pre-history `current` step says this paid order is
+    // finished, so there is nothing left to wait for and no `pending` step may
+    // follow it (Ruling 3). Only an UNPAID order gets the placeholder — the
+    // live-order test below asserts that.
+    expect(steps).toHaveLength(2);
     expect(steps[1]).toEqual({
       id: "current",
-      label: "Dikonfirmasi",
+      label: "Selesai",
       timestampLabel: null,
       actorLabel: null,
       note: "Tercatat sebelum riwayat status aktif",
@@ -163,7 +191,7 @@ describe("buildStatusSteps", () => {
     });
   });
 
-  it("adds one pending step for a live order and none after an end state", () => {
+  it("adds the pending placeholder only while the order is UNPAID", () => {
     const unpaid = buildStatusSteps({
       status: "UNPAID",
       createdAt: new Date(2026, 9, 28),
@@ -175,20 +203,55 @@ describe("buildStatusSteps", () => {
       tone: "pending",
       timestampLabel: null,
     });
-    expect(
-      buildStatusSteps({
-        status: "CANCEL",
+    // Every other status ends the list: CANCEL and COMPLETED because they are
+    // end states, CONFIRMED and SHIPPED because the CUSTOMER's lifecycle stops
+    // at payment (Ruling 3) even though the row can still move downstream.
+    for (const status of ["CONFIRMED", "SHIPPED", "COMPLETED", "CANCEL"] as const) {
+      const steps = buildStatusSteps({
+        status,
         createdAt: new Date(2026, 9, 28),
         history: [],
-      }).at(-1)?.tone,
-    ).not.toBe("pending");
+      });
+      expect(steps.some((s) => s.id === "pending")).toBe(false);
+      expect(steps.at(-1)?.tone).not.toBe("pending");
+    }
+  });
+
+  it("ends a paid order's steps at the paid Selesai step", () => {
+    // The whole point of Ruling 3, asserted as a shape: once the customer has
+    // paid there is no "and then…" to show. `isEndState` still says CONFIRMED
+    // is not an end state (admin cancel and the sync must keep working from
+    // it), so the stepper cannot read that flag for this.
+    const steps = buildStatusSteps({
+      status: "CONFIRMED",
+      createdAt: new Date(2026, 9, 28),
+      history: [checkoutRow(), entry({ id: "h-confirm" })],
+    });
+    expect(steps.map((s) => s.id)).toEqual(["created", "h-confirm"]);
+    expect(steps.at(-1)).toMatchObject({ label: "Selesai", tone: "done" });
+  });
+
+  it("reads a legacy SHIPPED row as Selesai, never as a step backwards", () => {
+    // Nothing writes SHIPPED any more (spec §4.7), but rows parked there still
+    // sync. Both the transition step and the pre-history placeholder must land
+    // on the same word the paid order landed on.
+    const withHistory = buildStatusSteps({
+      status: "SHIPPED",
+      createdAt: new Date(2026, 9, 28),
+      history: [
+        entry(),
+        entry({ id: "h-ship", fromStatus: "CONFIRMED", toStatus: "SHIPPED" }),
+      ],
+    });
+    expect(withHistory.map((s) => s.label)).toEqual([
+      "Pesanan dibuat",
+      "Selesai",
+      "Selesai",
+    ]);
+    expect(withHistory.at(-1)?.tone).toBe("done");
     expect(
-      buildStatusSteps({
-        status: "COMPLETED",
-        createdAt: new Date(2026, 9, 28),
-        history: [entry({ toStatus: "COMPLETED", fromStatus: "CONFIRMED" })],
-      }).at(-1)?.tone,
-    ).toBe("done");
+      buildStatusSteps({ status: "SHIPPED", createdAt: new Date(2026, 9, 28), history: [] })[1],
+    ).toMatchObject({ id: "current", label: "Selesai" });
   });
 
   it("does not repeat the creation step for a fresh order's checkout row", () => {
@@ -221,13 +284,9 @@ describe("buildStatusSteps", () => {
         entry({ id: "h-confirm" }),
       ],
     });
-    expect(steps.map((s) => s.id)).toEqual(["created", "h-confirm", "pending"]);
+    expect(steps.map((s) => s.id)).toEqual(["created", "h-confirm"]);
     const labels = steps.map((s) => s.label);
-    expect(labels).toEqual([
-      "Pesanan dibuat",
-      "Dibayar — sales order dibuat",
-      "Selesai",
-    ]);
+    expect(labels).toEqual(["Pesanan dibuat", "Selesai"]);
     // The behaviour the duplicate would have broken, stated once as a rule:
     // two steps never say the same thing.
     expect(new Set(labels).size).toBe(labels.length);

@@ -54,19 +54,28 @@ function isCancellable(status: string): boolean {
  * customer badge shows these uppercased (final review I-1: the pill above says
  * "BELUM BAYAR", so the card badge can't shout the raw enum beside it).
  *
- * COMPLETED reads "Diproses", not "Selesai", because it now covers both
- * processed-and-shipped (spec §4.7): nothing writes SHIPPED any more, so the
- * last state an order reaches must not claim only one of those two things. The
- * card spells it out under the pill; this label is the short form. `SHIPPED`
- * stays so legacy rows still get a word instead of the raw enum.
+ * Three statuses share the word "Selesai" and that is the whole ruling
+ * (spec §4.6, Ruling 3): the customer's lifecycle ends when they have paid.
+ * What happens after that — a sales order being raised, a parcel moving, a
+ * `COMPLETED` that now covers both processed and shipped (spec §4.7) — is
+ * Jubelio's and our business, and showing it as further rungs would make a
+ * routine sync read as the order going backwards, or as work still owed to the
+ * customer. They are done; only CANCEL can take that back, so CANCEL keeps its
+ * own word and out-ranks "Selesai" everywhere it is derived from this map.
  *
- * Admin surfaces keep raw-enum labels — the documented admin precedent.
+ * `SHIPPED` is not a label anyone writes any more; it stays so legacy rows get
+ * a word instead of the raw enum.
+ *
+ * Admin surfaces keep raw-enum labels — the documented admin precedent — and so
+ * do the storefront's FILTER pills (`orders-list.tsx` TABS), which must tell
+ * UNPAID/CONFIRMED/COMPLETED apart to be clickable filters and therefore cannot
+ * all say "Selesai". Only the badge on a customer's own order follows this map.
  */
 const CUSTOMER_STATUS_LABEL: Record<OrderStatus, string> = {
   UNPAID: "Belum Bayar",
-  CONFIRMED: "Dikonfirmasi",
-  SHIPPED: "Dikirim",
-  COMPLETED: "Diproses",
+  CONFIRMED: "Selesai",
+  SHIPPED: "Selesai",
+  COMPLETED: "Selesai",
   CANCEL: "Dibatalkan",
 };
 
@@ -75,15 +84,19 @@ const CUSTOMER_STATUS_LABEL: Record<OrderStatus, string> = {
  * than by the raw enum: `from === null` is the row's creation, and a transition
  * into CANCEL reads the same whatever it came from. Feeds the stepper dialog
  * (Task 8) and the history rows written to `order_status_history`.
+ *
+ * Only the CANCEL and creation branches survive, and that is the vocabulary
+ * change: everything else the map already calls "Selesai" must STEP as
+ * "Selesai" too, so the transition into payment is the finish line rather than
+ * "Dibayar — sales order dibuat". That string described OUR back-office action
+ * (raising a Jubelio sales order) as if it were progress the customer was
+ * entitled to watch — and made a later sync step look like a new, longer stage.
+ * A SHIPPED/COMPLETED row after it now repeats the word, which is the honest
+ * reading: the order did not move on, it only got further along in our books.
  */
 function stepLabel(from: OrderStatus | null, to: OrderStatus): string {
   if (to === "CANCEL") return CUSTOMER_STATUS_LABEL.CANCEL;
   if (from === null) return "Pesanan dibuat";
-  if (from === "UNPAID" && to === "CONFIRMED") {
-    return "Dibayar — sales order dibuat";
-  }
-  if (to === "SHIPPED") return "Dikirim";
-  if (to === "COMPLETED") return "Selesai";
   return CUSTOMER_STATUS_LABEL[to];
 }
 

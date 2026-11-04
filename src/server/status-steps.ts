@@ -20,7 +20,6 @@ import { formatStepTimestamp } from "@/lib/format";
 
 import {
   CUSTOMER_STATUS_LABEL,
-  isEndState,
   stepLabel,
   type OrderStatus,
 } from "./order-status";
@@ -59,7 +58,9 @@ type StatusStep = {
  * Creation step → one step per history row (in the order given — the caller
  * gets them ascending from SQL and re-sorting here would hide a broken
  * `ORDER BY`) → the pre-history current-status step when there are no rows →
- * the pending step while the order is still live.
+ * the pending step ONLY while the order is still UNPAID. Once it has been paid
+ * the list ends: the last customer-visible fact about a paid order is that it
+ * is finished (spec §4.6, Ruling 3).
  *
  * One row does not become a step: checkout's `null → UNPAID` creation record,
  * because the step that opens the list already states that transition and
@@ -129,12 +130,20 @@ function buildStatusSteps(input: {
     });
   }
 
-  if (!isEndState(status)) {
+  // The placeholder is a promise about the FUTURE, so it can only be made when
+  // one is owed: an order that has not been paid yet. CONFIRMED used to fall
+  // through to a "Selesai" placeholder below the paid step, which both claimed
+  // the order was finished twice and left a grey dot hanging after it.
+  //
+  // Deliberately NOT `!isEndState(status)`: CONFIRMED and SHIPPED are not end
+  // states — an admin may still cancel a CONFIRMED order and a legacy SHIPPED
+  // row can still advance (spec §4.7) — but the customer has nothing left to
+  // wait for, and this stepper speaks to the customer (Ruling 3). The two
+  // questions are different and must stay spelled differently in this file.
+  if (status === "UNPAID") {
     steps.push({
       id: "pending",
-      // SHIPPED takes the "Selesai" branch too: it is legacy but a row parked
-      // on it can still advance (spec §4.7).
-      label: status === "UNPAID" ? "Menunggu pembayaran" : "Selesai",
+      label: "Menunggu pembayaran",
       timestampLabel: null,
       actorLabel: null,
       note: null,
