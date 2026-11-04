@@ -9,6 +9,7 @@ import { db } from "@/server/db";
 import { flashSessions, sessionProducts } from "@/server/db/schema";
 import { getStockMap } from "@/server/jubelio-catalog";
 import { rosterProducts } from "@/server/roster-products";
+import { canEditProducts } from "@/server/session-products-edit";
 import { createJubelioClient } from "@/lib/jubelio";
 import { ProductPicker } from "@/app/_components/product-picker";
 
@@ -63,7 +64,9 @@ export default async function SessionProductsPage({
 
   const products = rosterProducts(rows, map);
 
-  const editable = session.status === "SCHEDULED";
+  // The pure edit window (spec §5.9 relaxed): SCHEDULED/ACTIVE/PAUSED edit,
+  // ENDED stays a record. The picker applies the same rule for its controls.
+  const editable = canEditProducts(session.status);
 
   return (
     <main className="flex-1 space-y-6 p-4 md:p-6">
@@ -85,7 +88,9 @@ export default async function SessionProductsPage({
           </h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {editable
-              ? "Pilih dan atur produk untuk sesi ini."
+              ? session.status === "SCHEDULED"
+                ? "Pilih dan atur produk untuk sesi ini."
+                : "Perubahan tersimpan lewat tombol Simpan. Produk yang disembunyikan hilang dari toko, pesanan lama tetap aman."
               : "Konfigurasi produk terkunci setelah sesi aktif."}
           </p>
         </div>

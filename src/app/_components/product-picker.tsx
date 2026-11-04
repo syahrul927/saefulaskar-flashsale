@@ -1,7 +1,14 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState } from "react";
-import { MagnifyingGlassIcon, PackageIcon, TrashIcon } from "@phosphor-icons/react";
+import { useRouter } from "next/navigation";
+import {
+  EyeIcon,
+  EyeSlashIcon,
+  MagnifyingGlassIcon,
+  PackageIcon,
+  TrashIcon,
+} from "@phosphor-icons/react";
 import { cn } from "cn";
 import { toast } from "sonner";
 
@@ -21,6 +28,7 @@ import { categoryOptions } from "@/app/_components/category-options";
 import { StatusBadge } from "@/app/_components/status-badge";
 import { useDebouncedValue } from "@/app/_components/use-debounced-value";
 import { useSessionExpiry } from "@/app/_components/use-session-expiry";
+import { canEditProducts } from "@/server/session-products-edit";
 import { formatRupiah } from "@/lib/format";
 import {
   PRODUCT_TYPES,
@@ -40,6 +48,12 @@ export type SessionProduct = {
   flashPrice: number;
   category: string | null;
   type: ProductType;
+  /**
+   * Mid-session removal flag (Task 2/4): a hidden row is gone from the
+   * storefront but stays in the roster, muted, with a re-show control. The
+   * admin list GET and the roster page join carry it on every row.
+   */
+  hidden: boolean;
   /**
    * v2 thumbnail URL, joined live from the stock map on the roster page
    * (`rosterProducts`) and preserved by the picker's add/save merges.
@@ -117,13 +131,19 @@ export function shouldLoadCatalog({
   return open && !loaded && !inFlight && !errored;
 }
 
-type RowPatch = {
-  sessionQuota: number;
-  minOrder: number;
-  flashPrice: number;
+/**
+ * PUT body for one roster row — only the fields that actually changed are
+ * sent (partial updates are the route's contract; "minimal satu field"
+ * fails an empty body, so callers only send rows with at least one diff).
+ */
+type RowPatchBody = {
+  sessionQuota?: number;
+  minOrder?: number;
+  flashPrice?: number;
   /** `null` = "Umum" (uncategorised); mirrors the nullable DB column. */
-  category: string | null;
-  type: ProductType;
+  category?: string | null;
+  type?: ProductType;
+  hidden?: boolean;
 };
 
 /** Shared class strings for the inline-edit cells (design.html:297-335). */
@@ -257,6 +277,81 @@ function canSaveRow(drafts: {
 }
 
 /**
+ * One roster row's unsaved edit values (the Save-bar draft model). The three
+ * numeric fields stay strings so a cleared/typing cell is representable;
+ * `dirtyPatches` parses them and compares against the saved row.
+ */
+type RowDraft = {
+  quota: string;
+  minOrder: string;
+  flashPrice: string;
+  /** "" renders as "Umum"; the flush maps it back to `category: null`. */
+  category: string;
+  type: ProductType;
+};
+
+/** A draft that equals the row as saved — the starting value until edited. */
+function defaultDraft(product: SessionProduct): RowDraft {
+  return {
+    quota: String(product.sessionQuota),
+    minOrder: String(product.minOrder),
+    flashPrice: String(product.flashPrice),
+    category: product.category ?? "",
+    type: product.type,
+  };
+}
+
+/**
+ * The dirty-row → PUT-body derivation for the single Save bar (Task 7):
+ * one entry per row with at least one PARSEABLE numeric draft field that
+ * differs from the saved value. Untouched rows (no draft entry) are absent;
+ * an equal draft is absent ("50" === 50); empty or unparsable cells are
+ * skipped silently — a half-typed row must never send `Number("") === 0`,
+ * and the Save button itself stays blocked by the `canSaveRow` guard until
+ * every draft parses again. Exported for unit tests.
+ */
+export function dirtyPatches(
+  products: readonly SessionProduct[],
+  drafts: ReadonlyMap<
+    number,
+    { quota: string; minOrder: string; flashPrice: string }
+  >,
+): Array<{
+  itemId: number;
+  patch: { sessionQuota?: number; minOrder?: number; flashPrice?: number };
+}> {
+  const out: Array<{
+    itemId: number;
+    patch: { sessionQuota?: number; minOrder?: number; flashPrice?: number };
+  }> = [];
+  for (const product of products) {
+    const draft = drafts.get(product.itemId);
+    if (!draft) continue;
+    const patch: {
+      sessionQuota?: number;
+      minOrder?: number;
+      flashPrice?: number;
+    } = {};
+    const quota = parseDraft(draft.quota);
+    if (quota !== null && quota !== product.sessionQuota) {
+      patch.sessionQuota = quota;
+    }
+    const minOrder = parseDraft(draft.minOrder);
+    if (minOrder !== null && minOrder !== product.minOrder) {
+      patch.minOrder = minOrder;
+    }
+    const flashPrice = parseDraft(draft.flashPrice);
+    if (flashPrice !== null && flashPrice !== product.flashPrice) {
+      patch.flashPrice = flashPrice;
+    }
+    if (Object.keys(patch).length > 0) {
+      out.push({ itemId: product.itemId, patch });
+    }
+  }
+  return out;
+}
+
+/**
  * Which Jubelio item ids already sit in the roster. The picker modal keys its
  * `+ Tambah` ↔ `✓ Ditambah` toggle and its `N dipilih` counter off this set —
  * selection lives on the roster (by `itemId`), so it survives any re-query.
@@ -303,45 +398,32 @@ function mergeProductsById(
 }
 
 /**
- * Per-row edit state + save/remove handlers, shared by the desktop table row
- * and the mobile card (Review Focus 4: `canEdit === false` renders no
- * controls at all). Preserves the original per-row Simpan guard flow.
+ * Per-row edit plumbing, shared by the desktop table row and the mobile card
+ * (Review Focus 4: `canEdit === false` renders no controls at all). Task 7
+ * moved draft ownership up to `ProductPicker` — the row reports every edit
+ * through `onDraftChange` and the roster's single Save bar flushes them;
+ * this hook keeps only the remove action's own loading state.
  */
 function useRowEdit({
   product,
   canEdit,
-  onSave,
+  draft,
+  onDraftChange,
   onRemove,
+  busy,
 }: {
   product: SessionProduct;
   canEdit: boolean;
-  onSave: (itemId: number, patch: RowPatch) => Promise<void>;
+  draft: RowDraft;
+  onDraftChange: (itemId: number, next: RowDraft) => void;
   onRemove: (itemId: number) => Promise<void>;
+  /** Another request touches this row (hide in flight / batch save). */
+  busy: boolean;
 }) {
-  const [quota, setQuota] = useState(String(product.sessionQuota));
-  const [minOrder, setMinOrder] = useState(String(product.minOrder));
-  const [flashPrice, setFlashPrice] = useState(String(product.flashPrice));
-  const [category, setCategory] = useState(product.category ?? "");
-  const [type, setType] = useState<ProductType>(product.type);
-  const [saving, setSaving] = useState(false);
   const [removing, setRemoving] = useState(false);
 
-  async function handleSave() {
-    setSaving(true);
-    try {
-      await onSave(product.itemId, {
-        sessionQuota: Number(quota),
-        minOrder: Number(minOrder),
-        flashPrice: Number(flashPrice),
-        // "" is the deliberate "Umum" choice → store null (nullable column,
-        // storefront groups null as Umum). Freshly imported rows carry "" in
-        // the DB; normalising here keeps them saveable without touching POST.
-        category: category.trim() === "" ? null : category,
-        type,
-      });
-    } finally {
-      setSaving(false);
-    }
+  function setDraft(patch: Partial<RowDraft>) {
+    onDraftChange(product.itemId, { ...draft, ...patch });
   }
 
   async function handleRemove() {
@@ -354,24 +436,63 @@ function useRowEdit({
   }
 
   return {
-    quota,
-    setQuota,
-    minOrder,
-    setMinOrder,
-    flashPrice,
-    setFlashPrice,
-    category,
-    setCategory,
-    type,
-    setType,
-    saving,
+    quota: draft.quota,
+    setQuota: (value: string) => setDraft({ quota: value }),
+    minOrder: draft.minOrder,
+    setMinOrder: (value: string) => setDraft({ minOrder: value }),
+    flashPrice: draft.flashPrice,
+    setFlashPrice: (value: string) => setDraft({ flashPrice: value }),
+    category: draft.category,
+    setCategory: (value: string) => setDraft({ category: value }),
+    type: draft.type,
+    setType: (value: ProductType) => setDraft({ type: value }),
     removing,
-    canSave:
-      canEdit && !removing && canSaveRow({ quota, minOrder, flashPrice }),
-    canRemove: canEdit && !removing && !saving,
-    handleSave,
+    busy,
+    canRemove: canEdit && !removing && !busy,
     handleRemove,
   };
+}
+
+/** Amber "belum disimpan" marker on a dirty row; red after a failed flush. */
+function DirtyChip({ failed }: { failed: boolean }) {
+  return (
+    <span
+      className={cn(
+        "rounded-full border px-1.5 py-0.5 text-[10px] font-bold",
+        failed
+          ? "border-red-200 bg-red-100 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
+          : "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300",
+      )}
+    >
+      belum disimpan
+    </span>
+  );
+}
+
+/** Marker on a hidden row — the storefront no longer shows it. */
+function HiddenChip() {
+  return (
+    <span className="rounded-full border border-neutral-300 bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold text-neutral-600 dark:border-border dark:bg-input/40 dark:text-neutral-300">
+      Sembunyikan (tidak tampil di toko)
+    </span>
+  );
+}
+
+/**
+ * Row background treatment: amber tint while a draft is unsaved, red after a
+ * failed flush (the draft is kept), muted while hidden. Hover stays only on
+ * clean rows so the flags are never accidentally erased under the cursor.
+ */
+function rowTintClass(dirty: boolean, failed: boolean, hidden: boolean) {
+  return cn(
+    "transition",
+    !dirty &&
+      !failed &&
+      "hover:bg-neutral-50/80 dark:hover:bg-input/30",
+    dirty && !failed && "bg-amber-500/10",
+    failed && "bg-red-500/10",
+    hidden && "opacity-60",
+  );
 }
 
 function CategorySelect({
@@ -390,10 +511,10 @@ function CategorySelect({
       aria-label={`Kategori ${productLabel(product)}`}
       value={row.category}
       onChange={(e) => row.setCategory(e.target.value)}
-      disabled={row.saving}
+      disabled={row.busy}
       className={cn(fullWidth && "w-full", cellSelectClass)}
     >
-      {/* "" is a deliberate choice — handleSave maps it to `category: null`. */}
+      {/* "" is a deliberate choice — the flush maps it to `category: null`. */}
       <option value="">Umum</option>
       {options.map((c) => (
         <option key={c} value={c}>
@@ -418,7 +539,7 @@ function TypeSelect({
       aria-label={`Tipe ${productLabel(product)}`}
       value={row.type}
       onChange={(e) => row.setType(e.target.value as ProductType)}
-      disabled={row.saving}
+      disabled={row.busy}
       className={cn(fullWidth && "w-full", cellSelectClass)}
     >
       {PRODUCT_TYPES.map((t) => (
@@ -430,25 +551,56 @@ function TypeSelect({
   );
 }
 
+/** Props shared by the desktop row and the mobile card (Task 7 plumbing). */
+type RosterRowProps = {
+  product: SessionProduct;
+  canEdit: boolean;
+  options: string[];
+  draft: RowDraft;
+  onDraftChange: (itemId: number, next: RowDraft) => void;
+  onRemove: (itemId: number) => Promise<void>;
+  onToggleHidden: (product: SessionProduct) => void;
+  /** Another request touches this row (hide in flight / batch saving). */
+  busy: boolean;
+  /** Any row operation is in flight — blocks this row's instant buttons. */
+  anyBusy: boolean;
+  /** Row has unsaved edits (amber) or failed the last flush (red). */
+  dirty: boolean;
+  failed: boolean;
+  /** Hide/show only makes sense while the session is live (ACTIVE/PAUSED). */
+  showHideToggle: boolean;
+  /** Hard-delete (trash) stays SCHEDULED-only — the API 409s after launch. */
+  isScheduled: boolean;
+};
+
 /** Desktop inline-edit roster row (design.html:284-345). */
 function RosterTableRow({
   product,
   canEdit,
   options,
-  onSave,
+  draft,
+  onDraftChange,
   onRemove,
-}: {
-  product: SessionProduct;
-  canEdit: boolean;
-  options: string[];
-  onSave: (itemId: number, patch: RowPatch) => Promise<void>;
-  onRemove: (itemId: number) => Promise<void>;
-}) {
-  const row = useRowEdit({ product, canEdit, onSave, onRemove });
+  onToggleHidden,
+  busy,
+  anyBusy,
+  dirty,
+  failed,
+  showHideToggle,
+  isScheduled,
+}: RosterRowProps) {
+  const row = useRowEdit({
+    product,
+    canEdit,
+    draft,
+    onDraftChange,
+    onRemove,
+    busy,
+  });
   const label = productLabel(product);
 
   return (
-    <tr className="transition hover:bg-neutral-50/80 dark:hover:bg-input/30">
+    <tr className={rowTintClass(dirty, failed, product.hidden)}>
       <td className="py-3 pl-4 pr-2">
         <RosterThumb product={product} />
       </td>
@@ -462,6 +614,12 @@ function RosterTableRow({
             {product.skuCode ?? "—"}
           </span>
         </div>
+        {(product.hidden || dirty) && (
+          <div className="mt-1 flex flex-wrap items-center gap-1">
+            {product.hidden && <HiddenChip />}
+            {dirty && <DirtyChip failed={failed} />}
+          </div>
+        )}
       </td>
       <td className="py-3 px-3">
         {canEdit ? (
@@ -494,7 +652,7 @@ function RosterTableRow({
             aria-label={`Kuota Sale ${label}`}
             value={row.quota}
             onChange={(e) => row.setQuota(e.target.value)}
-            disabled={row.saving}
+            disabled={row.busy}
             className={`w-16 ${cellInputClass}`}
           />
         ) : (
@@ -515,7 +673,7 @@ function RosterTableRow({
               aria-label={`Min. Order ${label}`}
               value={row.minOrder}
               onChange={(e) => row.setMinOrder(e.target.value)}
-              disabled={row.saving}
+              disabled={row.busy}
               className={`w-14 ${cellInputAmberClass}`}
             />
             <span className="font-mono text-[10px] text-neutral-400">pcs</span>
@@ -533,7 +691,7 @@ function RosterTableRow({
             aria-label={`Harga Flash ${label}`}
             value={row.flashPrice}
             onChange={(e) => row.setFlashPrice(e.target.value)}
-            disabled={row.saving}
+            disabled={row.busy}
             className={`w-28 ${cellInputClass}`}
           />
         ) : (
@@ -543,28 +701,34 @@ function RosterTableRow({
         )}
       </td>
       <td className="py-3 pl-2 pr-4 text-right">
-        {canEdit && (
+        {canEdit && (showHideToggle || isScheduled) && (
           <div className="flex items-center justify-end gap-1">
-            <Button
-              variant="ink"
-              size="xs"
-              isLoading={row.saving}
-              disabled={row.saving || !row.canSave}
-              onClick={row.handleSave}
-            >
-              Simpan
-            </Button>
-            <Button
-              variant="ghost"
-              size="icon-xs"
-              className="text-neutral-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
-              isLoading={row.removing}
-              disabled={!row.canRemove}
-              aria-label={`Hapus ${label}`}
-              onClick={row.handleRemove}
-            >
-              <TrashIcon />
-            </Button>
+            {showHideToggle && (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-input/40"
+                isLoading={busy}
+                disabled={anyBusy}
+                aria-label={product.hidden ? "Tampilkan lagi" : "Sembunyikan"}
+                onClick={() => onToggleHidden(product)}
+              >
+                {product.hidden ? <EyeIcon /> : <EyeSlashIcon />}
+              </Button>
+            )}
+            {isScheduled && (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="text-neutral-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                isLoading={row.removing}
+                disabled={!row.canRemove}
+                aria-label={`Hapus ${label}`}
+                onClick={row.handleRemove}
+              >
+                <TrashIcon />
+              </Button>
+            )}
           </div>
         )}
       </td>
@@ -577,20 +741,29 @@ function RosterCard({
   product,
   canEdit,
   options,
-  onSave,
+  draft,
+  onDraftChange,
   onRemove,
-}: {
-  product: SessionProduct;
-  canEdit: boolean;
-  options: string[];
-  onSave: (itemId: number, patch: RowPatch) => Promise<void>;
-  onRemove: (itemId: number) => Promise<void>;
-}) {
-  const row = useRowEdit({ product, canEdit, onSave, onRemove });
+  onToggleHidden,
+  busy,
+  anyBusy,
+  dirty,
+  failed,
+  showHideToggle,
+  isScheduled,
+}: RosterRowProps) {
+  const row = useRowEdit({
+    product,
+    canEdit,
+    draft,
+    onDraftChange,
+    onRemove,
+    busy,
+  });
   const label = productLabel(product);
 
   return (
-    <div className="space-y-3 p-4">
+    <div className={cn("space-y-3 p-4", rowTintClass(dirty, failed, product.hidden))}>
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <RosterThumb product={product} size="card" />
@@ -608,20 +781,43 @@ function RosterCard({
               Stok Jubelio:{" "}
               <strong>{product.availableStock ?? "—"} pcs</strong>
             </div>
+            {(product.hidden || dirty) && (
+              <div className="mt-1 flex flex-wrap items-center gap-1">
+                {product.hidden && <HiddenChip />}
+                {dirty && <DirtyChip failed={failed} />}
+              </div>
+            )}
           </div>
         </div>
-        {canEdit && (
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            className="text-neutral-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
-            isLoading={row.removing}
-            disabled={!row.canRemove}
-            aria-label={`Hapus ${label}`}
-            onClick={row.handleRemove}
-          >
-            <TrashIcon />
-          </Button>
+        {canEdit && (showHideToggle || isScheduled) && (
+          <div className="flex shrink-0 items-center gap-1">
+            {showHideToggle && (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-input/40"
+                isLoading={busy}
+                disabled={anyBusy}
+                aria-label={product.hidden ? "Tampilkan lagi" : "Sembunyikan"}
+                onClick={() => onToggleHidden(product)}
+              >
+                {product.hidden ? <EyeIcon /> : <EyeSlashIcon />}
+              </Button>
+            )}
+            {isScheduled && (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                className="text-neutral-400 hover:bg-red-50 hover:text-red-600 dark:hover:bg-red-950/40"
+                isLoading={row.removing}
+                disabled={!row.canRemove}
+                aria-label={`Hapus ${label}`}
+                onClick={row.handleRemove}
+              >
+                <TrashIcon />
+              </Button>
+            )}
+          </div>
         )}
       </div>
 
@@ -654,7 +850,7 @@ function RosterCard({
                 min={1}
                 value={row.quota}
                 onChange={(e) => row.setQuota(e.target.value)}
-                disabled={row.saving}
+                disabled={row.busy}
                 aria-label={`Kuota Sale ${label}`}
                 className={`w-full ${cellInputClass}`}
               />
@@ -668,7 +864,7 @@ function RosterCard({
                 min={1}
                 value={row.minOrder}
                 onChange={(e) => row.setMinOrder(e.target.value)}
-                disabled={row.saving}
+                disabled={row.busy}
                 aria-label={`Min. Order ${label}`}
                 className={`w-full ${cellInputAmberClass}`}
               />
@@ -683,22 +879,11 @@ function RosterCard({
                 step={10000}
                 value={row.flashPrice}
                 onChange={(e) => row.setFlashPrice(e.target.value)}
-                disabled={row.saving}
+                disabled={row.busy}
                 aria-label={`Harga Flash ${label}`}
                 className={`w-full ${cellInputClass}`}
               />
             </div>
-          </div>
-          <div className="pt-1">
-            <Button
-              variant="ink"
-              size="xs"
-              isLoading={row.saving}
-              disabled={row.saving || !row.canSave}
-              onClick={row.handleSave}
-            >
-              Simpan
-            </Button>
           </div>
         </>
       ) : (
@@ -759,9 +944,12 @@ function EmptyRoster({
  * lives in a Dialog modal (design.html Modal 1) that live-queries
  * `/api/jubelio/products` and toggles rows between `+ Tambah` and
  * `✓ Ditambah`; adds POST to `/api/sessions/[id]/products`, un-adds reuse the
- * roster `DELETE`. Rows edit via `PUT` on `[id]/products/[itemId]`.
- * Read-only when the session has left SCHEDULED (config frozen, spec §5.9) —
- * roster cells then render as plain mono text with no controls at all.
+ * roster `DELETE` (SCHEDULED only — after launch a re-add of a hidden row is
+ * the server-side UNHIDE, and removal is the `hidden` flag).
+ * Editable while `canEditProducts` (SCHEDULED/ACTIVE/PAUSED, spec §5.9
+ * relaxed): numeric edits are drafts flushed by the roster's single Save bar
+ * (Task 7 — no per-row Simpan), hide/show is instant per row. ENDED renders
+ * read-only cells with no controls at all.
  */
 function ProductPicker({
   sessionId,
@@ -772,7 +960,12 @@ function ProductPicker({
   sessionStatus: string;
   initialProducts: SessionProduct[];
 }) {
-  const canEdit = sessionStatus === "SCHEDULED";
+  // The pure edit window (Task 3): SCHEDULED + live statuses editable, ENDED
+  // frozen. Hide/show only makes sense once the sale is live; trash stays
+  // SCHEDULED-only (an activated session must never lose a referenced row).
+  const canEdit = canEditProducts(sessionStatus);
+  const isLive = sessionStatus === "ACTIVE" || sessionStatus === "PAUSED";
+  const isScheduled = sessionStatus === "SCHEDULED";
 
   const [products, setProducts] = useState<SessionProduct[]>(initialProducts);
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -786,13 +979,99 @@ function ProductPicker({
    * as "gagal memuat", not "produk tidak ditemukan" (final review I-4).
    * Cleared by the next successful load. */
   const [loadErrored, setLoadErrored] = useState(false);
-  /** Item currently in-flight on an add/remove POST-DELETE (single-flight). */
+  /** Item currently in-flight on an add/remove/hide POST-DELETE-PUT
+   * (single-flight). */
   const [busyItem, setBusyItem] = useState<number | null>(null);
+  /** Unsaved per-row edits, keyed by itemId — the Save bar's draft model. */
+  const [drafts, setDrafts] = useState<Map<number, RowDraft>>(() => new Map());
+  /** Rows whose last flush failed: kept dirty with a red tint (spec R5). */
+  const [failedItems, setFailedItems] = useState<Set<number>>(() => new Set());
+  /** Batch save in flight — disables the Save bar and every row's inputs. */
+  const [savingAll, setSavingAll] = useState(false);
   const searchInputRef = useRef<HTMLInputElement | null>(null);
   const signOutOnExpiry = useSessionExpiry();
+  const router = useRouter();
 
   const categories = categoryOptions(products.map((p) => p.category));
-  const selected = useMemo(() => selectedItemIds(products), [products]);
+  // Live sessions: a hidden roster row is absent from the storefront, so the
+  // modal must NOT mark it `✓ Ditambah` — `+ Tambah` on it means "show again"
+  // (the POST's unhide-only path, Task 4). SCHEDULED rows are never hidden.
+  const selected = useMemo(
+    () =>
+      selectedItemIds(isLive ? products.filter((p) => !p.hidden) : products),
+    [products, isLive],
+  );
+
+  function updateDraft(itemId: number, next: RowDraft) {
+    setDrafts((prev) => {
+      const copy = new Map(prev);
+      copy.set(itemId, next);
+      return copy;
+    });
+  }
+
+  // Drop a draft the server has now confirmed (flush success, POST unhide):
+  // once every draft field equals the saved row it carries no pending change.
+  function dropRedundantDrafts(confirmed: readonly SessionProduct[]) {
+    setDrafts((prev) => {
+      if (prev.size === 0) return prev;
+      const copy = new Map(prev);
+      for (const p of confirmed) {
+        const d = copy.get(p.itemId);
+        if (
+          d?.quota === String(p.sessionQuota) &&
+          d?.minOrder === String(p.minOrder) &&
+          d?.flashPrice === String(p.flashPrice) &&
+          categoryText(d?.category ?? "") === categoryText(p.category) &&
+          d?.type === p.type
+        ) {
+          copy.delete(p.itemId);
+        }
+      }
+      return copy;
+    });
+  }
+
+  // The dirty set for tint / chip / count: numeric diffs come from the tested
+  // `dirtyPatches`; category/type diffs ride the same PUT bodies so a
+  // select-only edit is still saved (spec Goal 1 lists them as editable).
+  const flushRows = useMemo(() => {
+    const rows: Array<{ itemId: number; body: RowPatchBody }> = [];
+    if (!canEdit) return rows;
+    const byId = new Map<number, RowPatchBody>();
+    for (const { itemId, patch } of dirtyPatches(products, drafts)) {
+      byId.set(itemId, { ...patch });
+    }
+    for (const product of products) {
+      const draft = drafts.get(product.itemId);
+      if (!draft) continue;
+      const body: RowPatchBody = byId.get(product.itemId) ?? {};
+      // "" is the deliberate "Umum" choice → store null (nullable column,
+      // storefront groups null as Umum); comparison goes through categoryText
+      // so legacy "" rows and the null draft never look dirty to each other.
+      if (categoryText(draft.category) !== categoryText(product.category)) {
+        body.category = draft.category.trim() === "" ? null : draft.category;
+      }
+      if (draft.type !== product.type) body.type = draft.type;
+      if (Object.keys(body).length > 0) byId.set(product.itemId, body);
+    }
+    for (const [itemId, body] of byId) rows.push({ itemId, body });
+    return rows;
+  }, [canEdit, products, drafts]);
+
+  const dirtyIds = useMemo(
+    () => new Set(flushRows.map((r) => r.itemId)),
+    [flushRows],
+  );
+
+  // "Save stays blocked by rowCanSave": any draft whose three numbers fail the
+  // old per-row guard keeps the whole Save disabled until it parses again.
+  const hasInvalidDraft = useMemo(() => {
+    for (const draft of drafts.values()) {
+      if (!canSaveRow(draft)) return true;
+    }
+    return false;
+  }, [drafts]);
 
   // Focus the search field each time the modal opens (base-ui restores focus
   // to the popup; the catalog is meaningless without a query).
@@ -862,6 +1141,10 @@ function ProductPicker({
   );
 
   async function add(product: SearchResult) {
+    // While live, a rostered-but-hidden row shows `+ Tambah`; the POST then
+    // takes the unhide-only path server-side and the row comes back in
+    // `products` — same merge, different toast (nothing was "added").
+    const wasRostered = products.some((p) => p.itemId === product.itemId);
     setBusyItem(product.itemId);
     try {
       const res = await fetch(`/api/sessions/${sessionId}/products`, {
@@ -908,7 +1191,12 @@ function ProductPicker({
         // stock the admin just saw in the search list, not a letter tile +
         // "—" until the next reload.
         setProducts((prev) => mergeProductsById(prev, added, [product]));
-        toast.success("Produk ditambahkan.");
+        // An unhide never touches config, so a draft that merely repeats the
+        // saved values is no longer a pending change — retire it.
+        dropRedundantDrafts(added);
+        toast.success(
+          wasRostered && isLive ? "Produk ditampilkan." : "Produk ditambahkan.",
+        );
       }
     } catch {
       toast.error("Terjadi kesalahan, coba lagi.");
@@ -917,7 +1205,8 @@ function ProductPicker({
     }
   }
 
-  /** The picker's `✓ Ditambah` side of the toggle: reuses the roster DELETE. */
+  /** The picker's `✓ Ditambah` side of the toggle: reuses the roster DELETE
+   * (SCHEDULED only — the DELETE 409s once the session is live). */
   async function unadd(product: SearchResult) {
     setBusyItem(product.itemId);
     try {
@@ -927,31 +1216,152 @@ function ProductPicker({
     }
   }
 
-  async function save(itemId: number, patch: RowPatch) {
+  /** Live sessions have no un-add: `✓ Ditambah` on a visible roster row
+   * hides it (same instant PUT the roster's eye button uses). */
+  function hideRostered(row: SearchResult) {
+    const product = products.find((p) => p.itemId === row.itemId);
+    if (product) void toggleHidden(product);
+  }
+
+  /**
+   * Instant hide/show PUT (spec Goal 3: per-button loading, no batch).
+   * `{hidden}` alone is a valid body; the stock-map/quota path is not touched,
+   * but `getSession` auth can still 401 — route it through the expiry hook
+   * like every other admin fetch instead of toasting a raw failure.
+   */
+  async function toggleHidden(product: SessionProduct) {
+    if (busyItem !== null || savingAll) return;
+    setBusyItem(product.itemId);
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/products/${itemId}`, {
+      const res = await fetch(`/api/sessions/${sessionId}/products/${product.itemId}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(patch),
+        body: JSON.stringify({ hidden: !product.hidden } satisfies RowPatchBody),
       });
       const data = (await res.json().catch(() => null)) as
         | { ok?: boolean; product?: SessionProduct; error?: string }
         | null;
+      if (res.status === 401) {
+        await signOutOnExpiry();
+        return;
+      }
       if (!res.ok || !data?.ok) {
         toast.error(data?.error ?? "Gagal menyimpan produk.");
         return;
       }
       if (data.product) {
-        // PUT returns the raw drizzle row WITHOUT `availableStock` or `image`
-        // (both are v2-map joins done on GET); replacing the whole row would
-        // blank the stock cell to "—" and revert the thumbnail to a letter
-        // tile for a row whose values the client already had (final review
-        // I-5 + Task 7 review) — mergeProductsById carries both over.
         setProducts((prev) => mergeProductsById(prev, [data.product!]));
       }
-      toast.success("Produk disimpan.");
+      toast.success(product.hidden ? "Produk ditampilkan." : "Produk disembunyikan.");
     } catch {
       toast.error("Terjadi kesalahan, coba lagi.");
+    } finally {
+      setBusyItem(null);
+    }
+  }
+
+  /**
+   * The roster's single Save (spec Goal 3 + R5): concurrent partial PUTs from
+   * `dirtyPatches` (plus any category/type diff on the same rows). Failure is
+   * per row — a failed row keeps its draft and turns red while the others
+   * land; nothing silently reverts. A 401 anywhere is token expiry: sign out
+   * through the shared hook, leave the drafts untouched.
+   */
+  async function flush() {
+    if (flushRows.length === 0 || hasInvalidDraft || savingAll) return;
+    setSavingAll(true);
+    type FlushResult =
+      | { itemId: number; ok: true; product?: SessionProduct; warning?: string }
+      | { itemId: number; ok: false; expired?: boolean; error: string };
+    const results = await Promise.all(
+      flushRows.map(async ({ itemId, body }): Promise<FlushResult> => {
+        try {
+          const res = await fetch(
+            `/api/sessions/${sessionId}/products/${itemId}`,
+            {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify(body),
+            },
+          );
+          const data = (await res.json().catch(() => null)) as
+            | {
+                ok?: boolean;
+                product?: SessionProduct;
+                error?: string;
+                warning?: string;
+              }
+            | null;
+          if (res.status === 401) {
+            return { itemId, ok: false, expired: true, error: "" };
+          }
+          if (!res.ok || !data?.ok) {
+            return { itemId, ok: false, error: data?.error ?? "" };
+          }
+          return { itemId, ok: true, product: data.product, warning: data.warning };
+        } catch {
+          return { itemId, ok: false, error: "" };
+        }
+      }),
+    );
+    try {
+      if (results.some((r) => !r.ok && r.expired)) {
+        await signOutOnExpiry();
+        return;
+      }
+      const ok = results.filter(
+        (r): r is Extract<FlushResult, { ok: true }> => r.ok,
+      );
+      const failed = results.filter(
+        (r): r is Extract<FlushResult, { ok: false }> => !r.ok,
+      );
+      if (ok.length > 0) {
+        // PUT answers with raw drizzle rows (no v2 join) — merge keeps each
+        // row's live thumbnail/stock (final review I-5).
+        setProducts((prev) =>
+          mergeProductsById(
+            prev,
+            ok.filter((r) => r.product).map((r) => r.product!),
+          ),
+        );
+        setDrafts((prev) => {
+          const copy = new Map(prev);
+          for (const r of ok) copy.delete(r.itemId);
+          return copy;
+        });
+        setFailedItems((prev) => {
+          const copy = new Set(prev);
+          for (const r of ok) copy.delete(r.itemId);
+          return copy;
+        });
+        for (const r of ok) {
+          // Task 4: a live quota write with an unreadable stock number saves
+          // anyway and says so — per-response top-level `warning`.
+          if (r.warning === "UNKNOWN_STOCK") {
+            const row = products.find((p) => p.itemId === r.itemId);
+            const sku = row?.skuCode ?? `Item #${r.itemId}`;
+            toast.warning(`Stok belum tentu akurat untuk ${sku}.`);
+          }
+        }
+      }
+      if (failed.length > 0) {
+        setFailedItems((prev) => {
+          const copy = new Set(prev);
+          for (const r of failed) copy.add(r.itemId);
+          return copy;
+        });
+        const firstMessage =
+          failed.map((r) => r.error.trim()).find((m) => m !== "") ??
+          "Terjadi kesalahan, coba lagi.";
+        toast.error(
+          `Gagal menyimpan ${failed.length} produk: ${firstMessage}`,
+        );
+      } else {
+        toast.success("Perubahan produk tersimpan.");
+        router.refresh();
+      }
+    } finally {
+      setSavingAll(false);
     }
   }
 
@@ -1082,10 +1492,22 @@ function ProductPicker({
                         size="xs"
                         variant="ghost"
                         aria-pressed={isAdded}
-                        aria-label={`${isAdded ? "Hapus " : "Tambah "}${label} ${isAdded ? "dari" : "ke"} roster`}
+                        aria-label={
+                          isAdded
+                            ? isLive
+                              ? `Sembunyikan ${label} dari toko`
+                              : `Hapus ${label} dari roster`
+                            : `Tambah ${label} ke roster`
+                        }
                         isLoading={busyItem === r.itemId}
                         disabled={busyItem !== null}
-                        onClick={() => (isAdded ? unadd(r) : add(r))}
+                        onClick={() =>
+                          isAdded
+                            ? isLive
+                              ? hideRostered(r)
+                              : unadd(r)
+                            : add(r)
+                        }
                         className={cn(
                           "shrink-0 rounded-lg font-bold",
                           isAdded
@@ -1169,8 +1591,16 @@ function ProductPicker({
                       product={p}
                       canEdit={canEdit}
                       options={categories}
-                      onSave={save}
+                      draft={drafts.get(p.itemId) ?? defaultDraft(p)}
+                      onDraftChange={updateDraft}
                       onRemove={remove}
+                      onToggleHidden={toggleHidden}
+                      busy={busyItem === p.itemId || savingAll}
+                      anyBusy={busyItem !== null || savingAll}
+                      dirty={dirtyIds.has(p.itemId)}
+                      failed={failedItems.has(p.itemId)}
+                      showHideToggle={canEdit && isLive}
+                      isScheduled={isScheduled}
                     />
                   ))}
                 </tbody>
@@ -1185,11 +1615,52 @@ function ProductPicker({
                   product={p}
                   canEdit={canEdit}
                   options={categories}
-                  onSave={save}
+                  draft={drafts.get(p.itemId) ?? defaultDraft(p)}
+                  onDraftChange={updateDraft}
                   onRemove={remove}
+                  onToggleHidden={toggleHidden}
+                  busy={busyItem === p.itemId || savingAll}
+                  anyBusy={busyItem !== null || savingAll}
+                  dirty={dirtyIds.has(p.itemId)}
+                  failed={failedItems.has(p.itemId)}
+                  showHideToggle={canEdit && isLive}
+                  isScheduled={isScheduled}
                 />
               ))}
             </div>
+
+            {/* Roster's single Save bar (spec Goal 3): replaces every per-row
+                Simpan. Dirty rows flush as concurrent partial PUTs. */}
+            {canEdit && (
+              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200 bg-neutral-50 px-4 py-3 dark:border-border dark:bg-input/30">
+                <div className="flex flex-wrap items-center gap-2">
+                  <span
+                    className={cn(
+                      "rounded-full border px-2 py-0.5 font-mono text-[10px] font-bold",
+                      dirtyIds.size > 0
+                        ? "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                        : "border-neutral-200 bg-neutral-100 text-neutral-500 dark:border-border dark:bg-input/40 dark:text-neutral-400",
+                    )}
+                  >
+                    {dirtyIds.size} belum disimpan
+                  </span>
+                  {hasInvalidDraft && (
+                    <span className="text-[10px] font-medium text-red-600 dark:text-red-400">
+                      Ada nilai yang belum valid — perbaiki dulu sebelum
+                      menyimpan.
+                    </span>
+                  )}
+                </div>
+                <Button
+                  variant="ink"
+                  isLoading={savingAll}
+                  disabled={dirtyIds.size === 0 || hasInvalidDraft}
+                  onClick={flush}
+                >
+                  Simpan semua perubahan
+                </Button>
+              </div>
+            )}
           </>
         )}
       </Panel>
@@ -1197,9 +1668,9 @@ function ProductPicker({
   );
 }
 
-// Exported for unit tests — the roster's save guard + read-only category
-// display rule + the picker modal's itemId-keyed selection/merge helpers
-// (pure, no React).
+// Exported for unit tests — the roster's save guard + dirty-draft → PUT-body
+// derivation + read-only category display rule + the picker modal's
+// itemId-keyed selection/merge helpers (pure, no React).
 export {
   ProductPicker,
   canSaveRow,

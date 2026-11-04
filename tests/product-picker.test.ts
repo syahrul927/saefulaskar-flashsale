@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import {
   canSaveRow,
   categoryText,
+  dirtyPatches,
   filterCatalog,
   mergeProductsById,
   selectedItemIds,
@@ -26,6 +27,7 @@ function rosterRow(itemId: number, overrides: Partial<SessionProduct> = {}) {
     flashPrice: 99000,
     category: null,
     type: "single" as SessionProduct["type"],
+    hidden: false,
     availableStock: null,
     ...overrides,
   } satisfies SessionProduct;
@@ -279,5 +281,72 @@ describe("filterCatalog", () => {
 
   it("trims surrounding whitespace before matching", () => {
     expect(filterCatalog(CATALOG, "  helm  ").map((r) => r.itemId)).toEqual([3]);
+  });
+});
+
+describe("dirtyPatches", () => {
+  /** Draft-map shorthand: the picker's `Map<number, draft>` shape. */
+  const drafts = (
+    entries: Array<[number, { quota: string; minOrder: string; flashPrice: string }]>,
+  ) => new Map(entries);
+
+  it("returns [] for a row with no draft and for a row whose draft equals the saved values", () => {
+    const products = [rosterRow(1)]; // saved: quota 50, min 1, flash 99000
+    expect(dirtyPatches(products, drafts([]))).toEqual([]);
+    expect(
+      dirtyPatches(products, drafts([[1, { quota: "50", minOrder: "1", flashPrice: "99000" }]])),
+    ).toEqual([]);
+  });
+
+  it("emits exactly one patch with only `sessionQuota` when quota alone changed", () => {
+    const products = [rosterRow(1), rosterRow(2)];
+    const patches = dirtyPatches(
+      products,
+      drafts([
+        [1, { quota: "75", minOrder: "1", flashPrice: "99000" }],
+        [2, { quota: "40", minOrder: "3", flashPrice: "80000" }],
+      ]),
+    );
+    const first = patches.find((p) => p.itemId === 1);
+    expect(patches).toHaveLength(2);
+    expect(first?.patch).toEqual({ sessionQuota: 75 });
+    expect(patches[1]?.patch).toEqual({
+      sessionQuota: 40,
+      minOrder: 3,
+      flashPrice: 80000,
+    });
+  });
+
+  it("ignores an empty cell — it yields no patch key, never a 0", () => {
+    const products = [rosterRow(1)];
+    // Empty quota among otherwise-saved values → the row is not dirty at all.
+    expect(
+      dirtyPatches(products, drafts([[1, { quota: "", minOrder: "1", flashPrice: "99000" }]])),
+    ).toEqual([]);
+    // Empty quota alongside a real change → patch without `sessionQuota`.
+    expect(
+      dirtyPatches(products, drafts([[1, { quota: "", minOrder: "2", flashPrice: "99000" }]])),
+    ).toEqual([{ itemId: 1, patch: { minOrder: 2 } }]);
+  });
+
+  it("treats string \"50\" as number 50 — an equal draft is not dirty", () => {
+    const products = [rosterRow(1, { sessionQuota: 50, minOrder: 50, flashPrice: 50 })];
+    expect(
+      dirtyPatches(products, drafts([[1, { quota: "50", minOrder: "50", flashPrice: "50" }]])),
+    ).toEqual([]);
+  });
+
+  it("skips unparsable drafts silently and leaves untouched rows absent", () => {
+    const products = [rosterRow(1), rosterRow(2), rosterRow(3)];
+    const patches = dirtyPatches(
+      products,
+      drafts([
+        // Every numeric field unparsable or equal → the row never appears.
+        [1, { quota: "1.5", minOrder: "abc", flashPrice: "99000" }],
+        [2, { quota: "999", minOrder: "1", flashPrice: "99000" }],
+        // row 3 has no draft entry at all
+      ]),
+    );
+    expect(patches).toEqual([{ itemId: 2, patch: { sessionQuota: 999 } }]);
   });
 });

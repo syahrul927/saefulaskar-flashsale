@@ -46,6 +46,9 @@ export function rosterProducts(
       flashPrice: row.flashPrice,
       category: row.category,
       type: row.type,
+      // Mid-session removal is this flag (Task 2/4): the roster keeps hidden
+      // rows so the admin can re-show them; the storefront drops them.
+      hidden: row.hidden,
       availableStock: entry?.available ?? null,
       image: entry?.image ?? null,
     };

@@ -84,7 +84,7 @@ describe("rosterProducts", () => {
     expect(zero[0]).toMatchObject({ availableStock: 0, image: null });
   });
 
-  it("carries the DB fields through unchanged (id, quota, claimed, prices, category, type)", () => {
+  it("carries the DB fields through unchanged (id, quota, claimed, prices, category, type, hidden)", () => {
     const row = dbRow({
       itemId: 2685,
       id: "abc-123",
@@ -115,6 +115,7 @@ describe("rosterProducts", () => {
       flashPrice: 2500000,
       category: null,
       type: "variable",
+      hidden: false,
       availableStock: 42,
       image: "u",
     });
