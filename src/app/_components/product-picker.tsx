@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import {
   EyeIcon,
   EyeSlashIcon,
+  FloppyDiskIcon,
   MagnifyingGlassIcon,
   PackageIcon,
   TrashIcon,
@@ -1690,6 +1691,11 @@ function ProductPicker({
                   }
                   onClick={flush}
                 >
+                  <FloppyDiskIcon
+                    weight="regular"
+                    className="size-4 shrink-0"
+                    aria-hidden="true"
+                  />
                   Simpan semua perubahan
                 </Button>
               </div>

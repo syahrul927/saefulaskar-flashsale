@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { XIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 import { useSessionExpiry } from "@/app/_components/use-session-expiry";
@@ -110,6 +111,7 @@ function CancelOrderButton({
         aria-haspopup="dialog"
         className="border-red-200 text-red-700 hover:bg-red-50 hover:text-red-800 dark:border-red-900/50 dark:text-red-300 dark:hover:bg-red-950/30"
       >
+        <XIcon weight="regular" className="size-4 shrink-0" aria-hidden="true" />
         Batalkan
       </Button>
       <DialogContent className="sm:max-w-md">
@@ -157,6 +159,7 @@ function CancelOrderButton({
               isLoading={loading}
               onClick={cancel}
             >
+              <XIcon weight="regular" className="size-4 shrink-0" aria-hidden="true" />
               Ya, batalkan
             </Button>
           </span>

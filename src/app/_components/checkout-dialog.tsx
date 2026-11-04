@@ -1,6 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { ShoppingBagIcon } from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
@@ -291,6 +292,11 @@ function CheckoutDialog({
             disabled={items.length === 0}
             onClick={handleSubmit}
           >
+            <ShoppingBagIcon
+              weight="regular"
+              className="size-4 shrink-0"
+              aria-hidden="true"
+            />
             {submitting ? "Mengunci stok..." : "Klaim Sekarang →"}
           </Button>
         </div>

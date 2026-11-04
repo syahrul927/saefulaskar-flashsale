@@ -3,6 +3,13 @@
 import { useState } from "react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
+import {
+  PauseIcon,
+  PlayIcon,
+  PencilIcon,
+  StopIcon,
+  TrashIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 import {
@@ -97,12 +104,15 @@ function SessionActions({
               }
               onClick={() => run("activate")}
             >
+              <PlayIcon weight="regular" className="size-4 shrink-0" aria-hidden="true" />
               {busy === "activate" ? "Mengaktifkan..." : "Aktifkan"}
             </Button>
             <Button size="sm" variant="outline" nativeButton={false} render={<Link href={`/admin/sessions/${sessionId}/edit`} />}>
+              <PencilIcon weight="regular" className="size-4 shrink-0" aria-hidden="true" />
               Ubah
             </Button>
             <Button size="sm" variant="ghost" disabled={busy !== null} onClick={handleDelete}>
+              <TrashIcon weight="regular" className="size-4 shrink-0" aria-hidden="true" />
               Hapus
             </Button>
           </>
@@ -110,9 +120,11 @@ function SessionActions({
         {status === "ACTIVE" && (
           <>
             <Button size="sm" disabled={busy !== null} onClick={() => run("pause")}>
+              <PauseIcon weight="regular" className="size-4 shrink-0" aria-hidden="true" />
               {busy === "pause" ? "Menjeda..." : "Jeda"}
             </Button>
             <Button size="sm" variant="destructive" disabled={busy !== null} onClick={() => run("end")}>
+              <StopIcon weight="regular" className="size-4 shrink-0" aria-hidden="true" />
               Akhiri
             </Button>
           </>
@@ -120,9 +132,11 @@ function SessionActions({
         {status === "PAUSED" && (
           <>
             <Button size="sm" disabled={busy !== null} onClick={() => run("resume")}>
+              <PlayIcon weight="regular" className="size-4 shrink-0" aria-hidden="true" />
               {busy === "resume" ? "Melanjutkan..." : "Lanjutkan"}
             </Button>
             <Button size="sm" variant="destructive" disabled={busy !== null} onClick={() => run("end")}>
+              <StopIcon weight="regular" className="size-4 shrink-0" aria-hidden="true" />
               Akhiri
             </Button>
           </>

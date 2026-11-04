@@ -58,7 +58,15 @@ function Button({
   return (
     <ButtonPrimitive
       data-slot="button"
-      className={cn(buttonVariants({ variant, size, className }))}
+      className={cn(
+        buttonVariants({ variant, size, className }),
+        // While a request is in flight the loader is the only glyph. Action
+        // buttons now carry a leading icon (Task 11) and `isLoading` does NOT
+        // replace children, so without this the icon and the spinner would sit
+        // side by side. CSS-only: the DOM is untouched, so nothing else about
+        // the loading state (disabled, aria-busy) changes.
+        isLoading && "[&_svg:not(.animate-spin)]:hidden",
+      )}
       {...props}
       {...(isLoading && { disabled: true, "aria-busy": true })}
     >

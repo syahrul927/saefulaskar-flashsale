@@ -2,6 +2,11 @@
 
 import { useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
+import {
+  FloppyDiskIcon,
+  PlusIcon,
+  XIcon,
+} from "@phosphor-icons/react";
 import { toast } from "sonner";
 
 import { Panel } from "@/app/_components/panel";
@@ -142,6 +147,14 @@ function SessionForm({ mode, sessionId, initial }: SessionFormProps) {
 
         <div className="flex items-center gap-3 pt-1">
           <Button type="submit" variant="ink" isLoading={isLoading}>
+            {/* One glyph per verb: creating a session is an add, editing it is
+                a save — the label already switches on `mode`, so the icon does
+                too rather than claiming "save" on a blank form. */}
+            {mode === "create" ? (
+              <PlusIcon weight="regular" className="size-4 shrink-0" aria-hidden="true" />
+            ) : (
+              <FloppyDiskIcon weight="regular" className="size-4 shrink-0" aria-hidden="true" />
+            )}
             {isLoading
               ? "Menyimpan..."
               : mode === "create"
@@ -154,6 +167,7 @@ function SessionForm({ mode, sessionId, initial }: SessionFormProps) {
             disabled={isLoading}
             onClick={() => router.push("/admin")}
           >
+            <XIcon weight="regular" className="size-4 shrink-0" aria-hidden="true" />
             Batal
           </Button>
         </div>
