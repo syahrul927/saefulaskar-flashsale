@@ -9,7 +9,9 @@ import { JubelioError } from "@/lib/jubelio";
 // POST onto — is the mockable boundary. `@/server/db` is a thenable-builder
 // mock (`session-query.test.ts` shape): selects hand back the per-table
 // fixtures, inserts echo their values back through `.returning()` and are
-// recorded so the tests can pin which rows actually persisted.
+// recorded so the tests can pin which rows actually persisted (`inserted`),
+// while `update` records its patch the same way (`updated`) — Task 4's
+// `"unhide_only"` branch writes through `db.update`, so the mock follows.
 vi.mock("@/server/better-auth/server", () => ({ getSession: vi.fn() }));
 vi.mock("@/server/jubelio-catalog", async (importOriginal) => {
   const actual = await importOriginal<Record<string, unknown>>();
@@ -29,6 +31,9 @@ const state = vi.hoisted(() => ({
     imageUrl: string | null;
   }[],
   inserted: [] as Record<string, unknown>[],
+  // The `"unhide_only"` branch (Task 4) writes through `db.update`, so the
+  // builder mock records those patches the same way it records inserts.
+  updated: [] as Record<string, unknown>[],
   echoSeq: 0,
   insertFails: false,
 }));
@@ -64,6 +69,29 @@ vi.mock("@/server/db", async () => {
               return Promise.resolve([
                 { id: `p-${++state.echoSeq}`, ...v },
               ]);
+            },
+          }),
+        }),
+      }),
+      // The `"unhide_only"` write (Task 4): `.set(patch).where(...).returning()`.
+      // The builder mock cannot read the `where` clause, so it echoes every
+      // fixture row back with the patch applied — accurate for these cases,
+      // because each fixture row is one of the posted `itemId`s.
+      update: (table: unknown) => ({
+        set: (patch: Record<string, unknown>) => ({
+          where: () => ({
+            returning: () => {
+              if (table === sessionProducts) state.updated.push(patch);
+              if (state.insertFails) {
+                return Promise.reject(new Error("db connection lost"));
+              }
+              return Promise.resolve(
+                state.existingRows.map((row) => ({
+                  id: `u-${++state.echoSeq}`,
+                  ...row,
+                  ...patch,
+                })),
+              );
             },
           }),
         }),
@@ -160,6 +188,7 @@ describe("POST /api/sessions/[id]/products", () => {
     state.sessionRows = [{ id: "s-1", status: "SCHEDULED" }];
     state.existingRows = [];
     state.inserted = [];
+    state.updated = [];
     state.echoSeq = 0;
     state.insertFails = false;
     vi.mocked(getSession).mockReset();
@@ -302,5 +331,95 @@ describe("POST /api/sessions/[id]/products", () => {
     expect(res.status).toBe(401);
     expect(await res.json()).toEqual({ error: "SESSION_EXPIRED" });
     expect(state.inserted).toEqual([]);
+  });
+
+  // Task 4's edit window. The decisions themselves are `session-products-edit`
+  // territory (pure, fully covered there); these cases pin only that the route
+  // ASKS them in the right order — because the order is the safety property:
+  // `canEditProducts` first (an ENDED session falls through `reAddDecision` to
+  // "upsert"), then the per-item split that keeps a live session's config
+  // unwritten.
+  describe("edit window (spec §5.9 relaxed)", () => {
+    const existing = {
+      itemId: 1,
+      jubelioStock: 37,
+      sessionQuota: 5,
+      imageUrl: "https://cdn/old.jpg",
+    };
+
+    it("ENDED: Bahasa 409, no v2 fetch, no write of any kind", async () => {
+      state.sessionRows = [{ id: "s-1", status: "ENDED" }];
+      state.existingRows = [existing];
+      const res = await POST(postRequest([item(1), item(2)]), params);
+      expect(res.status).toBe(409);
+      expect(await res.json()).toEqual({
+        error: "Sesi yang sudah berakhir tidak bisa diubah.",
+      });
+      expect(getStockMap).not.toHaveBeenCalled();
+      expect(state.inserted).toEqual([]);
+      expect(state.updated).toEqual([]);
+    });
+
+    it("ACTIVE re-add of an existing row: flag write only, row still reported", async () => {
+      state.sessionRows = [{ id: "s-1", status: "ACTIVE" }];
+      state.existingRows = [existing];
+      // A number IS available for this item — and must still be ignored: the
+      // upsert it would feed resets price/minOrder/category and re-derives the
+      // quota, i.e. rewrites the running sale (design Ruling 1).
+      vi.mocked(getStockMap).mockResolvedValue(
+        new Map([[1, { available: 5000, image: "https://cdn/new.jpg" }]]),
+      );
+      const res = await POST(postRequest([item(1)]), params);
+      expect(res.status).toBe(201);
+      const body = (await res.json()) as Record<string, unknown>;
+      // Not skipped (nothing blocked it) and present in `products` (`hidden`
+      // cleared) so the picker can merge the row back in.
+      expect(body.skipped).toEqual([]);
+      expect(body.products).toEqual([
+        {
+          id: "u-1",
+          ...existing,
+          hidden: false,
+        },
+      ]);
+      expect(state.inserted).toEqual([]);
+      expect(state.updated).toEqual([{ hidden: false }]);
+      expect(getStockMap).not.toHaveBeenCalled();
+    });
+
+    it("PAUSED batch: new item imports normally, rostered item just unhides", async () => {
+      state.sessionRows = [{ id: "s-1", status: "PAUSED" }];
+      state.existingRows = [existing];
+      vi.mocked(getStockMap).mockResolvedValue(
+        new Map([[2, { available: 40, image: "https://cdn/2.jpg" }]]),
+      );
+      const res = await POST(postRequest([item(1), item(2)]), params);
+      expect(res.status).toBe(201);
+      // The batch now has an importable row, so the cached v2 fetch runs.
+      expect(getStockMap).toHaveBeenCalled();
+      expect(state.inserted).toEqual([
+        expect.objectContaining({
+          itemId: 2,
+          jubelioStock: 40,
+          sessionQuota: 20,
+          imageUrl: "https://cdn/2.jpg",
+        }),
+      ]);
+      expect(state.updated).toEqual([{ hidden: false }]);
+      const body = (await res.json()) as { products: { itemId: number }[] };
+      expect(body.products.map((p) => p.itemId)).toEqual([2, 1]);
+    });
+
+    it("v2 down in a live session: the unhide still lands, nothing skipped", async () => {
+      state.sessionRows = [{ id: "s-1", status: "ACTIVE" }];
+      state.existingRows = [existing];
+      vi.mocked(getStockMap).mockRejectedValue(
+        new JubelioError(500, "UPSTREAM", "inventory v2 down"),
+      );
+      const res = await POST(postRequest([item(1)]), params);
+      expect(res.status).toBe(201);
+      expect(await res.json()).toMatchObject({ ok: true, skipped: [] });
+      expect(state.updated).toEqual([{ hidden: false }]);
+    });
   });
 });

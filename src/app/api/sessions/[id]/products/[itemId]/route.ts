@@ -8,6 +8,10 @@ import {
   sessionProducts,
 } from "@/server/db/schema";
 import { getStockMap } from "@/server/jubelio-catalog";
+import {
+  canEditProducts,
+  quotaUpdateDecision,
+} from "@/server/session-products-edit";
 import { createJubelioClient, isJubelioAuthError } from "@/lib/jubelio";
 import { z } from "zod";
 
@@ -26,6 +30,10 @@ const UpdateProduct = z
     // roster picker normalises its "Umum" choice to null before sending.
     category: z.string().trim().min(1).nullable().optional(),
     type: z.enum(PRODUCT_TYPES).optional(),
+    // Mid-session removal is a flag, not a delete: `hidden` takes the product
+    // off the storefront while the row (and its order-item FK) survives. It is
+    // a normal single-field edit, so it also satisfies "at least one field".
+    hidden: z.boolean().optional(),
   })
   .refine(
     (o) =>
@@ -33,9 +41,10 @@ const UpdateProduct = z
       o.minOrder !== undefined ||
       o.flashPrice !== undefined ||
       o.category !== undefined ||
-      o.type !== undefined,
+      o.type !== undefined ||
+      o.hidden !== undefined,
     {
-      message: "At least one field to update is required",
+      message: "minimal satu field harus diisi",
     },
   );
 
@@ -43,7 +52,8 @@ const UpdateProduct = z
  * GET /api/sessions/[id]/products/[itemId] — single session product with live
  * Jubelio `availableStock` read from the cached v2 stock map (raw ERP
  * `available`; `null` on a map miss or a non-auth upstream failure — unknown
- * is never shown as `0`). OWNER-only.
+ * is never shown as `0`). The row spreads in whole, so `hidden` is on the
+ * payload here too. OWNER-only.
  */
 export async function GET(
   _request: Request,
@@ -56,7 +66,7 @@ export async function GET(
   const { id, itemId: itemIdParam } = await params;
   const itemId = Number(itemIdParam);
   if (!Number.isInteger(itemId) || itemId <= 0)
-    return jsonError(400, "Invalid itemId");
+    return jsonError(400, "itemId tidak valid");
 
   const [row] = await db
     .select()
@@ -67,7 +77,7 @@ export async function GET(
         eq(sessionProducts.itemId, itemId),
       ),
     );
-  if (!row) return jsonError(404, "Session product not found");
+  if (!row) return jsonError(404, "Produk tidak ditemukan di sesi ini");
 
   // Same cached v2 map the picker and the list GET read, keyed on `itemId` —
   // one TTL'd fetch instead of a by-SKU call. Failure semantics are unchanged:
@@ -87,11 +97,17 @@ export async function GET(
 
 /**
  * PUT /api/sessions/[id]/products/[itemId] — admin override of quota / min /
- * flash price / category / type for a single product (spec §4.3, G10 camelCase).
+ * flash price / category / type / visibility for a single product (spec §4.3,
+ * G10 camelCase).
  * Body: { sessionQuota?, minOrder?, flashPrice?, category? (null = Umum),
- * type? }.
- * Only SCHEDULED sessions accept edits (spec §5.9: config frozen once a
- * session leaves SCHEDULED). OWNER-only.
+ * type?, hidden? }.
+ * Edit window (spec §5.9 relaxed): SCHEDULED, ACTIVE and PAUSED all accept
+ * edits — placed orders snapshot their own price/sku/name, so a change only
+ * affects future carts. ENDED stays frozen (409). Two extra rules come with a
+ * live session: `sessionQuota` can never go below `claimed` (sold units are
+ * history — 400 naming the floor), and a quota write refreshes the
+ * `jubelio_stock` snapshot from the cached v2 map because checkout validates
+ * against the snapshot, so a raised quota must not leave it behind. OWNER-only.
  */
 export async function PUT(
   request: Request,
@@ -104,7 +120,7 @@ export async function PUT(
   const { id, itemId: itemIdParam } = await params;
   const itemId = Number(itemIdParam);
   if (!Number.isInteger(itemId) || itemId <= 0)
-    return jsonError(400, "Invalid itemId");
+    return jsonError(400, "itemId tidak valid");
 
   let body: z.infer<typeof UpdateProduct>;
   try {
@@ -126,7 +142,7 @@ export async function PUT(
       400,
       detail
         ? `Body tidak valid: ${detail}.`
-        : "Body tidak valid: minimal salah satu dari sessionQuota, minOrder, flashPrice, category, type harus dikirim.",
+        : "Body tidak valid: minimal salah satu dari sessionQuota, minOrder, flashPrice, category, type, hidden harus dikirim.",
     );
   }
 
@@ -134,9 +150,12 @@ export async function PUT(
     .select()
     .from(flashSessions)
     .where(eq(flashSessions.id, id));
-  if (!session) return jsonError(404, "Session not found");
-  if (session.status !== "SCHEDULED")
-    return jsonError(409, "Only SCHEDULED sessions can modify products");
+  if (!session) return jsonError(404, "Sesi tidak ditemukan");
+  // The same pure window rule the POST and the admin UI apply: live sessions
+  // accept edits, an ended one is a record. It is checked here, before any
+  // write, so no status can slip through on a field-by-field path.
+  if (!canEditProducts(session.status))
+    return jsonError(409, "Sesi yang sudah berakhir tidak bisa diubah.");
 
   const [row] = await db
     .select()
@@ -147,20 +166,65 @@ export async function PUT(
         eq(sessionProducts.itemId, itemId),
       ),
     );
-  if (!row) return jsonError(404, "Session product not found");
+  if (!row) return jsonError(404, "Produk tidak ditemukan di sesi ini");
+
+  // Quota is the one field a live session cannot set freely, so it gets its own
+  // decision before anything is written (`quotaUpdateDecision`, pure + tested):
+  // the floor is what already sold, and the v2 refresh keeps `jubelio_stock`
+  // from falling below the new quota (checkout validates against the snapshot).
+  // The stock map is read ONLY on a quota write — hiding a product never waits
+  // on the ERP, which is what keeps a live session operable during an outage.
+  // Auth contract matches every sibling route: expired token → 401
+  // SESSION_EXPIRED; any other failure is `liveStock = undefined`, i.e.
+  // "unknown", which allows the edit and warns instead of blocking it on an
+  // outage (and never zeroes the stored snapshot).
+  let quotaPatch: { sessionQuota?: number; jubelioStock?: number } = {};
+  let warning: "UNKNOWN_STOCK" | undefined;
+  if (body.sessionQuota !== undefined) {
+    let liveStock: number | null | undefined;
+    try {
+      const map = await getStockMap(createJubelioClient(auth.user.token));
+      liveStock = map.get(itemId)?.available ?? null;
+    } catch (e) {
+      if (isJubelioAuthError(e)) return jsonError(401, "SESSION_EXPIRED");
+      liveStock = undefined;
+      console.error(
+        "session-product: getStockMap failed, quota saved with unknown stock",
+        e,
+      );
+    }
+    const decision = quotaUpdateDecision({
+      claimed: row.claimed,
+      requestedQuota: body.sessionQuota,
+      liveStock,
+    });
+    if (!decision.ok)
+      return jsonError(
+        400,
+        `Kuota minimal ${decision.floor} (sudah terjual ${decision.floor}).`,
+      );
+    quotaPatch = {
+      sessionQuota: body.sessionQuota,
+      // `null` means "don't overwrite" — the previous snapshot survives, so a
+      // v2 outage can't blank a live ERP number (missing ≠ empty).
+      ...(decision.jubelioStock !== null
+        ? { jubelioStock: decision.jubelioStock }
+        : {}),
+    };
+    if (decision.warnUnknownStock) warning = "UNKNOWN_STOCK";
+  }
 
   const [updated] = await db
     .update(sessionProducts)
     .set({
-      ...(body.sessionQuota !== undefined
-        ? { sessionQuota: body.sessionQuota }
-        : {}),
+      ...quotaPatch,
       ...(body.minOrder !== undefined ? { minOrder: body.minOrder } : {}),
       ...(body.flashPrice !== undefined
         ? { flashPrice: body.flashPrice }
         : {}),
       ...(body.category !== undefined ? { category: body.category } : {}),
       ...(body.type !== undefined ? { type: body.type } : {}),
+      ...(body.hidden !== undefined ? { hidden: body.hidden } : {}),
     })
     .where(
       and(
@@ -170,13 +234,21 @@ export async function PUT(
     )
     .returning();
 
-  return Response.json({ ok: true, product: updated });
+  // ADDITIVE: `warning` only appears when the stock number behind the quota
+  // could not be read; the roster turns it into a toast, never an error.
+  return Response.json({
+    ok: true,
+    product: updated,
+    ...(warning ? { warning } : {}),
+  });
 }
 
 /**
- * DELETE /api/sessions/[id]/products/[itemId] — remove a product from a session.
- * Only SCHEDULED sessions accept removal (spec §5.9: config frozen once a
- * session leaves SCHEDULED). OWNER-only.
+ * DELETE /api/sessions/[id]/products/[itemId] — hard-remove a product row,
+ * SCHEDULED cleanup only. A session that has been activated never deletes:
+ * `order_item` points at these rows, so mid-session removal is the `hidden`
+ * flag on PUT (storefront-gone, history intact) — hence this guard deliberately
+ * did NOT take the widened `canEditProducts` window. OWNER-only.
  */
 export async function DELETE(
   _request: Request,
@@ -189,15 +261,22 @@ export async function DELETE(
   const { id, itemId: itemIdParam } = await params;
   const itemId = Number(itemIdParam);
   if (!Number.isInteger(itemId) || itemId <= 0)
-    return jsonError(400, "Invalid itemId");
+    return jsonError(400, "itemId tidak valid");
 
   const [session] = await db
     .select()
     .from(flashSessions)
     .where(eq(flashSessions.id, id));
-  if (!session) return jsonError(404, "Session not found");
+  if (!session) return jsonError(404, "Sesi tidak ditemukan");
+  // SCHEDULED-only on purpose (see the handler doc): once a session has been
+  // activated, removal is the `hidden` flag on PUT — rows are referenced by
+  // `order_item`, so a live sale must never lose one. The message says so,
+  // because the operator's next move is the hide button, not a retry.
   if (session.status !== "SCHEDULED")
-    return jsonError(409, "Only SCHEDULED sessions can modify products");
+    return jsonError(
+      409,
+      "Hapus produk hanya untuk sesi yang belum diaktifkan. Sembunyikan produk untuk sesi yang sedang berjalan.",
+    );
 
   await db
     .delete(sessionProducts)
