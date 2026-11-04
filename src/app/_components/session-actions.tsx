@@ -10,6 +10,22 @@ import { Button } from "@/components/ui/button";
 type ActionKey = "activate" | "pause" | "resume" | "end" | "delete";
 
 /**
+ * The request each status-transition button fires. Activate/pause/resume/end
+ * are POSTs to their own subresource; delete has no subresource — DELETE is
+ * handled on the session itself (`/api/sessions/[id]`), so there is no
+ * `/delete` suffix to append.
+ */
+function sessionActionRequest(
+  key: ActionKey,
+  sessionId: string,
+): { url: string; method: "POST" | "DELETE" } {
+  if (key === "delete") {
+    return { url: `/api/sessions/${sessionId}`, method: "DELETE" };
+  }
+  return { url: `/api/sessions/${sessionId}/${key}`, method: "POST" };
+}
+
+/**
  * Status-transition controls for a session row (spec §4.2):
  * - SCHEDULED → Activate / Edit / Delete
  * - ACTIVE    → Pause / End
@@ -27,10 +43,11 @@ function SessionActions({
   const router = useRouter();
   const [busy, setBusy] = useState<ActionKey | null>(null);
 
-  async function run(key: ActionKey, method: "POST" | "DELETE") {
+  async function run(key: ActionKey) {
     setBusy(key);
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/${key}`, { method });
+      const { url, method } = sessionActionRequest(key, sessionId);
+      const res = await fetch(url, { method });
       const data = (await res.json().catch(() => null)) as
         | { ok?: boolean; error?: string }
         | null;
@@ -54,14 +71,14 @@ function SessionActions({
       )
     )
       return;
-    await run("delete", "DELETE");
+    await run("delete");
   }
 
   return (
     <div className="flex flex-wrap items-center gap-2">
       {status === "SCHEDULED" && (
         <>
-          <Button size="sm" disabled={busy !== null} onClick={() => run("activate", "POST")}>
+          <Button size="sm" disabled={busy !== null} onClick={() => run("activate")}>
             {busy === "activate" ? "Mengaktifkan..." : "Aktifkan"}
           </Button>
           <Button size="sm" variant="outline" nativeButton={false} render={<Link href={`/admin/sessions/${sessionId}/edit`} />}>
@@ -74,20 +91,20 @@ function SessionActions({
       )}
       {status === "ACTIVE" && (
         <>
-          <Button size="sm" disabled={busy !== null} onClick={() => run("pause", "POST")}>
+          <Button size="sm" disabled={busy !== null} onClick={() => run("pause")}>
             {busy === "pause" ? "Menjeda..." : "Jeda"}
           </Button>
-          <Button size="sm" variant="destructive" disabled={busy !== null} onClick={() => run("end", "POST")}>
+          <Button size="sm" variant="destructive" disabled={busy !== null} onClick={() => run("end")}>
             Akhiri
           </Button>
         </>
       )}
       {status === "PAUSED" && (
         <>
-          <Button size="sm" disabled={busy !== null} onClick={() => run("resume", "POST")}>
+          <Button size="sm" disabled={busy !== null} onClick={() => run("resume")}>
             {busy === "resume" ? "Melanjutkan..." : "Lanjutkan"}
           </Button>
-          <Button size="sm" variant="destructive" disabled={busy !== null} onClick={() => run("end", "POST")}>
+          <Button size="sm" variant="destructive" disabled={busy !== null} onClick={() => run("end")}>
             Akhiri
           </Button>
         </>
@@ -96,4 +113,4 @@ function SessionActions({
   );
 }
 
-export { SessionActions };
+export { SessionActions, sessionActionRequest };
