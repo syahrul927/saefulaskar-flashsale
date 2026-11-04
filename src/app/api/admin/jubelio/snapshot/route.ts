@@ -34,8 +34,10 @@ const Body = z.object({
 
 export async function POST(request: Request) {
   const auth = await getSession();
-  if (!auth) return jsonError(401, "Unauthorized");
-  if (auth.user.role !== "OWNER") return jsonError(403, "Forbidden");
+  if (!auth)
+    return jsonError(401, "Anda belum masuk. Masuk dulu untuk mengambil snapshot Jubelio.");
+  if (auth.user.role !== "OWNER")
+    return jsonError(403, "Hanya admin yang bisa mengambil snapshot Jubelio.");
 
   const parsed = Body.safeParse(await request.json().catch(() => null));
   if (!parsed.success) return jsonError(400, "salesorderId wajib nomor positif");

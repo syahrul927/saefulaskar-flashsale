@@ -301,13 +301,13 @@ function PaymentPanel({
             white inset with mono value + copy chip, total right-aligned. */}
         <div className="space-y-2 rounded-xl border border-neutral-200 bg-neutral-50 p-4 dark:border-border dark:bg-neutral-900/40">
           <div className="font-mono text-[10px] font-bold uppercase tracking-wider text-neutral-500">
-            Booking ID
+            ID Booking
           </div>
           <div className="flex items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-2 dark:border-border dark:bg-card">
             <span className="min-w-0 truncate font-mono text-sm font-black tracking-wider text-neutral-950 dark:text-neutral-50 sm:text-base">
               {bookingId}
             </span>
-            <CopyChip value={bookingId} label="Booking ID" />
+            <CopyChip value={bookingId} label="ID Booking" />
           </div>
           <div className="flex items-center justify-between gap-3 border-t border-neutral-200 pt-2 dark:border-border">
             <span className="font-mono text-xs text-neutral-500">Total</span>

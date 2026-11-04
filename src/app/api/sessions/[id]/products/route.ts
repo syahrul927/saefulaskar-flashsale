@@ -39,16 +39,17 @@ export async function GET(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const auth = await getSession();
-  if (!auth) return jsonError(401, "Unauthorized");
+  if (!auth)
+    return jsonError(401, "Anda belum masuk. Masuk dulu untuk mengubah sesi.");
   if (auth.user.role !== "OWNER")
-    return jsonError(403, "Forbidden");
+    return jsonError(403, "Hanya admin yang bisa mengubah sesi ini.");
 
   const { id } = await params;
   const [session] = await db
     .select()
     .from(flashSessions)
     .where(eq(flashSessions.id, id));
-  if (!session) return jsonError(404, "Session not found");
+  if (!session) return jsonError(404, "Sesi tidak ditemukan");
 
   const rows = await db
     .select()
@@ -118,9 +119,10 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const auth = await getSession();
-  if (!auth) return jsonError(401, "Unauthorized");
+  if (!auth)
+    return jsonError(401, "Anda belum masuk. Masuk dulu untuk mengubah sesi.");
   if (auth.user.role !== "OWNER")
-    return jsonError(403, "Forbidden");
+    return jsonError(403, "Hanya admin yang bisa mengubah sesi ini.");
 
   const { id } = await params;
 
@@ -128,7 +130,7 @@ export async function POST(
     .select()
     .from(flashSessions)
     .where(eq(flashSessions.id, id));
-  if (!session) return jsonError(404, "Session not found");
+  if (!session) return jsonError(404, "Sesi tidak ditemukan");
   // The edit window is the pure rule (`canEditProducts`) — a live session
   // (ACTIVE/PAUSED) can still be stocked; only a finished sale is a record.
   // This gate MUST come before `reAddDecision`, which has no ENDED branch and
@@ -142,11 +144,11 @@ export async function POST(
   } catch {
     return jsonError(
       400,
-      "Invalid body: array of { itemId, skuCode, itemGroupName, originalPrice }",
+      "Data yang dikirim tidak valid. Kirim daftar produk: { itemId, skuCode, itemGroupName, originalPrice }.",
     );
   }
   if (items.length === 0)
-    return jsonError(400, "At least one product is required");
+    return jsonError(400, "Tambahkan minimal satu produk.");
 
   const client = createJubelioClient(auth.user.token);
 

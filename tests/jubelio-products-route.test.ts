@@ -187,11 +187,15 @@ describe("GET /api/jubelio/products (route error contract)", () => {
     vi.mocked(getStockMap).mockResolvedValue(new Map());
   });
 
-  it("401 Unauthorized without a session", async () => {
+  it("401 with Bahasa copy without a session (status stays the client's signal)", async () => {
     vi.mocked(getSession).mockResolvedValue(null);
     const res = await GET();
+    // The expiry/sign-out contract keys off HTTP 401, never the message text —
+    // Task 10 translated the body, so the body pin follows the copy.
     expect(res.status).toBe(401);
-    expect(await res.json()).toEqual({ error: "Unauthorized" });
+    expect(await res.json()).toEqual({
+      error: "Anda belum masuk. Masuk dulu untuk mengubah sesi.",
+    });
   });
 
   it("403 for a non-OWNER role", async () => {

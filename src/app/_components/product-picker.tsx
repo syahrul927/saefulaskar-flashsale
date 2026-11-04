@@ -659,7 +659,7 @@ function RosterTableRow({
           <input
             type="number"
             min={1}
-            aria-label={`Kuota Sale ${label}`}
+            aria-label={`Kuota ${label}`}
             value={row.quota}
             onChange={(e) => row.setQuota(e.target.value)}
             disabled={row.busy}
@@ -680,7 +680,7 @@ function RosterTableRow({
             <input
               type="number"
               min={1}
-              aria-label={`Min. Order ${label}`}
+              aria-label={`Min. Pesanan ${label}`}
               value={row.minOrder}
               onChange={(e) => row.setMinOrder(e.target.value)}
               disabled={row.busy}
@@ -853,7 +853,7 @@ function RosterCard({
             </div>
             <div>
               <span className="block font-mono text-[9px] uppercase text-neutral-500">
-                Kuota Sale
+                Kuota
               </span>
               <input
                 type="number"
@@ -861,13 +861,13 @@ function RosterCard({
                 value={row.quota}
                 onChange={(e) => row.setQuota(e.target.value)}
                 disabled={row.busy}
-                aria-label={`Kuota Sale ${label}`}
+                aria-label={`Kuota ${label}`}
                 className={`w-full ${cellInputClass}`}
               />
             </div>
             <div>
               <span className="block font-mono text-[9px] uppercase text-neutral-500">
-                Min. Order
+                Min. Pesanan
               </span>
               <input
                 type="number"
@@ -875,7 +875,7 @@ function RosterCard({
                 value={row.minOrder}
                 onChange={(e) => row.setMinOrder(e.target.value)}
                 disabled={row.busy}
-                aria-label={`Min. Order ${label}`}
+                aria-label={`Min. Pesanan ${label}`}
                 className={`w-full ${cellInputAmberClass}`}
               />
             </div>
@@ -902,9 +902,9 @@ function RosterCard({
             [
               ["Kategori", categoryText(product.category)],
               ["Tipe", PRODUCT_TYPE_LABELS[product.type]],
-              ["Kuota Sale", String(product.sessionQuota)],
+              ["Kuota", String(product.sessionQuota)],
               ["Terklaim", `${product.claimed}/${product.sessionQuota}`],
-              ["Min. Order", String(product.minOrder)],
+              ["Min. Pesanan", String(product.minOrder)],
               ["Harga Flash (Rp)", String(product.flashPrice)],
             ] as const
           ).map(([key, value]) => (
@@ -1567,10 +1567,10 @@ function ProductPicker({
         </Dialog>
       )}
 
-      <Panel title="Roster Produk" count={`${products.length} item siap`}>
+      <Panel title="Roster Produk" count={`${products.length} produk siap`}>
         {canEdit && products.length > 0 && (
           <p className="border-b border-neutral-100 bg-neutral-50/70 px-4 py-2 text-xs text-neutral-500 dark:border-border dark:bg-input/30 dark:text-neutral-400">
-            Atur Kategori, Tipe, Kuota Sale, dan Min. Order per produk.
+            Atur Kategori, Tipe, Kuota, dan Min. Pesanan per produk.
           </p>
         )}
 
@@ -1599,13 +1599,13 @@ function ProductPicker({
                       Stok Jubelio
                     </th>
                     <th scope="col" className="py-3 px-3">
-                      Kuota Sale
+                      Kuota
                     </th>
                     <th scope="col" className="py-3 px-3">
                       Terklaim
                     </th>
                     <th scope="col" className="py-3 px-3">
-                      Min. Order
+                      Min. Pesanan
                     </th>
                     <th scope="col" className="py-3 px-3">
                       Harga Flash (Rp)

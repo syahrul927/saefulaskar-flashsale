@@ -61,7 +61,7 @@ export async function POST(
             error:
               "Sink tidak dikonfigurasi — set JUBELIO_WEBHOOK_SINK_TOKEN untuk menyimpan webhook.",
           }
-        : { ok: false, error: "Unauthorized" },
+        : { ok: false, error: "Token webhook tidak valid." },
       { status: verdict.reason === "not-configured" ? 503 : 401 },
     );
   }

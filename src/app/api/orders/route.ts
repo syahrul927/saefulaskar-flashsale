@@ -102,7 +102,8 @@ function errorResponse(error: CheckoutError): Response {
  */
 export async function POST(request: Request) {
   const auth = await getSession();
-  if (!auth) return jsonError(401, "Unauthorized");
+  if (!auth)
+    return jsonError(401, "Anda belum masuk. Masuk dulu untuk checkout.");
 
   let body: z.infer<typeof CheckoutBody>;
   try {
@@ -110,7 +111,7 @@ export async function POST(request: Request) {
   } catch {
     return jsonError(
       400,
-      "Invalid body: sessionId + items [{ sessionProductId, qty }]",
+      "Data yang dikirim tidak valid. Sertakan sessionId dan items [{ sessionProductId, qty }].",
     );
   }
 
@@ -249,7 +250,8 @@ export async function POST(request: Request) {
  */
 export async function GET() {
   const auth = await getSession();
-  if (!auth) return jsonError(401, "Unauthorized");
+  if (!auth)
+    return jsonError(401, "Anda belum masuk. Masuk dulu untuk melihat pesanan.");
 
   const rows = await db
     .select()

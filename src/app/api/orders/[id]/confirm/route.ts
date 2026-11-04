@@ -30,8 +30,10 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const auth = await getSession();
-  if (!auth) return jsonError(401, "Unauthorized");
-  if (auth.user.role !== "OWNER") return jsonError(403, "Forbidden");
+  if (!auth)
+    return jsonError(401, "Anda belum masuk. Masuk dulu untuk mengonfirmasi pesanan.");
+  if (auth.user.role !== "OWNER")
+    return jsonError(403, "Hanya admin yang bisa mengonfirmasi pesanan ini.");
 
   const { id } = await params;
 

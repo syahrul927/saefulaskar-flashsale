@@ -7,7 +7,7 @@ import { flashSessions } from "@/server/db/schema";
 import { SessionForm } from "@/app/_components/session-form";
 
 export const metadata: Metadata = {
-  title: "Edit Sesi — Flash Studio Admin",
+  title: "Ubah Sesi — Flash Sale Grosir Admin",
 };
 
 export const dynamic = "force-dynamic";

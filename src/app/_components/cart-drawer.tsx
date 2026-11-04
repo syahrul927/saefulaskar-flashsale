@@ -187,7 +187,7 @@ function CartDrawer({
                         </div>
                         <button
                           type="button"
-                          aria-label="Hapus item"
+                          aria-label="Hapus produk"
                           className="flex size-7 shrink-0 items-center justify-center rounded-full text-neutral-400 transition-colors hover:bg-destructive/10 hover:text-destructive"
                           onClick={() => {
                             remove(row.sessionProductId);

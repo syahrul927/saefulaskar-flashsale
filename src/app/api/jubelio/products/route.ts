@@ -31,8 +31,10 @@ function jsonError(status: number, error: string) {
  */
 export async function GET() {
   const auth = await getSession();
-  if (!auth) return jsonError(401, "Unauthorized");
-  if (auth.user.role !== "OWNER") return jsonError(403, "Forbidden");
+  if (!auth)
+    return jsonError(401, "Anda belum masuk. Masuk dulu untuk mengubah sesi.");
+  if (auth.user.role !== "OWNER")
+    return jsonError(403, "Hanya admin yang bisa mengubah sesi ini.");
 
   try {
     const client = createJubelioClient(auth.user.token);

@@ -21,7 +21,7 @@ import { activationPreview, type ActivationBlockReason } from "@/server/session-
 import { getSessionKpis } from "@/server/session-query";
 
 export const metadata: Metadata = {
-  title: "Konsol — Flash Studio Admin",
+  title: "Konsol — Flash Sale Grosir Admin",
 };
 
 export const dynamic = "force-dynamic";

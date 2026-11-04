@@ -14,7 +14,7 @@ import { jubelioSoSnapshots, orders, webhookCaptures } from "@/server/db/schema"
 import { diffProbeFields } from "@/server/jubelio-probe";
 
 export const metadata: Metadata = {
-  title: "Jejak Jubelio — Flash Studio Admin",
+  title: "Jejak Jubelio — Flash Sale Grosir Admin",
 };
 
 export const dynamic = "force-dynamic";

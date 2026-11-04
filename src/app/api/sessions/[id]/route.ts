@@ -20,7 +20,7 @@ const UpdateSession = z
       o.startTime !== undefined ||
       o.endTime !== undefined,
     {
-      message: "At least one field to update is required",
+      message: "minimal satu field yang diubah harus diisi",
     },
   );
 

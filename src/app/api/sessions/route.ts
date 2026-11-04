@@ -3,7 +3,11 @@ import { eq, ne } from "drizzle-orm";
 import { getSession } from "@/server/better-auth/server";
 import { db } from "@/server/db";
 import { flashSessions } from "@/server/db/schema";
-import { canActivate, hasOverlap } from "@/server/session-rules";
+import {
+  activationBlockMessage,
+  canActivate,
+  hasOverlap,
+} from "@/server/session-rules";
 import { z } from "zod";
 
 export const runtime = "nodejs";
@@ -46,9 +50,11 @@ export async function GET() {
  */
 export async function POST(request: Request) {
   const auth = await getSession();
-  if (!auth) return jsonError(401, "Unauthorized");
+  if (!auth)
+    return jsonError(401, "Anda belum masuk. Masuk dulu untuk mengubah sesi.");
   const user = auth.user;
-  if (user.role !== "OWNER") return jsonError(403, "Forbidden");
+  if (user.role !== "OWNER")
+    return jsonError(403, "Hanya admin yang bisa mengubah sesi ini.");
 
   let body: z.infer<typeof CreateSession>;
   try {
@@ -56,16 +62,16 @@ export async function POST(request: Request) {
   } catch {
     return jsonError(
       400,
-      "Invalid body: name, startTime (ISO), endTime (ISO) required",
+      "Data yang dikirim tidak valid. Sertakan name, startTime (ISO), dan endTime (ISO).",
     );
   }
 
   const startTime = new Date(body.startTime);
   const endTime = new Date(body.endTime);
   if (Number.isNaN(startTime.getTime()) || Number.isNaN(endTime.getTime()))
-    return jsonError(400, "startTime/endTime must be valid ISO dates");
+    return jsonError(400, "Format waktu tidak valid. Gunakan tanggal dan jam yang benar.");
   if (endTime <= startTime)
-    return jsonError(400, "endTime must be after startTime");
+    return jsonError(400, "Jam selesai harus setelah jam mulai.");
 
   const candidateId = crypto.randomUUID();
 
@@ -108,7 +114,10 @@ export async function POST(request: Request) {
   });
 
   if (!result.ok) {
-    return jsonError(409, result.reason);
+    // The 409 `error` is user-facing toast copy (the create form shows it
+    // verbatim), so it carries the same human message the session editor and
+    // PATCH use; the machine `reason` enum stays in session-rules.
+    return jsonError(409, activationBlockMessage(result.reason));
   }
 
   return Response.json({ ok: true, session: result.created }, { status: 201 });

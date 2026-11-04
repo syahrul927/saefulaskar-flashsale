@@ -21,7 +21,11 @@ export async function POST(
   { params }: { params: Promise<{ id: string }> },
 ) {
   const auth = await getSession();
-  if (!auth) return jsonError(401, "Unauthorized");
+  if (!auth)
+    return jsonError(
+      401,
+      "Anda belum masuk. Masuk dulu untuk mengunggah bukti transfer.",
+    );
 
   const { id } = await params;
 
@@ -30,18 +34,19 @@ export async function POST(
     .from(orders)
     .where(eq(orders.id, id));
   if (!order) return jsonError(404, "Pesanan tidak ditemukan");
-  if (order.customerId !== auth.user.id) return jsonError(403, "Forbidden");
+  if (order.customerId !== auth.user.id)
+    return jsonError(403, "Anda tidak bisa mengunggah bukti transfer untuk pesanan ini.");
 
   let form: FormData;
   try {
     form = await request.formData();
   } catch {
-    return jsonError(400, "Expected multipart/form-data");
+    return jsonError(400, "Format kiriman tidak valid. Coba unggah lagi.");
   }
 
   const file = form.get("file");
   if (!(file instanceof File)) {
-    return jsonError(400, "Field `file` required");
+    return jsonError(400, "File bukti transfer belum terlampir.");
   }
 
   const validation = validateProof({ size: file.size, type: file.type });

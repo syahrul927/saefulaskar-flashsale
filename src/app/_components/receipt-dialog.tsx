@@ -148,14 +148,14 @@ function ReceiptDialog({
               Detail Pesanan
             </div>
             <div className="flex items-center justify-between gap-3">
-              <span className="shrink-0 text-neutral-500">Booking ID</span>
+              <span className="shrink-0 text-neutral-500">ID Booking</span>
               <span className="flex min-w-0 items-center gap-1.5">
                 <span className="truncate font-bold text-neutral-900 dark:text-neutral-100">
                   {order.bookingId}
                 </span>
                 <CopyChip
                   value={order.bookingId}
-                  label="Booking ID"
+                  label="ID Booking"
                   size="icon-xs"
                 />
               </span>

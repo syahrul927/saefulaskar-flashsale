@@ -32,7 +32,7 @@ import { buildStatusSteps } from "@/server/status-steps";
 import { listStatusHistory } from "@/server/status-history";
 
 export const metadata: Metadata = {
-  title: "Pesanan — Flash Studio Admin",
+  title: "Pesanan — Flash Sale Grosir Admin",
 };
 
 export const dynamic = "force-dynamic";

@@ -287,8 +287,9 @@ describe("buildStatusSteps", () => {
     expect(steps.map((s) => s.id)).toEqual(["created", "h-confirm"]);
     const labels = steps.map((s) => s.label);
     expect(labels).toEqual(["Pesanan dibuat", "Selesai"]);
-    // The behaviour the duplicate would have broken, stated once as a rule:
-    // two steps never say the same thing.
+    // The dedup rule for DISTINCT transitions: steps never repeat a label
+    // here. The ENDED/SHIPPED "Selesai" twin is a deliberate exception —
+    // the sibling test above pins it.
     expect(new Set(labels).size).toBe(labels.length);
   });
 });

@@ -28,7 +28,8 @@ function jsonError(status: number, error: string) {
  */
 export async function POST(request: Request) {
   const auth = await getSession();
-  if (!auth) return jsonError(401, "Unauthorized");
+  if (!auth)
+    return jsonError(401, "Anda belum masuk. Masuk dulu untuk melengkapi profil.");
 
   let body: z.infer<typeof CreateContact>;
   try {
@@ -36,7 +37,7 @@ export async function POST(request: Request) {
   } catch {
     return jsonError(
       400,
-      "Invalid body: contactName, primaryContact, contactPosition (pemilik|procurement), phone, sAddress",
+      "Data yang dikirim tidak valid. Sertakan contactName, primaryContact, contactPosition (pemilik|procurement), phone, dan sAddress.",
     );
   }
 
@@ -96,7 +97,7 @@ export async function POST(request: Request) {
 /** GET /api/contacts/me — the signed-in customer's contact row, or 404. */
 export async function GET() {
   const auth = await getSession();
-  if (!auth) return jsonError(401, "Unauthorized");
+  if (!auth) return jsonError(401, "Anda belum masuk. Masuk dulu untuk melanjutkan.");
 
   const [row] = await db
     .select()

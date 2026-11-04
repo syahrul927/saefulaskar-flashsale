@@ -25,8 +25,10 @@ function jsonError(status: number, error: string) {
  */
 export async function POST() {
   const auth = await getSession();
-  if (!auth) return jsonError(401, "Unauthorized");
-  if (auth.user.role !== "OWNER") return jsonError(403, "Forbidden");
+  if (!auth)
+    return jsonError(401, "Anda belum masuk. Masuk dulu untuk menjalankan sinkronisasi.");
+  if (auth.user.role !== "OWNER")
+    return jsonError(403, "Hanya admin yang bisa menjalankan sinkronisasi.");
 
   try {
     const result = await forceRunOrderSync();

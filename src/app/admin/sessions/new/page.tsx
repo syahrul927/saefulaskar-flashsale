@@ -3,7 +3,7 @@ import type { Metadata } from "next";
 import { SessionForm } from "@/app/_components/session-form";
 
 export const metadata: Metadata = {
-  title: "Sesi Baru — Flash Studio Admin",
+  title: "Sesi Baru — Flash Sale Grosir Admin",
 };
 
 export const dynamic = "force-dynamic";

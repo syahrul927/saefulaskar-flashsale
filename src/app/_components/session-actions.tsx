@@ -65,7 +65,7 @@ function SessionActions({
         toast.error(data?.error ?? "Aksi gagal, coba lagi.");
         return;
       }
-      toast.success("Status sesi diperbarui.");
+      toast.success(key === "delete" ? "Sesi dihapus." : "Status sesi diperbarui.");
       router.refresh();
     } catch {
       toast.error("Terjadi kesalahan, coba lagi.");
@@ -100,7 +100,7 @@ function SessionActions({
               {busy === "activate" ? "Mengaktifkan..." : "Aktifkan"}
             </Button>
             <Button size="sm" variant="outline" nativeButton={false} render={<Link href={`/admin/sessions/${sessionId}/edit`} />}>
-              Edit
+              Ubah
             </Button>
             <Button size="sm" variant="ghost" disabled={busy !== null} onClick={handleDelete}>
               Hapus

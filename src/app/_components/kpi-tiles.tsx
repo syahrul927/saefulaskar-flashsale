@@ -105,12 +105,12 @@ function KpiRow({ kpis }: { kpis: SessionKpis }) {
           unit="SKU"
         />
         <KpiTile
-          label="TOTAL KUOTA SALE"
+          label="TOTAL KUOTA"
           value={String(kpis.totalQuota)}
           unit="unit"
         />
         <KpiTile
-          label="RESERVED / TERJUAL"
+          label="TERKUNCI / TERJUAL"
           value={String(kpis.totalClaimed)}
           unit="unit"
           valueClassName="text-brand-secondary"

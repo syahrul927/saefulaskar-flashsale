@@ -14,7 +14,7 @@ import { createJubelioClient } from "@/lib/jubelio";
 import { ProductPicker } from "@/app/_components/product-picker";
 
 export const metadata: Metadata = {
-  title: "Produk Sesi — Flash Studio Admin",
+  title: "Produk Sesi — Flash Sale Grosir Admin",
 };
 
 export const dynamic = "force-dynamic";
