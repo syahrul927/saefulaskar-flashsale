@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
   inserts: [] as { table: unknown; value: Record<string, unknown> }[],
@@ -36,7 +36,14 @@ import { env } from "@/env";
 import { webhookCaptures } from "@/server/db/schema";
 import { POST } from "@/app/api/jubelio/webhook-sink/[token]/route";
 
-const TOKEN = env.JUBELIO_WEBHOOK_SINK_TOKEN ?? "";
+// Pin the token here rather than reading ambient env: every case below
+// depends on whether it is set, and a local .env must not flip that silently.
+const TOKEN = "sink-test-token";
+
+function setSinkToken(value: string | undefined) {
+  (env as { JUBELIO_WEBHOOK_SINK_TOKEN?: string }).JUBELIO_WEBHOOK_SINK_TOKEN =
+    value;
+}
 
 function post(opts: {
   token?: string;
@@ -64,6 +71,11 @@ beforeEach(() => {
   state.prunes = 0;
   state.pruneFails = false;
   state.insertFails = false;
+  setSinkToken(TOKEN);
+});
+
+afterEach(() => {
+  setSinkToken(undefined);
 });
 
 describe("POST /api/jubelio/webhook-sink/[token]", () => {
@@ -143,26 +155,19 @@ describe("POST /api/jubelio/webhook-sink/[token]", () => {
     expect(state.inserts).toHaveLength(0);
   });
 
-  it("503s and stores nothing when the sink is not configured", async () => {
-    const previous = env.JUBELIO_WEBHOOK_SINK_TOKEN;
-    // The token is optional by design: unset must close the endpoint, not open
-    // it to anyone who finds the path.
-    (env as { JUBELIO_WEBHOOK_SINK_TOKEN?: string }).JUBELIO_WEBHOOK_SINK_TOKEN =
-      undefined;
-    try {
-      const res = await POST(
-        new Request("http://test/api/jubelio/webhook-sink/whatever", {
-          method: "POST",
-          body: "{}",
-        }),
-        { params: Promise.resolve({ token: "whatever" }) },
-      );
-      expect(res.status).toBe(503);
-      expect(state.inserts).toHaveLength(0);
-    } finally {
-      (env as { JUBELIO_WEBHOOK_SINK_TOKEN?: string }).JUBELIO_WEBHOOK_SINK_TOKEN =
-        previous;
-    }
+  it("accepts any path token and stores while no sink token is configured", async () => {
+    // The bench must work before anyone mints a secret; the token is the
+    // hardening step, not the switch.
+    setSinkToken(undefined);
+    const res = await POST(
+      new Request("http://test/api/jubelio/webhook-sink/whatever", {
+        method: "POST",
+        body: '{"salesorder_id":7}',
+      }),
+      { params: Promise.resolve({ token: "whatever" }) },
+    );
+    expect(res.status).toBe(200);
+    expect(state.inserts).toHaveLength(1);
   });
 
   it("still answers 200 when pruning fails — the capture already landed", async () => {

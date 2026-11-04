@@ -23,8 +23,10 @@ import {
  * assumed here.
  *
  * Two deliberate limits:
- * - Unset token ⇒ 503 and nothing stored. A public, unauthenticated,
- *   DB-writing endpoint has to be switched on on purpose, never by default.
+ * - Unset token ⇒ the sink is OPEN: any path segment is accepted. The bench
+ *   has to work before anyone mints a secret. Setting
+ *   `JUBELIO_WEBHOOK_SINK_TOKEN` is the hardening step — after that, only the
+ *   exact token stores anything.
  * - Bodies over `SINK_MAX_BODY_BYTES` are cut and flagged; headers are
  *   credential-redacted before they are written, because this table is readable
  *   by any admin and a live JWT has already been pasted around this repo once.
@@ -52,17 +54,10 @@ export async function POST(
   { params }: { params: Promise<{ token: string }> },
 ) {
   const { token } = await params;
-  const verdict = checkSinkToken(token, env.JUBELIO_WEBHOOK_SINK_TOKEN);
-  if (!verdict.ok) {
+  if (!checkSinkToken(token, env.JUBELIO_WEBHOOK_SINK_TOKEN)) {
     return NextResponse.json(
-      verdict.reason === "not-configured"
-        ? {
-            ok: false,
-            error:
-              "Sink tidak dikonfigurasi — set JUBELIO_WEBHOOK_SINK_TOKEN untuk menyimpan webhook.",
-          }
-        : { ok: false, error: "Token webhook tidak valid." },
-      { status: verdict.reason === "not-configured" ? 503 : 401 },
+      { ok: false, error: "Token webhook tidak valid." },
+      { status: 401 },
     );
   }
 

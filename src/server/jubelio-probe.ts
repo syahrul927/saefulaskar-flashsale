@@ -1,16 +1,17 @@
 /**
- * Pure core of the Jubelio observation rig (see `docs/PRD.md` §4.7).
+ * Pure core of the Jubelio webhook sink (see `docs/PRD.md` §4.7) — the
+ * observation half of the rig, answering the question upstream never
+ * documents: what does a Jubelio webhook POST actually contain? The sink
+ * records the request verbatim (headers + body) so the payload shape is read
+ * from reality instead of guessed from a spec that has been wrong about
+ * `payment_method`, the SO list, and webhook registration.
  *
- * Two questions this exists to answer, and neither is documented upstream:
- *   1. What does a Jubelio webhook POST actually contain? The sink records the
- *      request verbatim (headers + body) so the payload shape is read from
- *      reality instead of guessed from a spec that has been wrong about
- *      `payment_method`, the SO list, and webhook registration.
- *   2. What changes on a sales order when a faktur is created? The snapshot
- *      diff compares two `GET /sales/orders/{id}` reads key by key.
+ * The snapshot-diff half of the bench (two SO reads compared key by key) was
+ * retired 2026-11-04: production sync already reads each linked SO on the
+ * admin orders page, so the diff panels answered a question nothing asks.
  *
- * Everything here is pure — no HTTP, no DB — so both halves are testable
- * against live-shaped fixtures (`tests/jubelio-probe.test.ts`).
+ * Everything here is pure — no HTTP, no DB — so it is testable against
+ * live-shaped fixtures (`tests/jubelio-probe.test.ts`).
  */
 
 /** Cap on what we store of an inbound body. A public sink must not be a disk. */
@@ -33,27 +34,26 @@ const REDACTED = "[redacted]";
 const CREDENTIAL_HEADER =
   /(authorization|cookie|secret|token|password|passwd|credential|api[-_]?key|apikey|access[-_]?key|auth)/i;
 
-export type SinkTokenVerdict =
-  | { ok: true }
-  | { ok: false; reason: "not-configured" | "mismatch" };
-
 /**
  * Path-segment credential check. The sink is registered as a plain callback URL
  * in Jubelio's dashboard, which offers no place to add a header, so the secret
- * rides in the path. Unconfigured means closed: no token, no capture, ever —
- * a public endpoint that writes to the database is opt-in, not a default.
+ * rides in the path.
+ *
+ * The token is optional on purpose: unset env leaves the sink OPEN to any path
+ * segment so the bench works before anyone mints a secret. Setting
+ * `JUBELIO_WEBHOOK_SINK_TOKEN` is the hardening step — from then on only the
+ * exact token passes, and the old open URL stops storing.
  */
 export function checkSinkToken(
   provided: string | undefined,
   configured: string | undefined,
-): SinkTokenVerdict {
+): boolean {
   const expected = configured?.trim();
-  if (!expected) return { ok: false, reason: "not-configured" };
+  if (!expected) return true;
   // Exact compare, no normalisation of the incoming value: a paste that carries
   // trailing whitespace is a mismatch, and must fail loudly rather than write
   // captures nobody can explain.
-  if (provided !== expected) return { ok: false, reason: "mismatch" };
-  return { ok: true };
+  return provided === expected;
 }
 
 export function redactHeaders(
@@ -162,121 +162,4 @@ export function detectCaptureRefs(raw: unknown): CaptureRefs {
     invoiceId: positiveInt(row.invoice_id ?? row.invoiceId),
     refNo: nonEmptyString(row.ref_no ?? row.refNo),
   };
-}
-
-/** What one SO header says about itself, widened past what the sync needs. */
-export type SoProbeFields = {
-  salesorderId: number | null;
-  salesorderNo: string | null;
-  internalStatus: string | null;
-  channelStatus: string | null;
-  wmsStatus: string | null;
-  trackingNumber: string | null;
-  shipper: string | null;
-  invoiceId: number | null;
-  invoiceNo: string | null;
-  refNo: string | null;
-  isCanceled: boolean | null;
-};
-
-/**
- * Reads the fields worth watching across a faktur transition. `invoice_id` /
- * `invoice_no` are the hypothesis under test: if creating a faktur writes them
- * onto the SO, the sync button alone is enough and no webhook is needed.
- */
-export function readProbeFields(raw: unknown): SoProbeFields | null {
-  const row = unwrap(raw);
-  if (!row) return null;
-  if (
-    row.internal_status === undefined &&
-    row.salesorder_id === undefined &&
-    row.salesorder_no === undefined
-  ) {
-    return null;
-  }
-  return {
-    salesorderId: positiveInt(row.salesorder_id),
-    salesorderNo: nonEmptyString(row.salesorder_no),
-    internalStatus: nonEmptyString(row.internal_status),
-    channelStatus: nonEmptyString(row.channel_status),
-    wmsStatus: nonEmptyString(row.wms_status),
-    trackingNumber: nonEmptyString(row.tracking_number),
-    shipper: nonEmptyString(row.shipper),
-    invoiceId: positiveInt(row.invoice_id),
-    invoiceNo: nonEmptyString(row.invoice_no),
-    refNo: nonEmptyString(row.ref_no),
-    isCanceled: typeof row.is_canceled === "boolean" ? row.is_canceled : null,
-  };
-}
-
-export type ProbeDiffEntry = {
-  key: string;
-  kind: "added" | "removed" | "changed";
-  before: unknown;
-  after: unknown;
-};
-
-/**
- * Top-level key diff of two raw SO reads. Top level only on purpose: the nested
- * `items[]` is reported as one changed key rather than unrolled into line-item
- * noise, which keeps the answer to "what did the faktur touch?" to a handful of
- * rows. Values are compared by structure, not string form, so a key-reordering
- * of a nested object does not read as a change.
- */
-export function diffProbeFields(
-  prev: unknown,
-  next: unknown,
-): ProbeDiffEntry[] {
-  const a = unwrap(prev) ?? {};
-  const b = unwrap(next) ?? {};
-  const keys = [...new Set([...Object.keys(a), ...Object.keys(b)])];
-  const out: ProbeDiffEntry[] = [];
-  for (const key of keys) {
-    const inA = key in a;
-    const inB = key in b;
-    if (inA && !inB) {
-      out.push({ key, kind: "removed", before: a[key], after: null });
-      continue;
-    }
-    if (!inA && inB) {
-      out.push({ key, kind: "added", before: null, after: b[key] });
-      continue;
-    }
-    if (canonical(a[key]) !== canonical(b[key])) {
-      out.push({ key, kind: "changed", before: a[key], after: b[key] });
-    }
-  }
-  return out;
-}
-
-/** Order-insensitive JSON form, so `{a,b}` vs `{b,a}` is not a "change". */
-function canonical(value: unknown): string {
-  if (value === null || typeof value !== "object") return JSON.stringify(value) ?? "undefined";
-  if (Array.isArray(value)) return `[${value.map(canonical).join(",")}]`;
-  const entries = Object.keys(value as Record<string, unknown>)
-    .sort()
-    .map((k) => `${JSON.stringify(k)}:${canonical((value as Record<string, unknown>)[k])}`);
-  return `{${entries.join(",")}}`;
-}
-
-const MAX_VALUE_CHARS = 200;
-
-/** Display form for a diff cell. UI-facing, so it is Bahasa-labelled and total. */
-export function formatProbeValue(value: unknown): string {
-  if (value === null || value === undefined) return "—";
-  if (typeof value === "string") {
-    if (value === "") return "(kosong)";
-    return value.length > MAX_VALUE_CHARS ? `${value.slice(0, MAX_VALUE_CHARS)}…` : value;
-  }
-  if (typeof value === "boolean" || typeof value === "number") return String(value);
-  const json = safeJson(value);
-  return json.length > MAX_VALUE_CHARS ? `${json.slice(0, MAX_VALUE_CHARS)}…` : json;
-}
-
-function safeJson(value: unknown): string {
-  try {
-    return JSON.stringify(value) ?? String(value);
-  } catch {
-    return String(value);
-  }
 }
