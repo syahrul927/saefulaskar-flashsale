@@ -259,6 +259,9 @@ describe("POST /api/sessions/[id]/products", () => {
   });
 
   it("db failure: 502 unchanged and the dropped error is logged", async () => {
+    // The copy is SAVE-specific ("Gagal menyimpan produk"): this catch only
+    // wraps the db write — the stock READ failure is handled upstream and keeps
+    // its own "Gagal memuat stok" text.
     const errorSpy = vi.spyOn(console, "error").mockImplementation(() => undefined);
     vi.mocked(getStockMap).mockResolvedValue(
       new Map([[1, { available: 5000, image: null }]]),
@@ -267,7 +270,7 @@ describe("POST /api/sessions/[id]/products", () => {
     const res = await POST(postRequest([item(1)]), params);
     expect(res.status).toBe(502);
     expect(await res.json()).toEqual({
-      error: "Gagal memuat stok, coba lagi",
+      error: "Gagal menyimpan produk, coba lagi",
     });
     expect(errorSpy).toHaveBeenCalledWith(
       "session-products: db write failed",

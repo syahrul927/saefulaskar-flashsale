@@ -307,9 +307,12 @@ export async function POST(
     created = [...imported, ...unhidden];
   } catch (e) {
     // Genuine db failures only — stock is no longer fetched inside this loop,
-    // so upstream trouble is fully handled by the `map`/skip path above.
+    // so upstream trouble is fully handled by the `map`/skip path above. The
+    // copy therefore says SAVE, not LOAD: reusing the GET branch's "Gagal memuat
+    // stok" text told admins the stock read failed when their write is what
+    // rolled back (the real cause only reached the console).
     console.error("session-products: db write failed", e);
-    return jsonError(502, "Gagal memuat stok, coba lagi");
+    return jsonError(502, "Gagal menyimpan produk, coba lagi");
   }
 
   // ADDITIVE: `{ ok, products }` stays exactly as before for consumers;
