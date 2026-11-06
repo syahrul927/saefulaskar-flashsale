@@ -388,7 +388,10 @@ it("grounds the cart tile so its fallback letter clears 4.5:1", () => {
   const frame = /overflow-hidden rounded-lg border border-neutral-200\/80[^"]*"/;
   expect(cart).toMatch(frame);
   expect(cart.match(frame)![0]).not.toContain("bg-neutral-100");
-  expect(cart.match(frame)![0]).toContain("bg-background dark:bg-card");
+  // Order-independent: prettier-plugin-tailwindcss rewrites class strings, and a
+  // contiguous "A B" substring is one `yarn format:write` away from failing.
+  expect(cart.match(frame)![0]).toContain("bg-white");
+  expect(cart.match(frame)![0]).toContain("dark:bg-card");
 });
 ```
 
@@ -703,6 +706,13 @@ Expected: `login-audience-split` PASS, 0 type errors.
 - Modify: `src/app/_components/receipt-dialog.tsx:170` — the receipt card labels the
   same stored number `No. Telepon`. Left alone, the flow would enter it as "No.
   WhatsApp", confirm it as "No. WhatsApp" and then read it back as "No. Telepon".
+- Modify: `tests/brand-palette.test.ts:111` — **carried from Task 4b's review.** The
+  frame pin asserts the contiguous substring `"bg-white dark:bg-card"`, and
+  `prettier-plugin-tailwindcss` (registered in `prettier.config.js`, and already
+  reordering 141 files at HEAD) rewrites that class string to
+  `dark:bg-card … bg-white`, which would redden a passing suite for a formatting
+  reason. Split it into two order-independent `toContain` calls. This is the only
+  remaining task that touches that file, so it owns the edit.
 - Create: `tests/transactional-labels.test.ts`
 
 **Interfaces:**
@@ -750,7 +760,9 @@ describe("transactional data is explained where it is entered", () => {
 
 - [ ] **Step 4: Form changes** — `onboarding-form.tsx:97` label → `No. WhatsApp`; immediately above the submit `<Button>` add a light note (`text-xs text-muted-foreground leading-relaxed`) repeating that the data fills in automatically at every checkout and can be changed there.
 
-- [ ] **Step 5: Checkout and receipt labels** — `checkout-dialog.tsx:218` → `No. WhatsApp`; validation message at `:100-101` (`"No. telepon minimal 6 karakter."`) → `"Nomor WhatsApp minimal 6 karakter."`; `receipt-dialog.tsx:170` → `No. WhatsApp`. Field order, limits and payload keys do not change, and no data field is renamed — this is display copy only.
+- [ ] **Step 5: Checkout and receipt labels** — `checkout-dialog.tsx:218` → `No. WhatsApp`; validation message at `:100-101` (`"No. telepon minimal 6 karakter."`) → `"Nomor WhatsApp minimal 6 karakter."`; `receipt-dialog.tsx:170` → `No. WhatsApp`. Field order, limits and payload keys do not change, and no data field is renamed — this is display copy only. Two notes: `:101` is a **template literal** interpolating `LIMITS.phone.min` (declared `= 6` at `:48`), so it stays `Nomor WhatsApp minimal ${LIMITS.phone.min} karakter.` and must not hardcode the 6; and the lowercase `No. telepon` there is invisible to Step 1's case-sensitive `/No\. Telf|No\. Telepon/` regex, so that one changes on its own merits, not because a pin forces it.
+
+- [ ] **Step 5b: Harden Task 4b's frame pin** — `tests/brand-palette.test.ts:111` currently asserts the contiguous substring `"bg-white dark:bg-card"`. Replace it with two order-independent assertions (`toContain("bg-white")` and `toContain("dark:bg-card")`) so a `prettier-plugin-tailwindcss` reorder of that class string cannot redden the suite. Do not otherwise edit that file — its guard blocks are Task 4/6's, and the `bg-neutral-100` negative pin at `:110` and the `overflow-hidden rounded-lg border border-neutral-200/80[^"]*"` frame regex at `:108` both stay.
 
 - [ ] **Step 6: Run test + typecheck + suite.** Expected: PASS.
 
