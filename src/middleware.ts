@@ -28,7 +28,27 @@ export function hasSessionCookie(cookieHeader: string): boolean {
 }
 
 /**
- * Auth guard: redirects logged-out users hitting protected pages to /auth/login.
+ * Which login door a logged-out visitor sees, decided on the REQUESTED PATH.
+ * Middleware can only tell whether a session cookie EXISTS, never what role
+ * the session belongs to (`hasSessionCookie` above), so the staff/customer
+ * split cannot be made from the session — the path is all we have. `/admin`
+ * and anything under it get the staff door (`/auth/staff`, email/password);
+ * everything else gets the customer door (`/auth/login`, Google). Exported
+ * pure for tests (`tests/middleware-staff-path.test.ts`).
+ */
+export function loginPathFor(pathname: string): string {
+  // `=== "/admin"` or a `/`-boundary prefix — a bare `startsWith("/admin")`
+  // would also catch `/administrator-guide` and lock its customer reader
+  // behind the staff door.
+  return pathname === "/admin" || pathname.startsWith("/admin/")
+    ? "/auth/staff"
+    : "/auth/login";
+}
+
+/**
+ * Auth guard: redirects logged-out users hitting protected pages to the
+ * login door for that page's audience — staff areas to /auth/staff,
+ * everything else to /auth/login (see `loginPathFor`).
  *
  * This is a PRESENCE-ONLY check on the Better Auth session token cookie (see
  * `hasSessionCookie` — signed as `value.signature`, the raw value is fine, we
@@ -47,7 +67,9 @@ export function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
-  return NextResponse.redirect(new URL("/auth/login", request.url));
+  return NextResponse.redirect(
+    new URL(loginPathFor(request.nextUrl.pathname), request.url)
+  );
 }
 
 export const config = {
