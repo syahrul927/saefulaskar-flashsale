@@ -648,6 +648,8 @@ describe("login audiences stay separated", () => {
 
 **Files:**
 - Modify: `src/app/auth/login/page.tsx` (headline/sub/Form block 72-95, staff link, plate copy 141-155, metadata 9)
+- Modify: `tests/login-audience-split.test.ts:8-10` — **tighten Task 8's three pins** (carried from Task 8's review as its one Important finding, and this is the next dispatch that touches the file). `/logo-lockup\.png/` is satisfied by the page's own doc comment, so deleting the `<img>` would keep it green; `/AuthForm/` passes on the bare `import` with the JSX removed; `/bg-background/` is not pinned to `<main>`. Make them `/src="\/brand\/logo-lockup\.png"/`, `/<AuthForm\s*\/>/`, and assert the class sits on the `main` element. A pin that cannot fail for the reason it claims is not a pin.
+- Modify: `src/app/auth/staff/page.tsx:28` — add `md:w-44` to the lockup. Task 8 pinned `w-40` while the sibling customer page uses `w-40 md:w-44`; once this task rewrites that page, the two doors would show the same logo 16px apart on desktop. The staff page keeps no other difference from the customer column, so parity here is the fix.
 
 **Interfaces:**
 - Consumes: Task 8's `/auth/staff`; Task 1's `bg-brand-ink` / `brand-mark` plate tokens (already in use).
