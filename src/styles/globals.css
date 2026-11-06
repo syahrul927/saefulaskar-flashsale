@@ -31,13 +31,13 @@
   --secondary: oklch(0.960 0.007 67.7); /* #F5F1ED warm neutral — accents, badges */
   --secondary-foreground: oklch(0.278 0.030 256.8);
   --muted: oklch(0.969 0.005 67.8); /* #F7F4F1 */
-  --muted-foreground: oklch(0.530 0.009 73.7); /* #6F6B66 — 5.29:1 on paper */
+  --muted-foreground: oklch(0.530 0.009 73.7); /* #6F6B66 — 5.21:1 on paper, 5.29:1 on white card */
   --accent: oklch(0.966 0.021 60.8); /* #FFF1E6 orange tint surface */
   --accent-foreground: oklch(0.553 0.174 38.4); /* #C2410C — 4.68:1 on the tint */
   --destructive: oklch(0.577 0.245 27.325);
   --border: oklch(0.931 0.010 67.7); /* #EDE7E1 hairline warm border */
   --input: oklch(0.903 0.010 72.7); /* #E3DED8 */
-  --ring: oklch(0.646 0.194 41.1); /* #EA580C — 3.56:1, passes 3:1 for a non-text indicator */
+  --ring: oklch(0.646 0.194 41.1); /* #EA580C — 3.51:1 on paper (3.56:1 on white); passes the 3:1 bar for a non-text indicator */
   --chart-1: oklch(0.278 0.030 256.8); /* #1F2937 */
   --chart-2: oklch(0.553 0.174 38.4); /* #C2410C */
   --chart-3: oklch(0.646 0.194 41.1); /* #EA580C */
@@ -92,8 +92,9 @@
 @theme inline {
   --font-heading: var(--font-urbanist);
   --color-brand-primary: #EA580C;
-  /* Hover lightens up the ramp — darkening to #C2410C under near-black text
-     is 3.83:1 (fails AA); #F97316 is ≈6.8:1. */
+  /* Hover lightens up the ramp. Measured against `text-neutral-950` (#0A0A0A),
+     which is what `variant="brand"` actually paints: darkening to #C2410C is
+     3.82:1 (fails AA), #F97316 is 7.06:1. */
   --color-brand-primary-hover: #F97316;
   --color-brand-secondary: #FB923C;
   /* The two colours the supplied logo is actually made of — mark orange and

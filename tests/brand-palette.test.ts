@@ -35,7 +35,7 @@ describe("brand palette", () => {
 });
 
 describe("brand orange as text", () => {
-  // #EA580C / #FB923C on paper is 3.56:1 / ~2.3:1 — a mark colour must never
+  // #EA580C / #FB923C on paper is 3.51:1 / 2.23:1 — a mark colour must never
   // become a label. These four sites are the token-only cases the value-swap
   // in globals.css cannot fix, so they are pinned here.
   const paperTextSites = [
