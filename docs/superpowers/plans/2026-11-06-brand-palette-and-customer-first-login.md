@@ -366,6 +366,7 @@ so the frame takes the semantic pair rather than a bare `bg-white` that would fl
 white on an ink card.
 
 **Files:**
+- Modify: `src/app/_components/product-picker.tsx:1556` — the dead `hover:bg-muted`
 - Modify: `src/app/_components/cart-drawer.tsx:168` — on that one frame div,
   `bg-neutral-100` → `bg-background dark:bg-card`. Leave `:210`'s `bg-neutral-100`
   (an icon-button holder, no brand text) and every other file's `bg-neutral-100`
@@ -392,6 +393,29 @@ it("grounds the cart tile so its fallback letter clears 4.5:1", () => {
   two-line comment above it (`:166-167`) if it implies a grey recess.
 - [ ] **Step 4:** `COREPACK_ENABLE_STRICT=0 yarn vitest run && COREPACK_ENABLE_STRICT=0 yarn run typecheck` → pass, 0 errors.
 - [ ] **Step 5: Commit** `fix(palette): cart tile frame goes paper so its fallback letter holds AA`
+
+**Also in this task — two findings from Task 6's review, batched here because this is
+the only dispatch left that touches `tests/brand-palette.test.ts`:**
+
+- `product-picker.tsx:1556` — `hover:bg-muted` is a **dead hover**. `--secondary` is
+  `#F5F1ED` and `--muted` is `#F7F4F1` (one point of lightness, `globals.css:31,33`),
+  and under `.dark` the two tokens are literally the same value (`oklch(0.282 0.022
+  254.2)` at `:66` and `:68`), so the `+ Tambah` affordance shows no response at all in
+  dark. Replace it with `hover:bg-neutral-200 dark:hover:bg-neutral-700` — the precedent
+  `copy-chip.tsx:43` already sets — and leave the rest of the string alone. Ink
+  `text-secondary-foreground` on `#E5E5E5` is ≈11:1. This **supersedes** the class
+  Task 6's brief mandated verbatim: the implementer had no latitude there, the plan did.
+- Widen the guard in `tests/brand-palette.test.ts`: the walk matches only `/amber-/g`
+  over `.ts`/`.tsx`, so the old brand returns as `yellow-400` or an `@apply amber-…` in a
+  stylesheet and the suite stays green — the anti-goal is "yellow surviving anywhere as a
+  brand colour", not "no `amber-` token". Take `/amber-|yellow-/g` and add `.css` to the
+  extension list. Both are **green on arrival** (`grep -rn "yellow-" src` → 0; no amber
+  in `src/**/*.css`), so name them as regression guards, not TDD drivers — Task 5's
+  `storefront-header` pin set that wording precedent.
+
+Not changed, ruled deliberately: `walk` uses `e.isDirectory()`, which skips symlinked
+directories (latent — nothing under `src` is a symlink), and `expect(hits).toEqual([])`
+already names the offending file, which is what a future regressor needs.
 
 Deferred, not fixed here: `product-card.tsx:83` keeps `bg-neutral-100` because its
 48px letter qualifies as large text (3:1 bar). If the whole system should agree on a
