@@ -20,7 +20,7 @@ describe("brand palette", () => {
 
   it("carries no trace of the legacy saefulaskar yellow", () => {
     for (const legacy of ["#FFCC05", "#EBB800", "#FF7E33"]) {
-      expect(css).not.toContain(legacy);
+      expect(css.toLowerCase()).not.toContain(legacy.toLowerCase());
     }
   });
 

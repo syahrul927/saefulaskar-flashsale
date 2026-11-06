@@ -12,10 +12,12 @@
 /*
  * Design tokens — slate ink leads, orange marks accent (the logo's own pair:
  * mark orange #EA580C, wordmark slate #1F2937): slate for text + primary
- * buttons (calm, easy to look at), orange only as accent/mark where it pops
- * (badges, highlights, selection, tints) — never as a text-bearing fill at
- * small sizes (that is `brand-action` #C2410C). Warm paper canvas, white
- * cards, hairline warm borders. Flat and soft.
+ * buttons (calm, easy to look at), orange as accent/mark where it pops
+ * (badges, highlights, selection, tints). Orange may fill a text-bearing
+ * surface only under near-black text (5.56:1 — the sanctioned brand buttons);
+ * under white/light text it fails AA (3.56:1), and that role is
+ * `brand-action` #C2410C — also the orange allowed as text on paper. Warm
+ * paper canvas, white cards, hairline warm borders. Flat and soft.
  */
 :root {
   --background: oklch(0.995 0.003 48.7); /* #FFFDFC paper — the lockup needs a white-ish ground */
