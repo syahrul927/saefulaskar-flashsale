@@ -396,6 +396,7 @@ describe("caution stays out of the brand colour", () => {
 - Modify: `src/app/_components/product-picker.tsx:477,505,1556,1682` (line numbers re-measured after Task 4's two comment lines shifted the file by +2; locate by string regardless)
 - Modify: `src/app/_components/product-picker.tsx:469` — the `/** Amber "belum disimpan" marker … */` doc comment must be restated once the marker is neutral (a stale colour comment counts as a defect here)
 - Modify: `src/app/_components/product-picker.tsx:495` (`Row background treatment: amber tint while a draft is unsaved, …`) and `:580` (`/** Row has unsaved edits (amber) or failed the last flush (red). */`) — same defect. The `amber-` guard regex needs the hyphen, so prose like this can never fail the test; the only defence is restating it. All three comments describe the *same* two chips and must read "neutral"/"muted" once the swap lands.
+- Modify: `src/app/_components/product-card.tsx:37` — `aspect-square amber letter-tile frame (Task 7 RosterThumb treatment …)` is stale since Task 4 swept the thumb gradient to brand orange. Same defect class as the picker comments; no scan can catch it.
 - Modify: `tests/brand-palette.test.ts` (append)
 
 **Interfaces:**
@@ -525,8 +526,12 @@ describe("login audiences stay separated", () => {
     );
   });
 
-  it("sends an OAuth sign-out back to the storefront, not to a dead end", () => {
-    expect(readFileSync("src/app/login/success/page.tsx", "utf8")).not.toMatch(/"\/auth\/login"/);
+  it("sends a live session arriving at the old OAuth landing straight to the storefront", () => {
+    const success = readFileSync("src/app/login/success/page.tsx", "utf8");
+    expect(success).toMatch(/redirect\("\/"\)/); // the spec's "live session → /"
+    // ...and keeps the customer door for the no-session case: this is a
+    // customer-facing guard, which the spec says stays on /auth/login.
+    expect(success).toMatch(/redirect\("\/auth\/login"\)/);
   });
 
   it("returns a signed-out admin to the door they can use again", () => {
@@ -542,7 +547,9 @@ describe("login audiences stay separated", () => {
 
 - [ ] **Step 3: Create `src/app/auth/staff/page.tsx`** — an async-free server component: `export const metadata = { title: "Masuk sebagai staf — Flash Sale Grosir" }`, `<main className="flex min-h-svh flex-col items-center justify-center bg-background px-4 py-10">`, a `max-w-sm` column holding the `<img src="/brand/logo-lockup.png" alt="Flash Sale Grosir" className="w-40" />`, `h1` "Masuk sebagai staf", sub-line "Pakai email dan password akun Jubelio kamu.", `<AuthForm />`, and a quiet `Link href="/auth/login"` reading "Bukan staf? Masuk dengan Google". No countdown plate. Same heading/sub typography as the current customer page (`font-heading text-2xl md:text-3xl`, `text-sm text-neutral-600 dark:text-neutral-400`).
 
-- [ ] **Step 4: Move the staff doors.** `admin/layout.tsx:30` → `redirect("/auth/staff")`; `use-session-expiry.ts:23` → `router.push("/auth/staff")`; `login/success/page.tsx:21` → `redirect("/")`.
+- [ ] **Step 4: Move the staff doors.** `admin/layout.tsx:30` → `redirect("/auth/staff")`; `use-session-expiry.ts:23` → `router.push("/auth/staff")`.
+
+- [ ] **Step 4b: Turn `login/success/page.tsx` into a redirect shim.** Read the file before editing: its line 21 is the **no-session** branch (`if (!session) redirect("/auth/login")`), and the "Login Berhasil" card renders only when a session *does* exist. The spec's sentence is *"`/login/success` sends a live session to `/`"*, so the change is an inversion, not a string swap: add `redirect("/")` for the live-session case and **keep** `redirect("/auth/login")` for the no-session case (a customer-facing guard, which the spec says keeps pointing at the customer door). That makes the card, its `Card*` imports, its `<SignOutButton />` and its `metadata` unreachable — delete them, so the page is `getSession()` + two guards and never returns JSX. Nothing in the repo links to this URL (`grep -rn "login/success" src tests` finds no producer; Google OAuth lands on `/onboarding`), so it is reachable only from an old bookmark, and no test or screen depends on the card.
 
 - [ ] **Step 5: Give `SignOutButton` its `redirectTo` prop** — `function SignOutButton({ className, redirectTo = "/" }: { className?: string; redirectTo?: string })`, `router.push(redirectTo)`; `admin/layout.tsx:73` passes `redirectTo="/auth/staff"`; `/login/success` keeps the default. Update the hook's/file's comments that claim sign-out "returns to login".
 
