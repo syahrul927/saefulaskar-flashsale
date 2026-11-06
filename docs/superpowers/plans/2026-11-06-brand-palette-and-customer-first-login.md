@@ -741,14 +741,22 @@ import { describe, expect, it } from "vitest";
 describe("transactional data is explained where it is entered", () => {
   it("names the default-order purpose on the onboarding page", () => {
     const page = readFileSync("src/app/onboarding/page.tsx", "utf8");
-    expect(page).toMatch(/default/i);
+    // `/default/i` is permanently satisfied by the `export default` keyword two
+    // lines up, so it cannot fail for the reason it claims. Scope it to the copy.
+    expect(page).toMatch(/data default untuk setiap pesanan/);
     expect(page).not.toMatch(/Kami butuh beberapa data untuk mendaftarkan/);
   });
 
   it("repeats it above the submit button", () => {
-    expect(readFileSync("src/app/onboarding/onboarding-form.tsx", "utf8")).toMatch(
-      /tiap checkout|setiap pesanan/,
-    );
+    const form = readFileSync("src/app/onboarding/onboarding-form.tsx", "utf8");
+    expect(form).toMatch(/tiap checkout|setiap pesanan/);
+    // The claim is positional, so the pin must be too: a whole-file match is
+    // satisfied by a comment anywhere in the file, or by the sentence sitting
+    // under the button instead of above it.
+    const note = form.search(/<p className="text-xs text-muted-foreground/);
+    const submit = form.search(/<Button type="submit"/);
+    expect(note).toBeGreaterThanOrEqual(0);
+    expect(submit).toBeGreaterThan(note);
   });
 
   it("calls the number WhatsApp wherever it is entered, confirmed or read back", () => {
@@ -759,7 +767,10 @@ describe("transactional data is explained where it is entered", () => {
     ]) {
       const src = readFileSync(f, "utf8");
       expect(src).toMatch(/WhatsApp/);
-      expect(src).not.toMatch(/No\. Telf|No\. Telepon/);
+      // Case-insensitive: the checkout validation string was lowercase
+      // (`No. telepon minimal …`), so the case-sensitive form of this pin would
+      // let a regression reintroduce it untouched.
+      expect(src).not.toMatch(/no\.\s*(telf|telepon)/i);
     }
   });
 });
@@ -767,7 +778,7 @@ describe("transactional data is explained where it is entered", () => {
 
 - [ ] **Step 2: Run it** → FAIL.
 
-- [ ] **Step 3: Onboarding page sub-line** (`page.tsx:38-39`) becomes one Bahasa sentence carrying the purpose: the data is the default for every order — ship address, PIC, WhatsApp — and can still be changed per order at checkout.
+- [ ] **Step 3: Onboarding page sub-line** (`page.tsx:38-39`) becomes one Bahasa sentence carrying the purpose: the data is the default for every order and can still be changed per order at checkout. Name the fields the checkout **actually** prefills — `resolveRecipient` (`src/server/recipient.ts:44-48`) maps `contactName → nama penerima`, `phone → nomor WhatsApp`, `sAddress → alamat kirim`. **Do not name PIC:** `primaryContact` is only POSTed to `/api/contacts` and forwarded to Jubelio as `primary_contact` (`api/contacts/route.ts:54`); it never reaches `RecipientDefaults`, so a sentence promising it as a transaction default would be false. (The partner's own framing said "address, PIC, whatsapp" — the code says otherwise, and the partner hears this line in the final report, not a sentence that flatters their assumption.)
 
 - [ ] **Step 4: Form changes** — `onboarding-form.tsx:97` label → `No. WhatsApp`; immediately above the submit `<Button>` add a light note (`text-xs text-muted-foreground leading-relaxed`) repeating that the data fills in automatically at every checkout and can be changed there.
 
