@@ -694,6 +694,9 @@ Expected: `login-audience-split` PASS, 0 type errors.
 - Modify: `src/app/onboarding/page.tsx:38-39`
 - Modify: `src/app/onboarding/onboarding-form.tsx:97`
 - Modify: `src/app/_components/checkout-dialog.tsx:100-101,218`
+- Modify: `src/app/_components/receipt-dialog.tsx:170` — the receipt card labels the
+  same stored number `No. Telepon`. Left alone, the flow would enter it as "No.
+  WhatsApp", confirm it as "No. WhatsApp" and then read it back as "No. Telepon".
 - Create: `tests/transactional-labels.test.ts`
 
 **Interfaces:**
@@ -721,8 +724,12 @@ describe("transactional data is explained where it is entered", () => {
     );
   });
 
-  it("calls the number WhatsApp in onboarding and checkout", () => {
-    for (const f of ["src/app/onboarding/onboarding-form.tsx", "src/app/_components/checkout-dialog.tsx"]) {
+  it("calls the number WhatsApp wherever it is entered, confirmed or read back", () => {
+    for (const f of [
+      "src/app/onboarding/onboarding-form.tsx",
+      "src/app/_components/checkout-dialog.tsx",
+      "src/app/_components/receipt-dialog.tsx",
+    ]) {
       const src = readFileSync(f, "utf8");
       expect(src).toMatch(/WhatsApp/);
       expect(src).not.toMatch(/No\. Telf|No\. Telepon/);
@@ -737,7 +744,7 @@ describe("transactional data is explained where it is entered", () => {
 
 - [ ] **Step 4: Form changes** — `onboarding-form.tsx:97` label → `No. WhatsApp`; immediately above the submit `<Button>` add a light note (`text-xs text-muted-foreground leading-relaxed`) repeating that the data fills in automatically at every checkout and can be changed there.
 
-- [ ] **Step 5: Checkout label** — `checkout-dialog.tsx:218` → `No. WhatsApp`; validation message at `:100-101` (`"No. telepon minimal 6 karakter."`) → `"Nomor WhatsApp minimal 6 karakter."`. Field order, limits and payload keys do not change.
+- [ ] **Step 5: Checkout and receipt labels** — `checkout-dialog.tsx:218` → `No. WhatsApp`; validation message at `:100-101` (`"No. telepon minimal 6 karakter."`) → `"Nomor WhatsApp minimal 6 karakter."`; `receipt-dialog.tsx:170` → `No. WhatsApp`. Field order, limits and payload keys do not change, and no data field is renamed — this is display copy only.
 
 - [ ] **Step 6: Run test + typecheck + suite.** Expected: PASS.
 
