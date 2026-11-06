@@ -368,7 +368,11 @@ white on an ink card.
 **Files:**
 - Modify: `src/app/_components/product-picker.tsx:1556` — the dead `hover:bg-muted`
 - Modify: `src/app/_components/cart-drawer.tsx:168` — on that one frame div,
-  `bg-neutral-100` → `bg-background dark:bg-card`. Leave `:210`'s `bg-neutral-100`
+  `bg-neutral-100` → `bg-white dark:bg-card` (the exact pair its own row carries at
+  `:162`, so the tile reads as part of the row rather than a recessed chip). Measured
+  with `contrast.mjs` at 18px/900 for `#C2410C`: on `#F5F5F5` 4.22–4.25 FAIL, on
+  `#FFFFFF` 4.58–4.60 PASS, on the paper token 4.54 PASS — white is both the match and
+  the margin. Leave `:210`'s `bg-neutral-100`
   (an icon-button holder, no brand text) and every other file's `bg-neutral-100`
   alone — this is not a repo-wide grey sweep.
 - Modify: `tests/brand-palette.test.ts` (append to the `brand decoration no longer
