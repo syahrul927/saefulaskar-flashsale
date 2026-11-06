@@ -343,6 +343,63 @@ describe("brand decoration no longer uses the old yellow scale", () => {
 
 ---
 
+## Task 4b: Cart tile ground so the fallback letter holds AA
+
+Found by Task 4's fix-round re-review, after Task 4 was already approved: the `/15`
+gradient composites over whatever ground the caller's frame paints, and the two
+`ProductThumb` call sites differ.
+
+| call site | frame ground | letter size | glyph ratio | verdict |
+|---|---|---|---|---|
+| `product-card.tsx:83` | `bg-neutral-100` (#F5F5F5) | default `text-5xl` (48px) | ≈4.2:1, large-text bar 3:1 | passes |
+| `cart-drawer.tsx:168` | `bg-neutral-100` (#F5F5F5) | `letterClass="text-lg"` (18px `font-black`) | ≈4.23:1, bar 4.5:1 | **fails** |
+
+`text-lg` is 18px, under the 18.66px (14pt) bold large-text exemption, so this one
+glyph needs 4.5:1 and does not get it. The picker's own tiles are unaffected — their
+`bg-neutral-100` lives on the `<img>` branch (`product-picker.tsx:200`, `:235`), a
+photo-loading backdrop with no text, while the tile branch paints its gradient
+straight on the row ground (paper #FFFDFC → 4.59:1).
+
+The fix is the **ground**, not the type: `text-*` size, weight and the mandated `/15`
+gradient all stay. The row this tile sits in already writes `bg-white dark:bg-card`,
+so the frame takes the semantic pair rather than a bare `bg-white` that would flash
+white on an ink card.
+
+**Files:**
+- Modify: `src/app/_components/cart-drawer.tsx:168` — on that one frame div,
+  `bg-neutral-100` → `bg-background dark:bg-card`. Leave `:210`'s `bg-neutral-100`
+  (an icon-button holder, no brand text) and every other file's `bg-neutral-100`
+  alone — this is not a repo-wide grey sweep.
+- Modify: `tests/brand-palette.test.ts` (append to the `brand decoration no longer
+  uses the old yellow scale` describe — Task 4 owns that block and is finished, so
+  this is the only remaining edit that file takes)
+
+- [ ] **Step 1: Write the failing test.** The pin has to target the frame, because
+  `bg-neutral-100` appears elsewhere in the same file:
+
+```ts
+it("grounds the cart tile so its fallback letter clears 4.5:1", () => {
+  const cart = readFileSync("src/app/_components/cart-drawer.tsx", "utf8");
+  const frame = /overflow-hidden rounded-lg border border-neutral-200\/80[^"]*"/;
+  expect(cart).toMatch(frame);
+  expect(cart.match(frame)![0]).not.toContain("bg-neutral-100");
+  expect(cart.match(frame)![0]).toContain("bg-background dark:bg-card");
+});
+```
+
+- [ ] **Step 2: Run it** → FAIL (the frame still says `bg-neutral-100`).
+- [ ] **Step 3: Swap the class** at `cart-drawer.tsx:168`, and correct the frame's
+  two-line comment above it (`:166-167`) if it implies a grey recess.
+- [ ] **Step 4:** `COREPACK_ENABLE_STRICT=0 yarn vitest run && COREPACK_ENABLE_STRICT=0 yarn run typecheck` → pass, 0 errors.
+- [ ] **Step 5: Commit** `fix(palette): cart tile frame goes paper so its fallback letter holds AA`
+
+Deferred, not fixed here: `product-card.tsx:83` keeps `bg-neutral-100` because its
+48px letter qualifies as large text (3:1 bar). If the whole system should agree on a
+paper ground for tile frames, that is a two-line change the final review may rule on
+— no accessibility requirement compels it today.
+
+---
+
 ## Task 5: Amber sweep — caution becomes red
 
 **Files:**
