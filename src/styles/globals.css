@@ -10,89 +10,93 @@
 }
 
 /*
- * Design tokens — ink + yellow accent (saefulaskar.com yellow #FFCC05):
- * warm dark ink for text + primary buttons (calm, easy to look at), yellow
- * as accent/secondary where it pops (badges, highlights, selection, tints),
- * warm cream canvas, paper cards, hairline warm borders. Flat and soft.
+ * Design tokens — slate ink leads, orange marks accent (the logo's own pair:
+ * mark orange #EA580C, wordmark slate #1F2937): slate for text + primary
+ * buttons (calm, easy to look at), orange only as accent/mark where it pops
+ * (badges, highlights, selection, tints) — never as a text-bearing fill at
+ * small sizes (that is `brand-action` #C2410C). Warm paper canvas, white
+ * cards, hairline warm borders. Flat and soft.
  */
-:root { /* warm cream canvas */ /* warm dark ink */
-  --card: oklch(1 0 0); /* paper — clearly lighter than canvas */
-  --card-foreground: oklch(0.145 0 0);
+:root {
+  --background: oklch(0.995 0.003 48.7); /* #FFFDFC paper — the lockup needs a white-ish ground */
+  --foreground: oklch(0.278 0.030 256.8); /* #1F2937 wordmark slate */
+  --card: oklch(1 0 0); /* #FFFFFF — brand PNGs are opaque white */
+  --card-foreground: oklch(0.278 0.030 256.8);
   --popover: oklch(1 0 0);
-  --popover-foreground: oklch(0.145 0 0);
-  --primary: oklch(0.852 0.199 91.936); /* warm near-black ink buttons */
-  --primary-foreground: oklch(0.421 0.095 57.708); /* paper text on ink */
-  --secondary: oklch(0.967 0.001 286.375); /* brand yellow softened — accents, badges */
-  --secondary-foreground: oklch(0.21 0.006 285.885);
-  --muted: oklch(0.97 0 0);
-  --muted-foreground: oklch(0.556 0 0);
-  --accent: oklch(0.852 0.199 91.936); /* pale yellow tint surface */
-  --accent-foreground: oklch(0.421 0.095 57.708);
+  --popover-foreground: oklch(0.278 0.030 256.8);
+  --primary: oklch(0.278 0.030 256.8); /* #1F2937 ink buttons — slate leads, orange accents */
+  --primary-foreground: oklch(1 0 0); /* paper text on ink — 14.68:1 */
+  --secondary: oklch(0.960 0.007 67.7); /* #F5F1ED warm neutral — accents, badges */
+  --secondary-foreground: oklch(0.278 0.030 256.8);
+  --muted: oklch(0.969 0.005 67.8); /* #F7F4F1 */
+  --muted-foreground: oklch(0.530 0.009 73.7); /* #6F6B66 — 5.29:1 on paper */
+  --accent: oklch(0.966 0.021 60.8); /* #FFF1E6 orange tint surface */
+  --accent-foreground: oklch(0.553 0.174 38.4); /* #C2410C — 4.68:1 on the tint */
   --destructive: oklch(0.577 0.245 27.325);
-  --border: oklch(0.922 0 0); /* hairline warm border */
-  --input: oklch(0.922 0 0);
-  --ring: oklch(0.708 0 0); /* dark focus ring — visible on cream + yellow */
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
+  --border: oklch(0.931 0.010 67.7); /* #EDE7E1 hairline warm border */
+  --input: oklch(0.903 0.010 72.7); /* #E3DED8 */
+  --ring: oklch(0.646 0.194 41.1); /* #EA580C — 3.56:1, passes 3:1 for a non-text indicator */
+  --chart-1: oklch(0.278 0.030 256.8); /* #1F2937 */
+  --chart-2: oklch(0.553 0.174 38.4); /* #C2410C */
+  --chart-3: oklch(0.646 0.194 41.1); /* #EA580C */
+  --chart-4: oklch(0.705 0.187 47.6); /* #F97316 */
+  --chart-5: oklch(0.837 0.117 66.3); /* #FDBA74 */
   --radius: 0.5rem; /* mockup base radius — rounded-lg cards/controls */
-  --sidebar: oklch(0.985 0 0);
-  --sidebar-foreground: oklch(0.145 0 0);
-  --sidebar-primary: oklch(0.681 0.162 75.834);
-  --sidebar-primary-foreground: oklch(0.987 0.026 102.212);
-  --sidebar-accent: oklch(0.97 0 0);
-  --sidebar-accent-foreground: oklch(0.205 0 0);
-  --sidebar-border: oklch(0.922 0 0);
-  --sidebar-ring: oklch(0.708 0 0);
-  --background: oklch(1 0 0);
-  --foreground: oklch(0.145 0 0);
+  --sidebar: oklch(0.969 0.005 67.8);
+  --sidebar-foreground: oklch(0.278 0.030 256.8);
+  --sidebar-primary: oklch(0.278 0.030 256.8);
+  --sidebar-primary-foreground: oklch(1 0 0);
+  --sidebar-accent: oklch(0.966 0.021 60.8);
+  --sidebar-accent-foreground: oklch(0.553 0.174 38.4);
+  --sidebar-border: oklch(0.931 0.010 67.7);
+  --sidebar-ring: oklch(0.646 0.194 41.1);
 }
 
 .dark {
-  --background: oklch(0.145 0 0); /* warm dark brown */
-  --foreground: oklch(0.985 0 0);
-  --card: oklch(0.205 0 0);
-  --card-foreground: oklch(0.985 0 0);
-  --popover: oklch(0.205 0 0);
-  --popover-foreground: oklch(0.985 0 0);
-  --primary: oklch(0.795 0.184 86.047); /* brand yellow pops on dark */
-  --primary-foreground: oklch(0.421 0.095 57.708);
-  --secondary: oklch(0.274 0.006 286.033);
-  --secondary-foreground: oklch(0.985 0 0);
-  --muted: oklch(0.269 0 0);
-  --muted-foreground: oklch(0.708 0 0);
-  --accent: oklch(0.795 0.184 86.047);
-  --accent-foreground: oklch(0.421 0.095 57.708);
+  --background: oklch(0.202 0.014 253.2); /* #12171D ink-hued canvas — the same brand at night */
+  --foreground: oklch(0.944 0.010 252.8); /* #E8EDF3 — 15.30:1 */
+  --card: oklch(0.249 0.020 254.9); /* #1B222B */
+  --card-foreground: oklch(0.944 0.010 252.8);
+  --popover: oklch(0.249 0.020 254.9);
+  --popover-foreground: oklch(0.944 0.010 252.8);
+  --primary: oklch(0.944 0.010 252.8); /* paper fill with ink text — mirrors the light-mode pair */
+  --primary-foreground: oklch(0.202 0.014 253.2);
+  --secondary: oklch(0.282 0.022 254.2); /* #222A34 */
+  --secondary-foreground: oklch(0.944 0.010 252.8);
+  --muted: oklch(0.282 0.022 254.2);
+  --muted-foreground: oklch(0.675 0.028 253.6); /* #8B98A8 — 6.14:1 */
+  --accent: oklch(0.250 0.032 51.2); /* #2E1D13 dark orange tint */
+  --accent-foreground: oklch(0.705 0.187 47.6); /* #F97316 — 5.76:1 */
   --destructive: oklch(0.704 0.191 22.216);
   --border: oklch(1 0 0 / 10%);
   --input: oklch(1 0 0 / 15%);
-  --ring: oklch(0.556 0 0);
-  --chart-1: oklch(0.87 0 0);
-  --chart-2: oklch(0.556 0 0);
-  --chart-3: oklch(0.439 0 0);
-  --chart-4: oklch(0.371 0 0);
-  --chart-5: oklch(0.269 0 0);
-  --sidebar: oklch(0.205 0 0);
-  --sidebar-foreground: oklch(0.985 0 0);
-  --sidebar-primary: oklch(0.795 0.184 86.047);
-  --sidebar-primary-foreground: oklch(0.987 0.026 102.212);
-  --sidebar-accent: oklch(0.269 0 0);
-  --sidebar-accent-foreground: oklch(0.985 0 0);
+  --ring: oklch(0.705 0.187 47.6); /* #F97316 — the dark-mode orange */
+  --chart-1: oklch(0.705 0.187 47.6); /* #F97316 */
+  --chart-2: oklch(0.837 0.117 66.3); /* #FDBA74 */
+  --chart-3: oklch(0.758 0.159 55.9); /* #FB923C */
+  --chart-4: oklch(0.944 0.010 252.8); /* #E8EDF3 */
+  --chart-5: oklch(0.675 0.028 253.6); /* #8B98A8 */
+  --sidebar: oklch(0.249 0.020 254.9);
+  --sidebar-foreground: oklch(0.944 0.010 252.8);
+  --sidebar-primary: oklch(0.705 0.187 47.6);
+  --sidebar-primary-foreground: oklch(0.278 0.030 256.8);
+  --sidebar-accent: oklch(0.250 0.032 51.2);
+  --sidebar-accent-foreground: oklch(0.705 0.187 47.6);
   --sidebar-border: oklch(1 0 0 / 10%);
-  --sidebar-ring: oklch(0.556 0 0);
+  --sidebar-ring: oklch(0.705 0.187 47.6);
 }
 
 @theme inline {
   --font-heading: var(--font-urbanist);
-  --color-brand-primary: #FFCC05;
-  --color-brand-primary-hover: #EBB800;
-  --color-brand-secondary: #FF7E33;
+  --color-brand-primary: #EA580C;
+  /* Hover lightens up the ramp — darkening to #C2410C under near-black text
+     is 3.83:1 (fails AA); #F97316 is ≈6.8:1. */
+  --color-brand-primary-hover: #F97316;
+  --color-brand-secondary: #FB923C;
   /* The two colours the supplied logo is actually made of — mark orange and
      wordmark slate (`public/brand/logo-*.png` sample to #EA580C / #1F2937).
-     Brand-forward surfaces (login) read these instead of the legacy saefulaskar
-     yellow, which sits a few degrees off the new orange and fights it. */
+     `brand-primary`/`brand-secondary` now carry the same family, so gradients
+     and brand-forward surfaces (login) read as one hue instead of two brands. */
   --color-brand-mark: #EA580C;
   --color-brand-ink: #1F2937;
   /* Same hue as the mark, darkened enough to hold white text: #EA580C itself
@@ -162,7 +166,7 @@
     @apply font-sans;
   }
   ::selection {
-    background: oklch(0.877 0.166 92); /* brand yellow, like example's peach selection */
-    color: oklch(0.295 0.03 85);
+    background: oklch(0.837 0.117 66.3); /* #FDBA74 orange tint */
+    color: oklch(0.278 0.030 256.8); /* #1F2937 slate — 8.70:1 */
   }
 }
