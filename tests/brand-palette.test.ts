@@ -76,9 +76,25 @@ describe("brand decoration no longer uses the old yellow scale", () => {
 
   it("re-points the picker's placeholder gradient and special-cell tint, leaving Task 6's sites", () => {
     const picker = readFileSync("src/app/_components/product-picker.tsx", "utf8");
-    expect(picker).not.toMatch(/from-amber-50/); // :205, :240 thumb gradients
-    expect(picker).not.toMatch(/border-amber-200 bg-amber-50 px-2/); // :156 cellInput
-    expect(picker).not.toMatch(/text-amber-700/); // :207, :242 initial letters
+    expect(picker).not.toMatch(/from-amber-50/); // :207, :242 thumb gradients
+    expect(picker).not.toMatch(/border-amber-200 bg-amber-50 px-2/); // :157 cellInput
+    expect(picker).not.toMatch(/text-amber-700/); // :209, :244 initial letters
+  });
+
+  it("keeps the letter tile's end stop pale enough for its glyph to hold AA", () => {
+    // Not an absence check: the centred initial sits mid-gradient, and at
+    // `to-brand-secondary/25` that ground composites to ≈4.35:1 under
+    // `text-brand-action` — under the 4.5:1 bar these letters (text-base/lg,
+    // below the 18.66px bold exemption) have to clear. `/15` measures ~4.6:1.
+    const tiles = [
+      "src/app/_components/product-thumb.tsx",
+      "src/app/_components/product-picker.tsx",
+    ];
+    for (const file of tiles) {
+      expect(readFileSync(file, "utf8")).toMatch(
+        /from-brand-primary\/10 to-brand-secondary\/15/,
+      );
+    }
   });
 });
 

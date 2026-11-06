@@ -152,8 +152,8 @@ const cellSelectClass =
   "rounded-lg border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs text-neutral-800 focus:border-brand-primary focus:outline-none dark:border-border dark:bg-input/30 dark:text-neutral-200";
 const cellInputClass =
   "rounded-lg border border-neutral-200 bg-neutral-50 px-2 py-1 font-mono text-xs font-bold text-neutral-950 focus:border-brand-primary focus:outline-none dark:border-border dark:bg-input/30 dark:text-neutral-50";
-/** MOQ cell's brand tint — decoration (this row is special, not wrong), and the
- * alpha fill + `brand-action` text serves paper and the ink canvas with no `dark:` pair. */
+/** MOQ cell's brand tint — decoration (this row is special, not wrong). No
+ * `dark:` pair: an admin table cell paints on paper only, and `.dark` is unreachable. */
 const cellInputBrandClass =
   "rounded-lg border border-brand-primary/30 bg-brand-primary/10 px-2 py-1 font-mono text-xs font-black text-brand-action focus:border-brand-mark focus:outline-none";
 const readOnlyCellClass =
@@ -204,7 +204,7 @@ function RosterThumb({
   return (
     <span
       aria-hidden="true"
-      className={`flex shrink-0 items-center justify-center ${frame} bg-gradient-to-br from-brand-primary/10 to-brand-secondary/25`}
+      className={`flex shrink-0 items-center justify-center ${frame} bg-gradient-to-br from-brand-primary/10 to-brand-secondary/15`}
     >
       <span className={`${letter} font-black text-brand-action`}>
         {productLabel(product).charAt(0).toUpperCase()}
@@ -239,7 +239,7 @@ function SearchThumb({
   return (
     <span
       aria-hidden="true"
-      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand-primary/10 to-brand-secondary/25"
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand-primary/10 to-brand-secondary/15"
     >
       <span className="text-base font-black text-brand-action">
         {label.charAt(0).toUpperCase()}

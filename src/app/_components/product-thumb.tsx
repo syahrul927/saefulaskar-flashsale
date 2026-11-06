@@ -32,7 +32,7 @@ function ProductThumb({
     <>
       <span
         aria-hidden="true"
-        className={`flex size-full items-center justify-center bg-gradient-to-br from-brand-primary/10 to-brand-secondary/25 ${letterClass} font-black text-brand-action`}
+        className={`flex size-full items-center justify-center bg-gradient-to-br from-brand-primary/10 to-brand-secondary/15 ${letterClass} font-black text-brand-action`}
       >
         {letter}
       </span>
