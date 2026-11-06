@@ -348,6 +348,7 @@ describe("brand decoration no longer uses the old yellow scale", () => {
 - Modify: `src/app/_components/payment-panel.tsx:288,292,294`
 - Modify: `src/app/_components/orders-list.tsx:150,207,209,226`
 - Modify: `src/app/_components/cancel-order-button.tsx:54`
+- Modify: `src/app/_components/session-list-filter.tsx:12` (doc comment only — found by Task 3: it still says "amber is the orders unpaid signal", which is false after Task 3 moved `UNPAID` to red. One sentence, no code.)
 - Modify: `tests/brand-palette.test.ts` (append)
 
 **Interfaces:**
