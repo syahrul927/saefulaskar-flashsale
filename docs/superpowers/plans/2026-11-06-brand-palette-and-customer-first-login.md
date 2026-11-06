@@ -395,6 +395,7 @@ describe("caution stays out of the brand colour", () => {
 **Files:**
 - Modify: `src/app/_components/product-picker.tsx:477,505,1556,1682` (line numbers re-measured after Task 4's two comment lines shifted the file by +2; locate by string regardless)
 - Modify: `src/app/_components/product-picker.tsx:469` — the `/** Amber "belum disimpan" marker … */` doc comment must be restated once the marker is neutral (a stale colour comment counts as a defect here)
+- Modify: `src/app/_components/product-picker.tsx:495` (`Row background treatment: amber tint while a draft is unsaved, …`) and `:580` (`/** Row has unsaved edits (amber) or failed the last flush (red). */`) — same defect. The `amber-` guard regex needs the hyphen, so prose like this can never fail the test; the only defence is restating it. All three comments describe the *same* two chips and must read "neutral"/"muted" once the swap lands.
 - Modify: `tests/brand-palette.test.ts` (append)
 
 **Interfaces:**
