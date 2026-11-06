@@ -9,7 +9,7 @@ import { SESSION_STATUS_LABEL, type SessionStatus } from "./status-badge";
  * Session status tabs (spec decision 2): the console list arrives as
  * pre-rendered server nodes — the same ReactNode-as-prop island pattern as
  * `AdminOrdersFilter` — so filtering is instant and never re-queries.
- * No `emphasis` on these pills: amber is the orders "unpaid" signal; the
+ * No `emphasis` on these pills: red is the orders "unpaid" signal; the
  * session list stays quiet.
  */
 type Tab = "ALL" | SessionStatus;

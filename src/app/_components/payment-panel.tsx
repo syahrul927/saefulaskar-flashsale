@@ -285,13 +285,13 @@ function PaymentPanel({
         {/* Notice banner — the mockup timer slot (design.html:1095-1104)
             without a countdown (D7): the warning icon stands in for the
             clock so nothing reads as "time left". */}
-        <div className="flex items-start gap-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3">
+        <div className="flex items-start gap-2.5 rounded-xl border border-red-200 bg-red-100 p-3 dark:border-red-900 dark:bg-red-950/40">
           <WarningCircleIcon
             weight="fill"
             aria-hidden="true"
-            className="mt-0.5 size-4 shrink-0 text-amber-600"
+            className="mt-0.5 size-4 shrink-0 text-red-600 dark:text-red-400"
           />
-          <p className="font-mono text-[11px] leading-relaxed text-amber-900">
+          <p className="font-mono text-[11px] leading-relaxed text-red-700 dark:text-red-300">
             Selesaikan pembayaran sebelum sesi berakhir — pesanan belum
             terkonfirmasi dapat dibatalkan admin.
           </p>

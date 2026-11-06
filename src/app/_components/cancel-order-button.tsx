@@ -46,14 +46,17 @@ export type CancelOrderTarget = {
   customerWaLink: string;
 };
 
-/** Both warnings share a shape; only the tint changes with what is at stake. */
+/** Both warnings share a shape and the caution red — a warning never wears the
+ *  brand colour, so the two are told apart by weight, not hue. */
 const WARN_BASE = "rounded-xl border px-3 py-2.5 text-xs";
 const WARN_TONES = {
-  // Unpaid: worth a call before the units go back, but a soft stop.
-  amber:
-    "border-amber-200 bg-amber-50 text-amber-900 dark:border-amber-900/50 dark:bg-amber-950/30 dark:text-amber-200",
-  // Paid: real money, and the refund happens outside this system.
-  red: "border-red-200 bg-red-50 text-red-900 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200",
+  // Unpaid: worth a call before the units go back, but a soft stop — the
+  // shared caution recipe (5.30:1 on paper).
+  unpaid:
+    "border-red-200 bg-red-100 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300",
+  // Paid: real money, and the refund happens outside this system — paler
+  // plate, darker ink.
+  paid: "border-red-200 bg-red-50 text-red-900 dark:border-red-900/50 dark:bg-red-950/30 dark:text-red-200",
 } as const;
 
 function CancelOrderButton({
@@ -123,12 +126,12 @@ function CancelOrderButton({
         </DialogHeader>
 
         {target.status === "UNPAID" ? (
-          <p className={`${WARN_BASE} ${WARN_TONES.amber}`}>
+          <p className={`${WARN_BASE} ${WARN_TONES.unpaid}`}>
             Pelanggan belum membayar. Sebaiknya hubungi dulu lewat WhatsApp
             sebelum membatalkan.
           </p>
         ) : (
-          <p className={`${WARN_BASE} ${WARN_TONES.red}`}>
+          <p className={`${WARN_BASE} ${WARN_TONES.paid}`}>
             Pelanggan sudah membayar
             {target.jubelioSoId ? ` (SO #${target.jubelioSoId})` : ""}.
             Membatalkan berarti kamu menghubungi pelanggan dan mengatur refund di

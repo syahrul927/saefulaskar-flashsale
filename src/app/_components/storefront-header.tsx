@@ -104,7 +104,7 @@ function OrdersIconButton({ className }: { className?: string }) {
 }
 
 /**
- * Cart trigger — brand-yellow rail button (per brief) carrying the live item
+ * Cart trigger — brand-orange rail button (per brief) carrying the live item
  * count as a mono chip and the subtotal in mono. Chip shows only when the
  * cart has items, mirroring the mockup's `cartTotalCount > 0` guard; the
  * `Rp` figure drops below `sm` where the rail can't fit both clusters.

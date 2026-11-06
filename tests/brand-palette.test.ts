@@ -47,7 +47,11 @@ describe("brand orange as text", () => {
 
   it("never paints small text with the mark colours", () => {
     for (const file of paperTextSites) {
-      expect(readFileSync(file, "utf8")).not.toMatch(/text-brand-(primary|secondary|mark)\b/);
+      // The lookbehind exempts a sanctioned `dark:text-brand-*` companion:
+      // this rule is about brand orange painted on light paper.
+      expect(readFileSync(file, "utf8")).not.toMatch(
+        /(?<!dark:)text-brand-(primary|secondary|mark)\b/,
+      );
     }
   });
 });
@@ -75,5 +79,35 @@ describe("brand decoration no longer uses the old yellow scale", () => {
     expect(picker).not.toMatch(/from-amber-50/); // :205, :240 thumb gradients
     expect(picker).not.toMatch(/border-amber-200 bg-amber-50 px-2/); // :156 cellInput
     expect(picker).not.toMatch(/text-amber-700/); // :207, :242 initial letters
+  });
+});
+
+describe("caution stays out of the brand colour", () => {
+  // States that mean "act on this" — unpaid, awaiting payment, a cancel that
+  // costs money. They take the red caution recipe, never the old brand yellow
+  // and never the new brand orange (which is decoration). `storefront-header`
+  // joins the scan so Task 4's active-tab icon swap gets pinned: that task's
+  // own grep only looked for `amber-`, which the file never had.
+  const caution = [
+    "src/app/_components/filter-pill.tsx",
+    "src/app/_components/payment-panel.tsx",
+    "src/app/_components/orders-list.tsx",
+    "src/app/_components/cancel-order-button.tsx",
+    "src/app/_components/storefront-header.tsx",
+  ];
+
+  it("reads unpaid/awaiting states as red, never amber or brand orange", () => {
+    for (const file of caution) {
+      const src = readFileSync(file, "utf8");
+      expect(src).not.toMatch(/amber-/);
+      expect(src).not.toMatch(/(?<!dark:)text-brand-(primary|secondary|mark)\b/);
+    }
+    expect(readFileSync("src/app/_components/filter-pill.tsx", "utf8")).toMatch(/bg-red-500/);
+  });
+
+  it("paints the active storefront tab icon the action orange, not the light brand", () => {
+    const header = readFileSync("src/app/_components/storefront-header.tsx", "utf8");
+    expect(header).toMatch(/text-brand-action/);
+    expect(header).not.toMatch(/(?<!dark:)text-brand-secondary\b/);
   });
 });

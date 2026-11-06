@@ -126,9 +126,9 @@ function NoMatchPlate({ label }: { label: string }) {
 }
 
 /**
- * One transaction card — mockup treatment (:648-768): amber ring/tint while
- * payment is pending (:648-652, verbatim), mono booking ID + tinted pulsing
- * `StatusBadge` on the top rule, item rows with a thumb frame + mono
+ * One transaction card — mockup treatment (:648-768): the red caution
+ * ring/tint while payment is pending (:648-652), mono booking ID + tinted
+ * pulsing `StatusBadge` on the top rule, item rows with a thumb frame + mono
  * `qty × Rp…` line and the subtotal right-aligned (:713-726), and the Total +
  * CTA summary on the bottom rule (:729-766). `order_item` stores no per-line
  * image, so the thumb frame carries the product initial instead of an `<img>`
@@ -147,7 +147,7 @@ function TransactionCard({
       className={cn(
         "rounded-xl border bg-white p-4 shadow-xs transition dark:bg-card sm:p-5",
         unpaid
-          ? "border-amber-300 bg-amber-50/20 ring-1 ring-amber-200"
+          ? "border-red-300 bg-red-50/20 ring-1 ring-red-200"
           : "border-neutral-200 hover:border-neutral-300 dark:border-border",
       )}
     >
@@ -204,9 +204,9 @@ function TransactionCard({
           points. Upload hides once the proof is on the order; the sent line
           replaces the old ✅ emoji with CheckCircleIcon. */}
       {unpaid && (
-        <div className="mb-3 space-y-2.5 rounded-xl border border-amber-200 bg-amber-50 p-3">
+        <div className="mb-3 space-y-2.5 rounded-xl border border-red-200 bg-red-100 p-3 dark:border-red-900 dark:bg-red-950/40">
           {row.transferProofUrl ? (
-            <p className="flex items-center gap-1.5 text-xs font-semibold text-amber-950">
+            <p className="flex items-center gap-1.5 text-xs font-semibold text-red-700 dark:text-red-300">
               <CheckCircleIcon
                 aria-hidden="true"
                 weight="fill"
@@ -223,7 +223,7 @@ function TransactionCard({
               </a>
             </p>
           ) : (
-            <p className="font-mono text-[11px] text-amber-900">
+            <p className="font-mono text-[11px] text-red-700 dark:text-red-300">
               Transfer sesuai instruksi lalu kirim buktinya — pesanan belum
               terkonfirmasi dapat dibatalkan admin.
             </p>
