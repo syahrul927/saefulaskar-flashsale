@@ -32,6 +32,24 @@ describe("login audiences stay separated", () => {
     expect(success).toMatch(/redirect\("\/auth\/login"\)/);
   });
 
+  it("keeps the two in-app customer guards on the customer door", () => {
+    // The other two server-side guards a logged-out buyer can hit, in the same
+    // idiom as the `login/success` pin above: orders/page.tsx:49 (the
+    // storefront group's page, so the path is written with its group folder)
+    // and onboarding/page.tsx:23, both `if (!session) redirect("/auth/login")`.
+    // Nothing read either file for its redirect, so sweeping every redirect
+    // onto one door — `/auth/staff` here — stayed green while it sent a buyer's
+    // bookmarked /orders to the email/password form: the inverse of the split
+    // these pins exist for. Each file holds exactly one redirect to the
+    // customer door today, so the match is that call and not a mention of it.
+    expect(
+      readFileSync("src/app/(storefront)/orders/page.tsx", "utf8"),
+    ).toMatch(/redirect\("\/auth\/login"\)/);
+    expect(readFileSync("src/app/onboarding/page.tsx", "utf8")).toMatch(
+      /redirect\("\/auth\/login"\)/,
+    );
+  });
+
   it("returns a signed-out admin to the door they can use again", () => {
     expect(readFileSync("src/components/sign-out-button.tsx", "utf8")).toMatch(
       /redirectTo = "\/"/,
@@ -51,6 +69,23 @@ describe("customer page is Google-only", () => {
     expect(login).not.toMatch(/<AuthForm\s*\/>|@\/components\/auth-form/);
     expect(login).toMatch(/<GoogleSignInButton\s*\/>/);
     expect(login).toMatch(/href="\/auth\/staff"/); // the quiet staff link
+  });
+
+  it("gives that entrance a failure the buyer can see", () => {
+    // Beyond the six adjudicated items, and deletable with them: the toast at
+    // google-sign-in-button.tsx:38 is the wave's only product-code change, and
+    // this suite has no DOM to click it with (vitest.config.ts:22 — environment
+    // "node", no jsdom, no testing-library), so a source scan is all that is
+    // available. Two halves, both needed: the `toast.error` call, and the
+    // `<Toaster>` that renders it. The door has no layout of its own — only
+    // (storefront)/ and admin/ do — so src/app/layout.tsx is the one that
+    // wraps /auth/login, and it mounts the Toaster unconditionally.
+    expect(
+      readFileSync("src/components/google-sign-in-button.tsx", "utf8"),
+    ).toMatch(/toast\.error\("Gagal masuk dengan Google\. Coba lagi\."\)/);
+    expect(readFileSync("src/app/layout.tsx", "utf8")).toMatch(
+      /<Toaster[^>]*\/>/,
+    );
   });
 
   it("keeps the lockup on a white ground", () => {

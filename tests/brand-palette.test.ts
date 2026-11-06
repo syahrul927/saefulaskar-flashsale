@@ -97,7 +97,7 @@ describe("brand decoration no longer uses the old yellow scale", () => {
     }
   });
 
-  it("grounds the cart tile so its fallback letter clears 4.5:1", () => {
+  it("grounds the cart tile on paper so its fallback letter clears 4.5:1", () => {
     // The frame ground, not the type, is what puts this glyph under the bar:
     // the drawer passes `letterClass="text-lg"` (18px font-black), below the
     // 18.66px bold large-text exemption, so it needs 4.5:1. `bg-neutral-100`
@@ -110,6 +110,12 @@ describe("brand decoration no longer uses the old yellow scale", () => {
     expect(cart.match(frame)![0]).not.toContain("bg-neutral-100");
     // Split so a `prettier-plugin-tailwindcss` reorder of that class string
     // cannot redden the suite: the pin is that both grounds are present.
+    // The `dark:bg-card` half is Task 4b's frame decision, not an AA claim: on
+    // `.dark --card` (#1B222B, globals.css:60) the same `text-brand-action`
+    // glyph measures 3.09:1, so 4.5:1 holds on the paper/white grounds this
+    // title names and not there. `.dark` is unreachable in this app —
+    // globals.css:5 defines the variant, nothing ever applies the class
+    // (`<html>` at src/app/layout.tsx:40), no provider — so the latent ships.
     expect(cart.match(frame)![0]).toContain("bg-white");
     expect(cart.match(frame)![0]).toContain("dark:bg-card");
   });
@@ -136,6 +142,35 @@ describe("caution stays out of the brand colour", () => {
       expect(src).not.toMatch(/(?<!dark:)text-brand-(primary|secondary|mark)\b/);
     }
     expect(readFileSync("src/app/_components/filter-pill.tsx", "utf8")).toMatch(/bg-red-500/);
+
+    // Positive recipe pins for the three files the loop above cannot see. An
+    // absence scan is satisfied by `bg-emerald-*`, `bg-neutral-*` or a plain
+    // grey tint just as well as by red, so reverting one of these caution
+    // surfaces to a non-red tone kept Review Focus 3 ("an unpaid order or
+    // paused session reads red") false with the suite green. Each asserts the
+    // recipe that file's own caution string carries today, token-by-token
+    // inside ONE quoted class string so a `prettier-plugin-tailwindcss`
+    // reorder cannot redden the suite — the same de-frail idiom as
+    // tests/transactional-labels.test.ts:32.
+    //   payment-panel.tsx:288        the "selesaikan pembayaran" banner
+    //   orders-list.tsx:150          the unpaid row's own tint + ring
+    //   cancel-order-button.tsx:56   the shared `unpaid` WARN tone
+    const panel = readFileSync("src/app/_components/payment-panel.tsx", "utf8");
+    const list = readFileSync("src/app/_components/orders-list.tsx", "utf8");
+    const cancelBtn = readFileSync(
+      "src/app/_components/cancel-order-button.tsx",
+      "utf8",
+    );
+
+    expect(panel).toMatch(
+      /"(?=[^"]*\bborder-red-200\b)(?=[^"]*\bbg-red-100\b)[^"]*"/,
+    );
+    expect(list).toMatch(
+      /"(?=[^"]*\bborder-red-300\b)(?=[^"]*\bbg-red-50\/20\b)(?=[^"]*\bring-red-200\b)[^"]*"/,
+    );
+    expect(cancelBtn).toMatch(
+      /"(?=[^"]*\bborder-red-200\b)(?=[^"]*\bbg-red-100\b)(?=[^"]*\btext-red-700\b)[^"]*"/,
+    );
   });
 
   it("paints the active storefront tab icon the action orange, not the light brand", () => {

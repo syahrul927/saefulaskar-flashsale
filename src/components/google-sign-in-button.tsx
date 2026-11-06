@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { toast } from "sonner";
 
 import { authClient } from "@/server/better-auth/client";
 import { Button } from "@/components/ui/button";
@@ -28,8 +29,13 @@ function GoogleSignInButton({
         callbackURL,
       });
       if (error?.message) {
-        // better-auth surfaces an error object instead of redirecting.
+        // better-auth surfaces an error object instead of redirecting. The
+        // toast is the buyer's feedback — this is the only way in through the
+        // customer door, so a silent failure reads as a dead button. The
+        // console keeps the raw provider message, which is English and
+        // operator-facing; the storefront idiom is `Gagal … Coba lagi.`
         console.error("google sign-in", error.message);
+        toast.error("Gagal masuk dengan Google. Coba lagi.");
       }
     } finally {
       // The browser leaves the page on success; only reset on failure path.

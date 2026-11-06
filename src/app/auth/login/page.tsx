@@ -99,8 +99,12 @@ export default async function LoginPage() {
           <h1 className="mt-8 font-heading text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
             Masuk untuk belanja
           </h1>
-          {/* `neutral-600` rather than the muted token: secondary copy at 14px
-              needs 4.5:1, and muted grey on paper is 3.2:1. */}
+          {/* Contrast, measured on this branch's paper (`--background`
+              #FFFDFC): `--muted-foreground` #6F6B66 = 5.21:1, `neutral-600`
+              #525252 = 7.71:1 — both clear the 4.5:1 this 14px sub-line needs,
+              so `text-muted-foreground` would pass here as well. `neutral-600`
+              is the look this page ships with, not an accessibility
+              requirement. */}
           <p className="mt-1.5 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
             Cukup akun Google kamu — tidak perlu password baru atau form
             pendaftaran.
