@@ -5,9 +5,15 @@ const staff = readFileSync("src/app/auth/staff/page.tsx", "utf8");
 
 describe("login audiences stay separated", () => {
   it("puts the Jubelio form on the staff page, on a white ground", () => {
-    expect(staff).toMatch(/AuthForm/);
-    expect(staff).toMatch(/logo-lockup\.png/);
-    expect(staff).toMatch(/bg-background/); // paper: the lockup export is opaque white
+    // Each pin is tightened to the structure it claims to check: a bare
+    // `import { AuthForm }` with the JSX removed, a doc comment naming the
+    // lockup with the `<img>` deleted, and `bg-background` moved onto an inner
+    // div would all have kept the old loose matches green.
+    expect(staff).toMatch(/<AuthForm\s*\/>/);
+    expect(staff).toMatch(/src="\/brand\/logo-lockup\.png"/);
+    const staffMain = /<main[^>]*>/.exec(staff)?.[0] ?? "";
+    // paper: the lockup export is opaque white
+    expect(staffMain).toContain("bg-background");
     expect(staff).toMatch(/\/auth\/login/);
   });
 
@@ -31,5 +37,20 @@ describe("login audiences stay separated", () => {
       /redirectTo = "\/"/,
     );
     expect(readFileSync("src/app/admin/layout.tsx", "utf8")).toMatch(/redirectTo="\/auth\/staff"/);
+  });
+});
+
+const login = readFileSync("src/app/auth/login/page.tsx", "utf8");
+
+describe("customer page is Google-only", () => {
+  it("keeps the Jubelio form off the customer page", () => {
+    expect(login).not.toMatch(/AuthForm/);
+    expect(login).toMatch(/GoogleSignInButton/);
+    expect(login).toMatch(/\/auth\/staff/); // the quiet staff link
+  });
+
+  it("keeps the lockup on a white ground", () => {
+    // logo-lockup.png is an opaque white export — a dark panel shows a white box
+    expect(login).toMatch(/bg-background|bg-white|bg-card/);
   });
 });

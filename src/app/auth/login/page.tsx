@@ -1,9 +1,11 @@
-import { AuthForm } from "@/components/auth-form";
+import Link from "next/link";
+
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
 import { CountdownTimer } from "@/app/_components/countdown-timer";
 import { cn } from "cn";
 import { db } from "@/server/db";
 import { getPrimaryActiveSession } from "@/server/session-query";
+import { env } from "@/env";
 
 export const metadata = {
   title: "Masuk — Flash Sale Grosir",
@@ -35,26 +37,46 @@ async function getLiveSale(): Promise<LiveSale | null> {
 }
 
 /**
- * Login split, built on the two colours the new logo is made of: slate ink
- * (#1F2937, its wordmark) and mark orange (#EA580C) on paper white.
+ * The customer door — Google is the whole page. A buyer arriving from a
+ * WhatsApp link has one thing to do here: sign in with the account they
+ * already have. Shop staff have their own door at /auth/staff, linked quietly
+ * at the foot of the column, so the page never shows a customer a form or a
+ * word that isn't theirs.
  *
- * - Form sits on the LEFT on paper white. `logo-lockup.png` is an opaque white
- *   export, so a light ground is the only place it can sit without showing a
- *   box — which is also why the wordmark leads the page in reading order.
+ * Built on the two colours the new logo is made of: slate ink (#1F2937, its
+ * wordmark) and mark orange (#EA580C) on paper white.
+ *
+ * - Sign-in sits on the LEFT on paper white. `logo-lockup.png` is an opaque
+ *   white export, so a light ground is the only place it can sit without showing
+ *   a box — which is also why the wordmark leads the page in reading order.
  * - The right plate is brand-ink, sticky, and carries the one live thing: the
- *   same boxed countdown the storefront banner shows (`tone="ink"`), so the
- *   owner sees the clock the customers are racing against.
+ *   same boxed countdown the storefront banner shows (`tone="ink"`), so a buyer
+ *   sees the clock they would be racing against before they even sign in.
  * - Below `lg` the task comes first and the plate becomes a footer strip, so the
- *   dark panel never pushes the form down the screen. The split waits for `lg`
- *   because a 42% column at tablet width can't hold four countdown cells
+ *   dark panel never pushes the sign-in down the screen. The split waits for
+ *   `lg` because a 42% column at tablet width can't hold four countdown cells
  *   (Hari/Jam/Menit/Detik) without pushing the page sideways.
  */
 export default async function LoginPage() {
   const live = await getLiveSale();
 
+  // Same two keys `server/better-auth/config.ts` gates the Google provider on:
+  // with either missing the provider isn't registered, so the button would fail
+  // at runtime. Say so in buyer language instead of offering a dead button.
+  const googleConfigured = !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
+  if (!googleConfigured) {
+    const missing = [
+      env.GOOGLE_CLIENT_ID ? null : "GOOGLE_CLIENT_ID",
+      env.GOOGLE_CLIENT_SECRET ? null : "GOOGLE_CLIENT_SECRET",
+    ].filter(Boolean);
+    console.warn(
+      `Google sign-in unavailable on /auth/login — missing ${missing.join(", ")}`,
+    );
+  }
+
   return (
     <main className="flex min-h-svh flex-col bg-background lg:flex-row">
-      {/* ── Form panel (paper) ──────────────────────────────────────── */}
+      {/* ── Sign-in panel (paper) ───────────────────────────────────── */}
       <section className="flex flex-1 flex-col px-6 py-10 md:justify-center md:px-12 xl:px-16">
         <div className="w-full max-w-sm motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-4 motion-safe:duration-500">
           {/* Brand lockup — the supplied export carries mark + name together.
@@ -70,28 +92,34 @@ export default async function LoginPage() {
           </header>
 
           <h1 className="mt-8 font-heading text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
-            Masuk ke dasbor
+            Masuk untuk belanja
           </h1>
           {/* `neutral-600` rather than the muted token: secondary copy at 14px
               needs 4.5:1, and muted grey on paper is 3.2:1. */}
           <p className="mt-1.5 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
-            Pakai email dan password akun Jubelio kamu.
+            Cukup akun Google kamu — tidak perlu password baru atau form
+            pendaftaran.
           </p>
 
           <div className="mt-7">
-            <AuthForm />
+            {googleConfigured ? (
+              <GoogleSignInButton />
+            ) : (
+              <p className="text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
+                Pendaftaran lewat Google belum dibuka. Hubungi toko untuk akses
+                belanja.
+              </p>
+            )}
           </div>
 
+          {/* Wayfinding for shop staff, not a second call to action. */}
           <p className="mt-8 border-t border-border pt-4 text-sm text-neutral-600 dark:text-neutral-400">
-            Pelanggan? Masuk dengan Google untuk mulai belanja.
-          </p>
-
-          <div className="mt-4">
-            <GoogleSignInButton />
-          </div>
-
-          <p className="mt-8 border-t border-border pt-4 text-sm text-neutral-600 dark:text-neutral-400">
-            Butuh akses? Hubungi admin.
+            <Link
+              href="/auth/staff"
+              className="underline-offset-4 hover:text-foreground hover:underline"
+            >
+              Masuk sebagai staf
+            </Link>
           </p>
         </div>
       </section>
@@ -141,10 +169,11 @@ export default async function LoginPage() {
         ) : (
           <div className="border-l-2 border-white/20 pl-4 sm:pl-5">
             <h2 className="font-heading text-lg font-semibold tracking-tight">
-              Tidak ada sale yang berjalan
+              Belum ada sale yang berjalan
             </h2>
             <p className="mt-1.5 max-w-[16rem] text-sm leading-relaxed text-white/60">
-              Buat dan aktifkan sesi baru begitu kamu masuk ke dasbor.
+              Buka lagi halaman ini nanti, atau tanya toko lewat WhatsApp kapan
+              belanja dibuka.
             </p>
           </div>
         )}

@@ -28,7 +28,7 @@ export default function StaffLoginPage() {
           <img
             src="/brand/logo-lockup.png"
             alt="Flash Sale Grosir"
-            className="w-40"
+            className="w-40 md:w-44"
           />
         </header>
 
