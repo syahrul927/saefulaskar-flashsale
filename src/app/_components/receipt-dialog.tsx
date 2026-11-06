@@ -167,7 +167,7 @@ function ReceiptDialog({
               </span>
             </div>
             <div className="flex items-baseline justify-between gap-3">
-              <span className="shrink-0 text-neutral-500">No. Telepon</span>
+              <span className="shrink-0 text-neutral-500">No. WhatsApp</span>
               <span className="font-semibold text-neutral-800 dark:text-neutral-100">
                 {recipient.phone}
               </span>

@@ -98,7 +98,7 @@ function CheckoutDialog({
       nextErrors.name = `Nama penerima minimal ${LIMITS.name.min} karakter.`;
     }
     if (trimmed.phone.length < LIMITS.phone.min) {
-      nextErrors.phone = `No. telepon minimal ${LIMITS.phone.min} karakter.`;
+      nextErrors.phone = `Nomor WhatsApp minimal ${LIMITS.phone.min} karakter.`;
     }
     if (trimmed.address.length < LIMITS.address.min) {
       nextErrors.address = `Alamat pengiriman minimal ${LIMITS.address.min} karakter.`;
@@ -215,7 +215,7 @@ function CheckoutDialog({
               htmlFor="recipient-phone"
               className="font-mono text-[10px] font-bold uppercase tracking-wider text-neutral-500"
             >
-              No. Telepon
+              No. WhatsApp
             </FieldLabel>
             <Input
               id="recipient-phone"

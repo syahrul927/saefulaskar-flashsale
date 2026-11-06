@@ -94,7 +94,7 @@ function OnboardingForm() {
       </Field>
 
       <Field>
-        <FieldLabel htmlFor="phone">No. Telf PIC</FieldLabel>
+        <FieldLabel htmlFor="phone">No. WhatsApp</FieldLabel>
         <Input
           id="phone"
           type="tel"
@@ -118,6 +118,11 @@ function OnboardingForm() {
           required
         />
       </Field>
+
+      <p className="text-xs text-muted-foreground leading-relaxed">
+        Data ini terisi otomatis di tiap checkout, dan tetap bisa Anda ubah untuk
+        pesanan tertentu.
+      </p>
 
       <Button type="submit" size="lg" className="h-11 w-full" disabled={isLoading}>
         {isLoading ? <Spinner /> : null}

@@ -35,8 +35,8 @@ export default async function OnboardingPage() {
           Lengkapi Data Anda
         </h1>
         <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground">
-          Kami butuh beberapa data untuk mendaftarkan toko Anda sebagai
-          pelanggan sebelum bisa mulai belanja.
+          Isian ini jadi data default untuk setiap pesanan — nama penerima, alamat
+          kirim, dan nomor WhatsApp — dan tetap bisa Anda ubah saat checkout.
         </p>
         <div className="mt-8">
           <OnboardingForm />

@@ -108,7 +108,10 @@ describe("brand decoration no longer uses the old yellow scale", () => {
       /overflow-hidden rounded-lg border border-neutral-200\/80[^"]*"/;
     expect(cart).toMatch(frame);
     expect(cart.match(frame)![0]).not.toContain("bg-neutral-100");
-    expect(cart.match(frame)![0]).toContain("bg-white dark:bg-card");
+    // Split so a `prettier-plugin-tailwindcss` reorder of that class string
+    // cannot redden the suite: the pin is that both grounds are present.
+    expect(cart.match(frame)![0]).toContain("bg-white");
+    expect(cart.match(frame)![0]).toContain("dark:bg-card");
   });
 });
 
