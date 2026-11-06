@@ -1,109 +1,88 @@
 import { AuthForm } from "@/components/auth-form";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
+import { CountdownTimer } from "@/app/_components/countdown-timer";
+import { cn } from "cn";
+import { db } from "@/server/db";
+import { getPrimaryActiveSession } from "@/server/session-query";
 
 export const metadata = {
   title: "Masuk — Flash Sale Grosir",
 };
 
+// The plate reads the live session, so the page can't be prerendered.
+export const dynamic = "force-dynamic";
+
+type LiveSale = { name: string; endTime: string };
+
 /**
- * Split brand layout:
- * - md+: left 45% yellow brand panel (brand lockup, price-tag outline, "-70%"
- *   starburst — flash-sale vernacular), right white panel with the form
- *   sitting directly on the paper, no floating card.
- * - mobile: yellow band on top, white body below, form full-width.
+ * The session customers are looking at right now — the same earliest ACTIVE row
+ * the storefront serves. Read defensively: this page is the way into the app,
+ * so a cold DB or a migration mid-flight must never turn into a login that
+ * won't render. The plate then falls back to its "nothing live" copy.
  */
-export default function LoginPage() {
+async function getLiveSale(): Promise<LiveSale | null> {
+  try {
+    const session = await getPrimaryActiveSession(db);
+    if (!session?.endTime) return null;
+
+    return {
+      name: session.name || session.sessionName,
+      endTime: session.endTime.toISOString(),
+    };
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Login split, built on the two colours the new logo is made of: slate ink
+ * (#1F2937, its wordmark) and mark orange (#EA580C) on paper white.
+ *
+ * - Form sits on the LEFT on paper white. `logo-lockup.png` is an opaque white
+ *   export, so a light ground is the only place it can sit without showing a
+ *   box — which is also why the wordmark leads the page in reading order.
+ * - The right plate is brand-ink, sticky, and carries the one live thing: the
+ *   same boxed countdown the storefront banner shows (`tone="ink"`), so the
+ *   owner sees the clock the customers are racing against.
+ * - Below `lg` the task comes first and the plate becomes a footer strip, so the
+ *   dark panel never pushes the form down the screen. The split waits for `lg`
+ *   because a 42% column at tablet width can't hold four countdown cells
+ *   (Hari/Jam/Menit/Detik) without pushing the page sideways.
+ */
+export default async function LoginPage() {
+  const live = await getLiveSale();
+
   return (
-    <main className="flex min-h-svh flex-col bg-background md:flex-row">
-      {/* ── Brand panel ─────────────────────────────────────────────── */}
-      <section className="relative isolate overflow-hidden bg-primary px-6 pb-14 pt-8 text-primary-foreground md:sticky md:top-0 md:flex md:h-svh md:w-[45%] md:flex-col md:justify-between md:px-12 md:py-12">
-        {/* Oversized price-tag outline, ink on yellow — the one decorative
-            element. Bleeds off the top-right corner. */}
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="1"
-          strokeLinecap="round"
-          strokeLinejoin="round"
-          className="pointer-events-none absolute -right-16 -top-16 z-0 h-64 w-64 rotate-12 opacity-25 md:-right-20 md:-top-20 md:h-[26rem] md:w-[26rem] md:opacity-30"
-        >
-          <path d="M12.586 2.586A2 2 0 0 0 11.172 2H4a2 2 0 0 0-2 2v7.172a2 2 0 0 0 .586 1.414l8.704 8.704a2.426 2.426 0 0 0 2.828 0l6.586-6.586a2.426 2.426 0 0 0 0-2.828z" />
-          <circle cx="7.5" cy="7.5" r=".5" fill="currentColor" />
-        </svg>
-
-        {/* Brand lockup — the supplied export (image, not text) carries the
-            name and the mark together, so this slot renders it verbatim.
-            Plain `<img>`: `images.unoptimized` is on, `next/image` adds
-            nothing. */}
-        <header className="relative z-10">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src="/brand/logo-lockup.png"
-            alt="Flash Sale Grosir"
-            className="w-40 rounded-xl md:w-52"
-          />
-        </header>
-
-        {/* "-70%" starburst sticker — flash-sale price flash. SVG only,
-            brand ink on brand yellow. */}
-        <div className="relative z-10 mt-10 md:mt-0">
-          <svg
-            aria-hidden="true"
-            viewBox="0 0 120 120"
-            className="h-28 w-28 text-primary-foreground/90 md:h-40 md:w-40"
-          >
-            <path
-              fill="currentColor"
-              d="M60 0l9.4 9.6L82.2 5l5.7 12.4L101.6 14l1.5 13.5L117 32l-2.6 13.3 12.4 6-7.4 11.5 8.6 10.4-11.6 6.9 4 13-13.4 2.2-.8 13.5-13.5-1.4-6.5 12-12.4-5.2-9.9 9.3-9.9-9.3-12.4 5.2-6.5-12-13.5 1.4-.8-13.5-13.4-2.2 4-13L0 73.2l8.6-10.4L1.2 51.3l12.4-6L11 32l13.9-4.5L26.4 14l13.7 3.4L45.8 5l12.8 4.6z"
-            />
-            <text
-              x="60"
-              y="56"
-              textAnchor="middle"
-              fill="oklch(0.852 0.199 91.936)"
-              className="font-heading"
-              fontSize="30"
-              fontWeight="700"
-            >
-              -70%
-            </text>
-            <text
-              x="60"
-              y="76"
-              textAnchor="middle"
-              fill="oklch(0.852 0.199 91.936)"
-              fontSize="10"
-              letterSpacing="2"
-            >
-              FLASH SALE
-            </text>
-          </svg>
-        </div>
-
-        {/* Tagline anchors the panel bottom on desktop */}
-        <p className="relative z-10 hidden max-w-xs text-base leading-relaxed opacity-80 md:block">
-          Kelola flash sale kamu dengan akun Jubelio.
-        </p>
-      </section>
-
-      {/* ── Form panel ──────────────────────────────────────────────── */}
-      <section className="flex flex-1 flex-col px-6 py-10 md:items-center md:justify-center md:px-12">
+    <main className="flex min-h-svh flex-col bg-background lg:flex-row">
+      {/* ── Form panel (paper) ──────────────────────────────────────── */}
+      <section className="flex flex-1 flex-col px-6 py-10 md:justify-center md:px-12 xl:px-16">
         <div className="w-full max-w-sm motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-4 motion-safe:duration-500">
-          <h1 className="font-heading text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
+          {/* Brand lockup — the supplied export carries mark + name together.
+              Plain `<img>`: `images.unoptimized` is on, `next/image` adds
+              nothing. */}
+          <header>
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/brand/logo-lockup.png"
+              alt="Flash Sale Grosir"
+              className="w-40 md:w-44"
+            />
+          </header>
+
+          <h1 className="mt-8 font-heading text-2xl font-semibold tracking-tight text-foreground md:text-3xl">
             Masuk ke dasbor
           </h1>
-          {/* On mobile the yellow panel is short, so the tagline lives here */}
-          <p className="mt-1.5 text-sm leading-relaxed text-muted-foreground md:hidden">
-            Kelola flash sale kamu dengan akun Jubelio.
+          {/* `neutral-600` rather than the muted token: secondary copy at 14px
+              needs 4.5:1, and muted grey on paper is 3.2:1. */}
+          <p className="mt-1.5 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">
+            Pakai email dan password akun Jubelio kamu.
           </p>
 
-          <div className="mt-8">
+          <div className="mt-7">
             <AuthForm />
           </div>
 
-          <p className="mt-8 border-t border-border pt-4 text-sm text-muted-foreground">
+          <p className="mt-8 border-t border-border pt-4 text-sm text-neutral-600 dark:text-neutral-400">
             Pelanggan? Masuk dengan Google untuk mulai belanja.
           </p>
 
@@ -111,11 +90,70 @@ export default function LoginPage() {
             <GoogleSignInButton />
           </div>
 
-          <p className="mt-8 border-t border-border pt-4 text-sm text-muted-foreground">
+          <p className="mt-8 border-t border-border pt-4 text-sm text-neutral-600 dark:text-neutral-400">
             Butuh akses? Hubungi admin.
           </p>
         </div>
       </section>
+
+      {/* ── Live sale plate (brand ink) ─────────────────────────────── */}
+      <aside
+        aria-label="Flash sale yang sedang berjalan"
+        className="flex flex-col gap-8 bg-brand-ink px-5 py-10 text-white sm:px-6 md:px-12 lg:sticky lg:top-0 lg:h-svh lg:w-[42%] lg:justify-between lg:gap-0 xl:px-14"
+      >
+        {/* Status — the one animated thing on the page, and it earns it: it
+            marks a live sale, not decoration. */}
+        <div className="flex items-center gap-2.5">
+          <span className="relative flex size-2.5 shrink-0" aria-hidden="true">
+            {live ? (
+              <span className="absolute inset-0 rounded-full bg-brand-mark/70 motion-safe:animate-ping motion-safe:[animation-duration:2.4s]" />
+            ) : null}
+            <span
+              className={cn(
+                "relative size-2.5 rounded-full",
+                live ? "bg-brand-mark" : "bg-white/30",
+              )}
+            />
+          </span>
+          <p className="text-sm font-semibold text-white/85">
+            {live ? "Sale sedang aktif" : "Belum ada sale aktif"}
+          </p>
+        </div>
+
+        {/* The countdown, bracketed by a rule in the logo's orange — the accent
+            has one job here: point at the thing that is running out. */}
+        {live ? (
+          <div className="border-l-2 border-brand-mark pl-4 sm:pl-5">
+            <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-white/55">
+              Sesi berakhir dalam
+            </p>
+            <CountdownTimer
+              endTime={live.endTime}
+              variant="boxed"
+              tone="ink"
+              size="lg"
+              className="mt-3"
+            />
+            <p className="mt-3.5 max-w-[15rem] truncate text-sm font-medium text-white/70">
+              {live.name}
+            </p>
+          </div>
+        ) : (
+          <div className="border-l-2 border-white/20 pl-4 sm:pl-5">
+            <h2 className="font-heading text-lg font-semibold tracking-tight">
+              Tidak ada sale yang berjalan
+            </h2>
+            <p className="mt-1.5 max-w-[16rem] text-sm leading-relaxed text-white/60">
+              Buat dan aktifkan sesi baru begitu kamu masuk ke dasbor.
+            </p>
+          </div>
+        )}
+
+        <p className="max-w-xs text-[15px] leading-relaxed text-white/70">
+          Harga grosir dengan kuota terbatas. Selagi hitungannya masih
+          berjalan.
+        </p>
+      </aside>
     </main>
   );
 }

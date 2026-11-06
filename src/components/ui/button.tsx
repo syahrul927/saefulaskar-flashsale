@@ -14,6 +14,11 @@ const buttonVariants = cva(
         ink: "bg-neutral-900 text-white hover:bg-neutral-950 dark:bg-neutral-50 dark:text-neutral-900 dark:hover:bg-white",
         brand:
           "bg-brand-primary text-neutral-950 hover:bg-brand-primary-hover border-brand-primary/40",
+        // Logo-orange sibling of `brand` for surfaces that carry the brand mark
+        // (login, empty states) — yellow next to the orange logo reads as two
+        // competing accents. `brand-action` is the mark's hue darkened to hold
+        // white text at AA; the raw #EA580C is 3.56:1.
+        mark: "bg-brand-action text-white hover:bg-brand-action-hover",
         outline:
           "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:bg-transparent dark:hover:bg-input/30",
         secondary:

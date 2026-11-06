@@ -117,7 +117,13 @@ function AuthForm() {
         </p>
       ) : null}
 
-      <Button type="submit" size="lg" className="h-11 w-full" disabled={isLoading}>
+      <Button
+        type="submit"
+        variant="mark"
+        size="lg"
+        className="h-11 w-full"
+        disabled={isLoading}
+      >
         {isLoading ? <Spinner /> : "Masuk"}
       </Button>
     </form>

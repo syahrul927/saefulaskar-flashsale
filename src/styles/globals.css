@@ -89,6 +89,18 @@
   --color-brand-primary: #FFCC05;
   --color-brand-primary-hover: #EBB800;
   --color-brand-secondary: #FF7E33;
+  /* The two colours the supplied logo is actually made of — mark orange and
+     wordmark slate (`public/brand/logo-*.png` sample to #EA580C / #1F2937).
+     Brand-forward surfaces (login) read these instead of the legacy saefulaskar
+     yellow, which sits a few degrees off the new orange and fights it. */
+  --color-brand-mark: #EA580C;
+  --color-brand-ink: #1F2937;
+  /* Same hue as the mark, darkened enough to hold white text: #EA580C itself
+     is only 3.56:1 against white, which fails AA for button-size labels. Use
+     `brand-action` wherever the brand orange has text sitting on it, and the
+     plain `brand-mark` where it is graphics, rules or large digits. */
+  --color-brand-action: #C2410C;
+  --color-brand-action-hover: #B33A0A;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
