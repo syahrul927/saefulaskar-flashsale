@@ -291,23 +291,31 @@ describe("status tones after the brand sweep", () => {
 
 - [ ] **Step 1: Write the failing test** — append to `tests/brand-palette.test.ts`
 
+`product-picker.tsx` is shared with Task 6 (which owns 4 of its 9 amber sites), so this task cannot assert that file is amber-free — it asserts only the decoration forms it owns. Task 6 closes the file out completely.
+
 ```ts
 describe("brand decoration no longer uses the old yellow scale", () => {
-  const decoration = [
+  // Files this task owns outright — every amber site in them is decoration.
+  const owned = [
     "src/app/_components/countdown-timer.tsx",
     "src/app/_components/product-thumb.tsx",
-    "src/app/_components/product-picker.tsx",
     "src/app/_components/cart-drawer.tsx",
   ];
 
-  it("paints placeholder tiles, the paper countdown and the MOQ line in brand orange", () => {
-    for (const file of decoration) {
-      const src = readFileSync(file, "utf8");
-      expect(src).not.toMatch(/amber-/);
+  it("paints the paper countdown, placeholder tiles and the MOQ line in brand orange", () => {
+    for (const file of owned) {
+      expect(readFileSync(file, "utf8")).not.toMatch(/amber-/);
     }
     expect(readFileSync("src/app/_components/countdown-timer.tsx", "utf8")).toMatch(
       /accent:\s*"border-brand-mark\/30 bg-brand-primary\/10 text-brand-action"/,
     );
+  });
+
+  it("re-points the picker's placeholder gradient and special-cell tint, leaving Task 6's sites", () => {
+    const picker = readFileSync("src/app/_components/product-picker.tsx", "utf8");
+    expect(picker).not.toMatch(/from-amber-50/); // :205, :240 thumb gradients
+    expect(picker).not.toMatch(/border-amber-200 bg-amber-50 px-2/); // :156 cellInput
+    expect(picker).not.toMatch(/text-amber-700/); // :207, :242 initial letters
   });
 });
 ```
@@ -485,20 +493,15 @@ Expected: both PASS, 0 errors.
 
 - [ ] **Step 1: Write the failing test** — `tests/login-audience-split.test.ts`
 
+This file covers the **staff side only**. The customer-page assertions (`/auth/login` must lose `AuthForm`) are appended here by Task 9, which is the task that removes it — a task's test cannot go green on work a later task has not done yet.
+
 ```ts
 import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-const login = readFileSync("src/app/auth/login/page.tsx", "utf8");
 const staff = readFileSync("src/app/auth/staff/page.tsx", "utf8");
 
 describe("login audiences stay separated", () => {
-  it("keeps the Jubelio form off the customer page", () => {
-    expect(login).not.toMatch(/AuthForm/);
-    expect(login).toMatch(/GoogleSignInButton/);
-    expect(login).toMatch(/\/auth\/staff/);
-  });
-
   it("puts the Jubelio form on the staff page, on a white ground", () => {
     expect(staff).toMatch(/AuthForm/);
     expect(staff).toMatch(/logo-lockup\.png/);
@@ -549,7 +552,24 @@ describe("login audiences stay separated", () => {
 - Consumes: Task 8's `/auth/staff`; Task 1's `bg-brand-ink` / `brand-mark` plate tokens (already in use).
 - Produces: nothing later tasks depend on.
 
-- [ ] **Step 1: Run the guard that already covers this page** — Task 9's failing test is the one Task 8 wrote; the working tree's `/auth/login` still imports `AuthForm`, so it fails here and only goes green at Step 6.
+- [ ] **Step 1: Write the failing test** — append to `tests/login-audience-split.test.ts` (the staff-side block already there is Task 8's and should still pass):
+
+```ts
+const login = readFileSync("src/app/auth/login/page.tsx", "utf8");
+
+describe("customer page is Google-only", () => {
+  it("keeps the Jubelio form off the customer page", () => {
+    expect(login).not.toMatch(/AuthForm/);
+    expect(login).toMatch(/GoogleSignInButton/);
+    expect(login).toMatch(/\/auth\/staff/); // the quiet staff link
+  });
+
+  it("keeps the lockup on a white ground", () => {
+    // logo-lockup.png is an opaque white export — a dark panel shows a white box
+    expect(login).toMatch(/bg-background|bg-white|bg-card/);
+  });
+});
+```
 
 Run: `COREPACK_ENABLE_STRICT=0 yarn vitest run tests/login-audience-split.test.ts`
 Expected: FAIL — `login` still matches `/AuthForm/`.
