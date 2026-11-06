@@ -331,8 +331,8 @@ describe("brand decoration no longer uses the old yellow scale", () => {
 | site | becomes |
 |---|---|
 | `countdown-timer.tsx:48` `paper.accent` | `border-brand-mark/30 bg-brand-primary/10 text-brand-action` (mirrors the `ink` tone at `:54`, so one device speaks one colour) |
-| `product-thumb.tsx:35` tile | `bg-gradient-to-br from-brand-primary/10 to-brand-secondary/25` + `text-brand-action` |
-| `product-picker.tsx:205,240` thumbs | same gradient pair, letters `text-brand-action` |
+| `product-thumb.tsx:35` tile | `bg-gradient-to-br from-brand-primary/10 to-brand-secondary/15` + `text-brand-action` — **`/15`, not `/25`**: at `/25` the composited ground under the centred letter is ≈4.35:1 and `#C2410C` needs 4.5:1 at these sizes (Task 4 review, measured at the gradient midpoint) |
+| `product-picker.tsx:205,240` thumbs | same gradient pair (`/10` → `/15`), letters `text-brand-action` |
 | `product-picker.tsx:156` `cellInputAmberClass` | `border-brand-primary/30 bg-brand-primary/10 … text-brand-action`, `focus:border-brand-mark` kept |
 | `cart-drawer.tsx:183` "Min. pesan" | `text-brand-action` (9px text — the mark colours cannot carry it) |
 | `storefront-header.tsx:71` active-tab icon | `text-brand-action` — a state indicator needs 3:1 for non-text, `#FB923C` on paper is ~2.3:1 |
@@ -351,7 +351,8 @@ describe("brand decoration no longer uses the old yellow scale", () => {
 - Modify: `src/app/_components/orders-list.tsx:150,207,209,226`
 - Modify: `src/app/_components/cancel-order-button.tsx:54`
 - Modify: `src/app/_components/session-list-filter.tsx:12` (doc comment only — found by Task 3: it still says "amber is the orders unpaid signal", which is false after Task 3 moved `UNPAID` to red. One sentence, no code.)
-- Modify: `tests/brand-palette.test.ts` (append)
+- Modify: `src/app/_components/storefront-header.tsx:106-107` (doc comment only — "brand-yellow rail button" while the code reads `variant="brand"` on `bg-brand-secondary`; found by Task 4)
+- Modify: `tests/brand-palette.test.ts` (append, **and one amendment to the existing Task 2 block**): the `describe("brand orange as text")` scan becomes `/(?<!dark:)text-brand-(primary|secondary|mark)\b/` (plan amendment `e7579db`), and this task's appended block also covers `storefront-header.tsx` — asserting it now carries `text-brand-action` and no light `text-brand-secondary`, because Task 4's icon swap has no other guard (that file never contained `amber-`, so an absence-of-amber assertion there is vacuous).
 
 **Interfaces:**
 - Consumes: Task 3's tone map (`UNPAID`/`PAUSED` already render red through `destructive`).
@@ -392,7 +393,8 @@ describe("caution stays out of the brand colour", () => {
 ## Task 6: Amber sweep — pending becomes neutral, and the guard closes
 
 **Files:**
-- Modify: `src/app/_components/product-picker.tsx:475,503,1554,1680`
+- Modify: `src/app/_components/product-picker.tsx:477,505,1556,1682` (line numbers re-measured after Task 4's two comment lines shifted the file by +2; locate by string regardless)
+- Modify: `src/app/_components/product-picker.tsx:469` — the `/** Amber "belum disimpan" marker … */` doc comment must be restated once the marker is neutral (a stale colour comment counts as a defect here)
 - Modify: `tests/brand-palette.test.ts` (append)
 
 **Interfaces:**
@@ -424,7 +426,7 @@ describe("no old-brand yellow survives in components", () => {
 
 - [ ] **Step 2: Run it** → FAIL, listing `product-picker.tsx`.
 
-- [ ] **Step 3: Swap the four pending/dirty sites to neutral ink**, because "not saved yet" is neither danger nor brand: `DirtyChip`'s not-failed branch (`:475`) and the footer count chip (`:1680`) → `border-border bg-muted text-muted-foreground` (5.29:1); the dirty row tint (`:503`) → `bg-muted/60`; the `+ Tambah` affordance (`:1554`) → `border-border bg-secondary text-secondary-foreground hover:bg-muted`.
+- [ ] **Step 3: Swap the four pending/dirty sites to neutral ink**, because "not saved yet" is neither danger nor brand: `DirtyChip`'s not-failed branch (`:477`) and the footer count chip (`:1682`) → `border-border bg-muted text-muted-foreground` (5.29:1); the dirty row tint (`:505`) → `bg-muted/60`; the `+ Tambah` affordance (`:1556`) → `border-border bg-secondary text-secondary-foreground hover:bg-muted`. Then restate the `:469` comment.
 
 - [ ] **Step 4: Run the whole file and the suite.**
 
