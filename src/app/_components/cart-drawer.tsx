@@ -162,10 +162,10 @@ function CartDrawer({
                     >
                       <div className="flex items-start justify-between gap-2">
                         <div className="flex min-w-0 items-center gap-2.5">
-                          {/* Thumb frame — same photo-over-tile treatment as
-                              the product card; old carts without an image
-                              fall back to the letter tile. */}
-                          <div className="relative flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-neutral-200/80 bg-neutral-100">
+                          {/* Thumb frame — photo-over-tile like the product card,
+                              but on the row's own `bg-white dark:bg-card`, not the
+                              card's grey: this 18px fallback glyph needs 4.5:1. */}
+                          <div className="relative flex size-11 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-neutral-200/80 bg-white dark:bg-card">
                             <ProductThumb
                               src={row.image ?? null}
                               alt={row.name}

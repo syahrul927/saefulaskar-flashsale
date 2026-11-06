@@ -96,6 +96,20 @@ describe("brand decoration no longer uses the old yellow scale", () => {
       );
     }
   });
+
+  it("grounds the cart tile so its fallback letter clears 4.5:1", () => {
+    // The frame ground, not the type, is what puts this glyph under the bar:
+    // the drawer passes `letterClass="text-lg"` (18px font-black), below the
+    // 18.66px bold large-text exemption, so it needs 4.5:1. `bg-neutral-100`
+    // (#F5F5F5) measures 4.22–4.25 for `text-brand-action` through the `/15`
+    // gradient; on the row's own white the same glyph measures 4.58–4.60.
+    const cart = readFileSync("src/app/_components/cart-drawer.tsx", "utf8");
+    const frame =
+      /overflow-hidden rounded-lg border border-neutral-200\/80[^"]*"/;
+    expect(cart).toMatch(frame);
+    expect(cart.match(frame)![0]).not.toContain("bg-neutral-100");
+    expect(cart.match(frame)![0]).toContain("bg-white dark:bg-card");
+  });
 });
 
 describe("caution stays out of the brand colour", () => {
@@ -129,17 +143,23 @@ describe("caution stays out of the brand colour", () => {
 });
 
 describe("no old-brand yellow survives in components", () => {
-  it("leaves zero amber-* classes under src/", () => {
+  // Regression guard, not a TDD driver: the sweep was already clean when this
+  // widened — `yellow-` matches nothing under src, and no stylesheet mentions
+  // amber — so this pins the anti-goal (the old brand's yellow coming back in
+  // any flavour, in any source) rather than a live defect. The trailing dash is
+  // what keeps the two sanctioned history notes (status-badge.tsx:8,
+  // src/components/ui/button.tsx:18) out of the hits.
+  it("leaves zero amber-* or yellow-* classes under src/", () => {
     const walk = (dir: string): string[] =>
       readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
         e.isDirectory()
           ? walk(`${dir}/${e.name}`)
-          : /\.(tsx|ts)$/.test(e.name)
+          : /\.(tsx|ts|css)$/.test(e.name)
             ? [`${dir}/${e.name}`]
             : [],
       );
     const hits = walk("src")
-      .map((f) => ({ f, m: readFileSync(f, "utf8").match(/amber-/g) }))
+      .map((f) => ({ f, m: readFileSync(f, "utf8").match(/amber-|yellow-/g) }))
       .filter((x) => x.m);
     expect(hits).toEqual([]);
   });

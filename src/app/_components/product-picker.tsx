@@ -1553,7 +1553,7 @@ function ProductPicker({
                           "shrink-0 rounded-lg font-bold",
                           isAdded
                             ? "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-950/60"
-                            : "border border-border bg-secondary text-secondary-foreground hover:bg-muted",
+                            : "border border-border bg-secondary text-secondary-foreground hover:bg-neutral-200 dark:hover:bg-neutral-700",
                         )}
                       >
                         {isAdded ? "✓ Ditambah" : "+ Tambah"}
