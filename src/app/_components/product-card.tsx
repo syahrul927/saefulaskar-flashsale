@@ -34,8 +34,9 @@ type ProductCardProps = {
 
 /**
  * Customer product card — mockup transplant (design.html:519-598).
- * aspect-square amber letter-tile frame (Task 7 `RosterThumb` treatment sized
- * up) with floating category pill + MOQ badge, mono price block, a low-stock
+ * aspect-square brand-orange letter-tile frame (`from-brand-primary/10
+ * to-brand-secondary/15`, Task 7 `RosterThumb` treatment sized up) with
+ * floating category pill + MOQ badge, mono price block, a low-stock
  * "sisa N" callout, the brand-gradient quota bar and a whiteout sold-out
  * overlay. Quick-add at minOrder; cart logic unchanged, CTA disabled while
  * sold out.

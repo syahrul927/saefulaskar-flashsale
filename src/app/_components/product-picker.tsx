@@ -466,7 +466,7 @@ function useRowEdit({
   };
 }
 
-/** Amber "belum disimpan" marker on a dirty row; red after a failed flush. */
+/** Neutral "belum disimpan" marker on a dirty row; red after a failed flush. */
 function DirtyChip({ failed }: { failed: boolean }) {
   return (
     <span
@@ -474,7 +474,7 @@ function DirtyChip({ failed }: { failed: boolean }) {
         "rounded-full border px-1.5 py-0.5 text-[10px] font-bold",
         failed
           ? "border-red-200 bg-red-100 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300"
-          : "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300",
+          : "border-border bg-muted text-muted-foreground",
       )}
     >
       belum disimpan
@@ -492,8 +492,8 @@ function HiddenChip() {
 }
 
 /**
- * Row background treatment: amber tint while a draft is unsaved, red after a
- * failed flush (the draft is kept), muted while hidden. Hover stays only on
+ * Row background treatment: muted tint while a draft is unsaved, red after a
+ * failed flush (the draft is kept), dimmed while hidden. Hover stays only on
  * clean rows so the flags are never accidentally erased under the cursor.
  */
 function rowTintClass(dirty: boolean, failed: boolean, hidden: boolean) {
@@ -502,7 +502,7 @@ function rowTintClass(dirty: boolean, failed: boolean, hidden: boolean) {
     !dirty &&
       !failed &&
       "hover:bg-neutral-50/80 dark:hover:bg-input/30",
-    dirty && !failed && "bg-amber-500/10",
+    dirty && !failed && "bg-muted/60",
     failed && "bg-red-500/10",
     hidden && "opacity-60",
   );
@@ -577,7 +577,7 @@ type RosterRowProps = {
   busy: boolean;
   /** Any row operation is in flight — blocks this row's instant buttons. */
   anyBusy: boolean;
-  /** Row has unsaved edits (amber) or failed the last flush (red). */
+  /** Row has unsaved edits (neutral) or failed the last flush (red). */
   dirty: boolean;
   failed: boolean;
   /** Hide/show only makes sense while the session is live (ACTIVE/PAUSED). */
@@ -1553,7 +1553,7 @@ function ProductPicker({
                           "shrink-0 rounded-lg font-bold",
                           isAdded
                             ? "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-950/60"
-                            : "border border-amber-200 bg-amber-50 text-amber-900 hover:bg-amber-100 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-200 dark:hover:bg-amber-950/60",
+                            : "border border-border bg-secondary text-secondary-foreground hover:bg-muted",
                         )}
                       >
                         {isAdded ? "✓ Ditambah" : "+ Tambah"}
@@ -1679,7 +1679,7 @@ function ProductPicker({
                     className={cn(
                       "rounded-full border px-2 py-0.5 font-mono text-[10px] font-bold",
                       dirtyIds.size > 0
-                        ? "border-amber-200 bg-amber-100 text-amber-800 dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-300"
+                        ? "border-border bg-muted text-muted-foreground"
                         : "border-neutral-200 bg-neutral-100 text-neutral-500 dark:border-border dark:bg-input/40 dark:text-neutral-400",
                     )}
                   >

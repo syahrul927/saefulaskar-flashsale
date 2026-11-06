@@ -1,4 +1,4 @@
-import { readFileSync } from "node:fs";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
 // One source of truth: the palette lives in globals.css. This file pins the
@@ -125,5 +125,22 @@ describe("caution stays out of the brand colour", () => {
     const header = readFileSync("src/app/_components/storefront-header.tsx", "utf8");
     expect(header).toMatch(/text-brand-action/);
     expect(header).not.toMatch(/(?<!dark:)text-brand-secondary\b/);
+  });
+});
+
+describe("no old-brand yellow survives in components", () => {
+  it("leaves zero amber-* classes under src/", () => {
+    const walk = (dir: string): string[] =>
+      readdirSync(dir, { withFileTypes: true }).flatMap((e) =>
+        e.isDirectory()
+          ? walk(`${dir}/${e.name}`)
+          : /\.(tsx|ts)$/.test(e.name)
+            ? [`${dir}/${e.name}`]
+            : [],
+      );
+    const hits = walk("src")
+      .map((f) => ({ f, m: readFileSync(f, "utf8").match(/amber-/g) }))
+      .filter((x) => x.m);
+    expect(hits).toEqual([]);
   });
 });
