@@ -13,7 +13,8 @@ export const dynamic = "force-dynamic";
 
 /**
  * Admin shell — OWNER-only guard + mockup header chrome (design.html:50-142).
- * Non-owners bounce to the storefront, unauthenticated visitors to login.
+ * Unauthenticated visitors bounce to the staff door (`/auth/staff`),
+ * non-owners to the storefront.
  * (Spec §4.2 admin actions are owner-scoped.)
  *
  * The header also names the live sale: the same earliest-created ACTIVE row the
@@ -27,7 +28,7 @@ export default async function AdminLayout({
   children: React.ReactNode;
 }) {
   const session = await getSession();
-  if (!session) redirect("/auth/login");
+  if (!session) redirect("/auth/staff");
   if (session.user.role !== "OWNER") redirect("/");
 
   const activeSession = await getPrimaryActiveSession(db);
@@ -70,7 +71,10 @@ export default async function AdminLayout({
                 AKTIF: {activeSession.name}
               </span>
             )}
-            <SignOutButton className="h-9 w-auto px-3" />
+            <SignOutButton
+              className="h-9 w-auto px-3"
+              redirectTo="/auth/staff"
+            />
           </div>
         </div>
       </header>

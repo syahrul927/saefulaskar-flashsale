@@ -5,7 +5,7 @@ import { NextResponse, type NextRequest } from "next/server";
  *  (`node_modules/better-auth/dist/cookies/index.mjs:279`), so PRODUCTION
  *  serves `__Secure-better-auth.session_token` while dev serves the bare
  *  name — checking only one of them logs every deployed user out at the
- *  gate (the Vercel /admin → /auth/login loop). */
+ *  gate (the old Vercel /admin → /auth/login loop). */
 const SESSION_COOKIE_NAMES = [
   "__Secure-better-auth.session_token",
   "better-auth.session_token",

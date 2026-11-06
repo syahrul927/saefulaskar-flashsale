@@ -8,7 +8,19 @@ import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
 import { cn } from "@/lib/utils";
 
-function SignOutButton({ className }: { className?: string }) {
+/**
+ * "Keluar" — clears the session, then lands on `redirectTo`. The default is the
+ * storefront: signing out of a page that has no login door of its own should put
+ * you back where you came from. The admin header passes its own door so a
+ * signed-out owner can log straight back in.
+ */
+function SignOutButton({
+  className,
+  redirectTo = "/",
+}: {
+  className?: string;
+  redirectTo?: string;
+}) {
   const router = useRouter();
   const [isLoading, setIsLoading] = useState(false);
 
@@ -22,7 +34,7 @@ function SignOutButton({ className }: { className?: string }) {
         body: JSON.stringify({}),
       });
     } finally {
-      router.push("/auth/login");
+      router.push(redirectTo);
       router.refresh();
     }
   }
