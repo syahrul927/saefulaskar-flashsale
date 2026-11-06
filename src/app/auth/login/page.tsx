@@ -16,6 +16,10 @@ export const dynamic = "force-dynamic";
 
 type LiveSale = { name: string; endTime: string };
 
+// The warning is per process, not per render: this page is `force-dynamic`, so
+// a bare call would log on every customer page view of an unconfigured deploy.
+let warnedAboutGoogle = false;
+
 /**
  * The session customers are looking at right now — the same earliest ACTIVE row
  * the storefront serves. Read defensively: this page is the way into the app,
@@ -64,7 +68,8 @@ export default async function LoginPage() {
   // with either missing the provider isn't registered, so the button would fail
   // at runtime. Say so in buyer language instead of offering a dead button.
   const googleConfigured = !!(env.GOOGLE_CLIENT_ID && env.GOOGLE_CLIENT_SECRET);
-  if (!googleConfigured) {
+  if (!googleConfigured && !warnedAboutGoogle) {
+    warnedAboutGoogle = true;
     const missing = [
       env.GOOGLE_CLIENT_ID ? null : "GOOGLE_CLIENT_ID",
       env.GOOGLE_CLIENT_SECRET ? null : "GOOGLE_CLIENT_SECRET",
@@ -149,23 +154,33 @@ export default async function LoginPage() {
         </div>
 
         {/* The countdown, bracketed by a rule in the logo's orange — the accent
-            has one job here: point at the thing that is running out. */}
+            has one job here: point at the thing that is running out. The
+            closing line lives inside this branch: with no session there is no
+            clock running, and the plate must not promise one. A fragment, not a
+            wrapper div, so the sticky `lg:justify-between` column keeps its
+            three slots — status, countdown, tagline — exactly as before. */}
         {live ? (
-          <div className="border-l-2 border-brand-mark pl-4 sm:pl-5">
-            <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-white/55">
-              Sesi berakhir dalam
+          <>
+            <div className="border-l-2 border-brand-mark pl-4 sm:pl-5">
+              <p className="font-mono text-[10px] font-bold uppercase tracking-wider text-white/55">
+                Sesi berakhir dalam
+              </p>
+              <CountdownTimer
+                endTime={live.endTime}
+                variant="boxed"
+                tone="ink"
+                size="lg"
+                className="mt-3"
+              />
+              <p className="mt-3.5 max-w-[15rem] truncate text-sm font-medium text-white/70">
+                {live.name}
+              </p>
+            </div>
+            <p className="max-w-xs text-[15px] leading-relaxed text-white/70">
+              Harga grosir dengan kuota terbatas. Selagi hitungannya masih
+              berjalan.
             </p>
-            <CountdownTimer
-              endTime={live.endTime}
-              variant="boxed"
-              tone="ink"
-              size="lg"
-              className="mt-3"
-            />
-            <p className="mt-3.5 max-w-[15rem] truncate text-sm font-medium text-white/70">
-              {live.name}
-            </p>
-          </div>
+          </>
         ) : (
           <div className="border-l-2 border-white/20 pl-4 sm:pl-5">
             <h2 className="font-heading text-lg font-semibold tracking-tight">
@@ -177,11 +192,6 @@ export default async function LoginPage() {
             </p>
           </div>
         )}
-
-        <p className="max-w-xs text-[15px] leading-relaxed text-white/70">
-          Harga grosir dengan kuota terbatas. Selagi hitungannya masih
-          berjalan.
-        </p>
       </aside>
     </main>
   );
