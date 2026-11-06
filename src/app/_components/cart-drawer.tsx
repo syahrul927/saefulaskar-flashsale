@@ -180,7 +180,7 @@ function CartDrawer({
                             <p className="mt-0.5 font-mono text-[10px] font-bold tabular-nums text-neutral-900 dark:text-neutral-200">
                               {formatRupiah(row.price)} × {row.qty}
                             </p>
-                            <p className="font-mono text-[9px] font-semibold text-amber-900 dark:text-amber-500">
+                            <p className="font-mono text-[9px] font-semibold text-brand-action">
                               Min. pesan {row.minOrder}
                             </p>
                           </div>

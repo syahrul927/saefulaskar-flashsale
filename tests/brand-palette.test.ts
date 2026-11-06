@@ -51,3 +51,29 @@ describe("brand orange as text", () => {
     }
   });
 });
+
+describe("brand decoration no longer uses the old yellow scale", () => {
+  // Files this task owns outright — every amber site in them is decoration.
+  const owned = [
+    "src/app/_components/countdown-timer.tsx",
+    "src/app/_components/product-thumb.tsx",
+    "src/app/_components/cart-drawer.tsx",
+    "src/app/_components/storefront-header.tsx",
+  ];
+
+  it("paints the paper countdown, placeholder tiles and the MOQ line in brand orange", () => {
+    for (const file of owned) {
+      expect(readFileSync(file, "utf8")).not.toMatch(/amber-/);
+    }
+    expect(readFileSync("src/app/_components/countdown-timer.tsx", "utf8")).toMatch(
+      /accent:\s*"border-brand-mark\/30 bg-brand-primary\/10 text-brand-action"/,
+    );
+  });
+
+  it("re-points the picker's placeholder gradient and special-cell tint, leaving Task 6's sites", () => {
+    const picker = readFileSync("src/app/_components/product-picker.tsx", "utf8");
+    expect(picker).not.toMatch(/from-amber-50/); // :205, :240 thumb gradients
+    expect(picker).not.toMatch(/border-amber-200 bg-amber-50 px-2/); // :156 cellInput
+    expect(picker).not.toMatch(/text-amber-700/); // :207, :242 initial letters
+  });
+});

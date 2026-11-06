@@ -152,8 +152,10 @@ const cellSelectClass =
   "rounded-lg border border-neutral-200 bg-neutral-50 px-2 py-1 text-xs text-neutral-800 focus:border-brand-primary focus:outline-none dark:border-border dark:bg-input/30 dark:text-neutral-200";
 const cellInputClass =
   "rounded-lg border border-neutral-200 bg-neutral-50 px-2 py-1 font-mono text-xs font-bold text-neutral-950 focus:border-brand-primary focus:outline-none dark:border-border dark:bg-input/30 dark:text-neutral-50";
-const cellInputAmberClass =
-  "rounded-lg border border-amber-200 bg-amber-50 px-2 py-1 font-mono text-xs font-black text-amber-950 focus:border-brand-primary focus:outline-none dark:border-amber-900 dark:bg-amber-950/40 dark:text-amber-100";
+/** MOQ cell's brand tint — decoration (this row is special, not wrong), and the
+ * alpha fill + `brand-action` text serves paper and the ink canvas with no `dark:` pair. */
+const cellInputBrandClass =
+  "rounded-lg border border-brand-primary/30 bg-brand-primary/10 px-2 py-1 font-mono text-xs font-black text-brand-action focus:border-brand-mark focus:outline-none";
 const readOnlyCellClass =
   "font-mono text-xs text-neutral-800 dark:text-neutral-200";
 
@@ -202,9 +204,9 @@ function RosterThumb({
   return (
     <span
       aria-hidden="true"
-      className={`flex shrink-0 items-center justify-center ${frame} bg-gradient-to-br from-amber-50 to-amber-200`}
+      className={`flex shrink-0 items-center justify-center ${frame} bg-gradient-to-br from-brand-primary/10 to-brand-secondary/25`}
     >
-      <span className={`${letter} font-black text-amber-700`}>
+      <span className={`${letter} font-black text-brand-action`}>
         {productLabel(product).charAt(0).toUpperCase()}
       </span>
     </span>
@@ -237,9 +239,9 @@ function SearchThumb({
   return (
     <span
       aria-hidden="true"
-      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-amber-50 to-amber-200 dark:from-amber-950/40 dark:to-amber-900/30"
+      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand-primary/10 to-brand-secondary/25"
     >
-      <span className="text-base font-black text-amber-700 dark:text-amber-400">
+      <span className="text-base font-black text-brand-action">
         {label.charAt(0).toUpperCase()}
       </span>
     </span>
@@ -685,7 +687,7 @@ function RosterTableRow({
               value={row.minOrder}
               onChange={(e) => row.setMinOrder(e.target.value)}
               disabled={row.busy}
-              className={`w-14 ${cellInputAmberClass}`}
+              className={`w-14 ${cellInputBrandClass}`}
             />
             <span className="font-mono text-[10px] text-neutral-400">pcs</span>
           </div>
@@ -877,7 +879,7 @@ function RosterCard({
                 onChange={(e) => row.setMinOrder(e.target.value)}
                 disabled={row.busy}
                 aria-label={`Min. Pesanan ${label}`}
-                className={`w-full ${cellInputAmberClass}`}
+                className={`w-full ${cellInputBrandClass}`}
               />
             </div>
             <div className="col-span-2">

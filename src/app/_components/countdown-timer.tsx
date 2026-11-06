@@ -45,7 +45,7 @@ const BOXED_UNITS_DAYS = [{ key: "d", label: "Hari" }, ...BOXED_UNITS] as const;
 const BOXED_TONES = {
   paper: {
     cell: "border-neutral-200 bg-white text-neutral-950",
-    accent: "border-amber-200 bg-amber-50 text-amber-900",
+    accent: "border-brand-mark/30 bg-brand-primary/10 text-brand-action",
     label: "text-neutral-500",
     colon: "text-neutral-400",
   },

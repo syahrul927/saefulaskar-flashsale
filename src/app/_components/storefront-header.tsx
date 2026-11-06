@@ -69,7 +69,7 @@ function StorefrontTabs({ className }: { className?: string }) {
               className={cn(
                 "size-4 shrink-0",
                 active
-                  ? "text-brand-secondary"
+                  ? "text-brand-action"
                   : "text-neutral-600 dark:text-neutral-400",
               )}
               weight={active ? "fill" : "regular"}

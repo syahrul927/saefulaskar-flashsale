@@ -4,7 +4,7 @@ import { useState } from "react";
 
 /**
  * Photo-over-tile thumb for customer surfaces (storefront card + cart
- * drawer). The amber letter tile renders first and stays as the backdrop;
+ * drawer). The brand-orange letter tile renders first and stays as the backdrop;
  * the v2 thumbnail (`session_products.image_url`, captured at import)
  * overlays it once present. A null URL — or a CDN 404, tracked with local
  * `failed` state — leaves the tile visible, so the degraded look is exactly
@@ -32,7 +32,7 @@ function ProductThumb({
     <>
       <span
         aria-hidden="true"
-        className={`flex size-full items-center justify-center bg-gradient-to-br from-amber-50 to-amber-200 ${letterClass} font-black text-amber-700`}
+        className={`flex size-full items-center justify-center bg-gradient-to-br from-brand-primary/10 to-brand-secondary/25 ${letterClass} font-black text-brand-action`}
       >
         {letter}
       </span>
