@@ -665,14 +665,25 @@ const login = readFileSync("src/app/auth/login/page.tsx", "utf8");
 
 describe("customer page is Google-only", () => {
   it("keeps the Jubelio form off the customer page", () => {
-    expect(login).not.toMatch(/AuthForm/);
-    expect(login).toMatch(/GoogleSignInButton/);
-    expect(login).toMatch(/\/auth\/staff/); // the quiet staff link
+    // Structural, not lexical: a bare `not.toMatch(/AuthForm/)` would break the
+    // next comment that explains why the credentials form is NOT on this door —
+    // exactly the prose the sibling staff page carries — and `/GoogleSignInButton/`
+    // passes on the bare import with the JSX deleted.
+    expect(login).not.toMatch(/<AuthForm\s*\/>|@\/components\/auth-form/);
+    expect(login).toMatch(/<GoogleSignInButton\s*\/>/);
+    expect(login).toMatch(/href="\/auth\/staff"/); // the quiet staff link
   });
 
   it("keeps the lockup on a white ground", () => {
-    // logo-lockup.png is an opaque white export — a dark panel shows a white box
-    expect(login).toMatch(/bg-background|bg-white|bg-card/);
+    // logo-lockup.png is an opaque white export — a dark panel shows a white box.
+    // Pinned to the <main> tag: a bare `bg-background|bg-white|bg-card` alternation
+    // is already satisfied by the `bg-white/30` on the ink plate's status dot.
+    const main = /<main[^>]*>/.exec(login)?.[0] ?? "";
+    expect(main).toContain("bg-background");
+  });
+
+  it("keeps the two doors' lockup the same width", () => {
+    expect(staff).toMatch(/w-40 md:w-44/);
   });
 });
 ```
@@ -682,9 +693,9 @@ Expected: FAIL — `login` still matches `/AuthForm/`.
 
 - [ ] **Step 2: Rewrite the form panel** — drop the `AuthForm` import and usage; `h1` becomes "Masuk untuk belanja"; sub-line becomes one sentence saying only that a Google account is needed (no new password, no registration form); `<GoogleSignInButton />` sits immediately under it at full width; below everything, the quiet `Link href="/auth/staff"` "Masuk sebagai staf". Delete the old "Pelanggan? Masuk dengan Google…" divider copy and the "Butuh akses? Hubungi admin." line — both are superseded.
 
-- [ ] **Step 3: Add the unconfigured fallback.** Read `env.GOOGLE_CLIENT_ID`/`env.GOOGLE_CLIENT_SECRET` in this server component; when either is missing render a short Bahasa line (e.g. "Pendaftaran lewat Google belum dibuka. Hubungi toko untuk akses belanja.") in place of the button, keep the staff link, and `console.warn` once with the missing variable names. Import `env` from `@/env`.
+- [ ] **Step 3: Add the unconfigured fallback.** Read `env.GOOGLE_CLIENT_ID`/`env.GOOGLE_CLIENT_SECRET` in this server component; when either is missing render a short Bahasa line (e.g. "Pendaftaran lewat Google belum dibuka. Hubungi toko untuk akses belanja.") in place of the button, keep the staff link, and `console.warn` once with the missing variable names — **once**, and this page is `force-dynamic`, so a bare call inside the component logs on every customer page view: guard it with a module-scope `let warned = false` flag. Import `env` from `@/env`.
 
-- [ ] **Step 4: Flip the plate copy to buyer talk.** Keep the live dot, the `Sesi berakhir dalam` label, `CountdownTimer variant="boxed" tone="ink" size="lg"` and the session name. Replace the no-session branch's owner instruction ("Buat dan aktifkan sesi baru begitu kamu masuk ke dasbor") with buyer copy — heading like "Belum ada sale yang berjalan", one line saying to check back or ask the store on WhatsApp. Keep the closing line about wholesale price and limited quota; do not promise a discount that is not live.
+- [ ] **Step 4: Flip the plate copy to buyer talk.** Keep the live dot, the `Sesi berakhir dalam` label, `CountdownTimer variant="boxed" tone="ink" size="lg"` and the session name. Replace the no-session branch's owner instruction ("Buat dan aktifkan sesi baru begitu kamu masuk ke dasbor") with buyer copy — heading like "Belum ada sale yang berjalan", one line saying to check back or ask the store on WhatsApp. Keep the closing line about wholesale price and limited quota, but render it **inside the `live` branch**: with no session it currently asserts "Selagi hitungannya masih berjalan" about a countdown that is not running, which contradicts this step's own "do not promise a discount that is not live".
 
 - [ ] **Step 5: Update `metadata.title`** to "Masuk — Flash Sale Grosir" (it currently says "Masuk" already — confirm no dasbor wording survives anywhere in the file), and rewrite the file's long header doc comment, which still describes the page as the owner's dashboard door with the Jubelio form as its subject.
 
