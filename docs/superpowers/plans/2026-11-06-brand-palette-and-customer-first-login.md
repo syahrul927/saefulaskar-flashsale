@@ -212,7 +212,9 @@ describe("brand orange as text", () => {
 
   it("never paints small text with the mark colours", () => {
     for (const file of paperTextSites) {
-      expect(readFileSync(file, "utf8")).not.toMatch(/text-brand-(primary|secondary|mark)\b/);
+      // The lookbehind keeps a *sanctioned* `dark:text-brand-primary` companion
+      // from tripping a rule about light-mode paper text.
+      expect(readFileSync(file, "utf8")).not.toMatch(/(?<!dark:)text-brand-(primary|secondary|mark)\b/);
     }
   });
 });
@@ -370,7 +372,7 @@ describe("caution stays out of the brand colour", () => {
     for (const file of caution) {
       const src = readFileSync(file, "utf8");
       expect(src).not.toMatch(/amber-/);
-      expect(src).not.toMatch(/text-brand-(primary|secondary|mark)\b/);
+      expect(src).not.toMatch(/(?<!dark:)text-brand-(primary|secondary|mark)\b/);
     }
     expect(readFileSync("src/app/_components/filter-pill.tsx", "utf8")).toMatch(/bg-red-500/);
   });
