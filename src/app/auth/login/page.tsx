@@ -83,7 +83,7 @@ export default async function LoginPage() {
     <main className="flex min-h-svh flex-col bg-background lg:flex-row">
       {/* ── Sign-in panel (paper) ───────────────────────────────────── */}
       <section className="flex flex-1 flex-col px-6 py-10 md:justify-center md:px-12 xl:px-16">
-        <div className="w-full max-w-sm motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-4 motion-safe:duration-500">
+        <div className="w-full max-w-sm motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-4 motion-safe:[animation-duration:500ms]">
           {/* Brand lockup — the supplied export carries mark + name together.
               Plain `<img>`: `images.unoptimized` is on, `next/image` adds
               nothing. */}

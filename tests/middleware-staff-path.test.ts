@@ -14,6 +14,13 @@ describe("loginPathFor", () => {
   it("sends customer surfaces to the customer door", () => {
     expect(loginPathFor("/orders")).toBe("/auth/login");
     expect(loginPathFor("/onboarding")).toBe("/auth/login");
+    // The two door rows nothing here covered: the storefront root and the OAuth
+    // landing. Falsifies an `else → "/auth/staff"` default, or a staff-path
+    // list that grows — a buyer arriving from a WhatsApp link at `/` would land
+    // on the email/password door, and `/login/success` would bounce a Google
+    // callback to credentials the customer does not have.
+    expect(loginPathFor("/")).toBe("/auth/login");
+    expect(loginPathFor("/login/success")).toBe("/auth/login");
   });
 
   it("does not mistake a customer path that merely contains the word", () => {

@@ -73,9 +73,19 @@ export function middleware(request: NextRequest) {
 }
 
 export const config = {
-  // Protect everything except: API routes (Better Auth handler, jubelio-login,
-  // sign-out), the login page itself (and anything under /auth/*), Next
-  // internals, and static assets.
+  // One matcher: a negated lookahead over the path with its leading `/`
+  // stripped. Everything not excluded below is guarded, i.e. a request without
+  // a session cookie is redirected to `loginPathFor(pathname)`. Exclusions, in
+  // the order the lookahead lists them:
+  //   `api` — every API route, including the Better Auth handler and
+  //           `/api/auth/jubelio-login` + `/api/auth/sign-out`. A login POST
+  //           arrives from a browser that has no session cookie yet, so
+  //           guarding it would bounce the exchange that creates one.
+  //   `auth` — BOTH doors, not the customer one only: `/auth/login` and
+  //           `/auth/staff`. Guarding a door redirects it to itself.
+  //   `_next/static`, `_next/image` — Next internals.
+  //   `favicon.ico`, and any path ending in an image extension
+  //           (svg|png|jpg|jpeg|gif|webp|ico) — static assets.
   matcher: [
     "/((?!api|auth|_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)",
   ],

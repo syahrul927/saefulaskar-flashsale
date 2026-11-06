@@ -62,6 +62,14 @@ describe("customer page is Google-only", () => {
   });
 
   it("keeps the two doors' lockup the same width", () => {
+    // The title names BOTH doors, so both sides are pinned literally. Pinning
+    // only the staff side let `md:w-44` be deleted from the customer page's
+    // lockup (<img> in src/app/auth/login/page.tsx) and stay green — the two
+    // columns then rendered at 10rem vs 11rem at md and above, while the test
+    // that says they are the same width still passed. A literal per side, not
+    // an equality between the files: `expect(a).toBe(b)` is satisfiable by
+    // changing both to something else, e.g. both to `w-48`.
     expect(staff).toMatch(/w-40 md:w-44/);
+    expect(login).toMatch(/w-40 md:w-44/);
   });
 });

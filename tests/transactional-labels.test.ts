@@ -20,8 +20,18 @@ describe("transactional data is explained where it is entered", () => {
     // The claim is positional, so the pin must be too: a whole-file match is
     // satisfied by a comment anywhere in the file, or by the sentence sitting
     // under the button instead of above it.
-    const note = form.search(/<p className="text-xs text-muted-foreground/);
-    const submit = form.search(/<Button type="submit"/);
+    //
+    // Order-independent inside that position. `prettier-plugin-tailwindcss` is
+    // registered in prettier.config.js and `format:write` covers **/*.{ts,tsx},
+    // so one format pass rewrites `text-xs text-muted-foreground` to
+    // `text-muted-foreground text-xs` and breaks the 84-column `<Button ...>`
+    // onto one attribute per line. Both were literal-continuation anchors, so
+    // `format:write` alone turned this suite red with no product change — a
+    // false red that trains whoever runs it to ignore the result.
+    const note = form.search(
+      /<p className="(?=[^"]*\btext-xs\b)(?=[^"]*\btext-muted-foreground\b)[^"]*"/,
+    );
+    const submit = form.search(/<Button[\s\S]{0,160}?type="submit"/);
     expect(note).toBeGreaterThanOrEqual(0);
     expect(submit).toBeGreaterThan(note);
   });

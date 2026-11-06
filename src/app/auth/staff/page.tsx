@@ -19,7 +19,7 @@ export const metadata = {
 export default function StaffLoginPage() {
   return (
     <main className="flex min-h-svh flex-col items-center justify-center bg-background px-4 py-10">
-      <div className="w-full max-w-sm motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-4 motion-safe:duration-500">
+      <div className="w-full max-w-sm motion-safe:animate-in motion-safe:fade-in motion-safe:slide-in-from-bottom-4 motion-safe:[animation-duration:500ms]">
         <header>
           {/* Brand lockup — the supplied export carries mark + name together.
               Plain `<img>`: `images.unoptimized` is on, `next/image` adds

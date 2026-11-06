@@ -63,6 +63,7 @@
   --popover-foreground: oklch(0.944 0.010 252.8);
   --primary: oklch(0.944 0.010 252.8); /* paper fill with ink text — mirrors the light-mode pair */
   --primary-foreground: oklch(0.202 0.014 253.2);
+  /* --secondary === --muted, deliberately: dark has no distinct secondary surface. It is why hover states elsewhere in the app pair a static neutral-* value instead of a token pair — see product-picker.tsx:1556, `bg-secondary` with `hover:bg-neutral-200 dark:hover:bg-neutral-700`. */
   --secondary: oklch(0.282 0.022 254.2); /* #222A34 */
   --secondary-foreground: oklch(0.944 0.010 252.8);
   --muted: oklch(0.282 0.022 254.2);
