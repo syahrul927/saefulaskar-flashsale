@@ -33,3 +33,21 @@ describe("brand palette", () => {
     expect(root).toMatch(/--ring:\s*oklch\(0\.646 0\.194 41\.1\)/);
   });
 });
+
+describe("brand orange as text", () => {
+  // #EA580C / #FB923C on paper is 3.56:1 / ~2.3:1 — a mark colour must never
+  // become a label. These four sites are the token-only cases the value-swap
+  // in globals.css cannot fix, so they are pinned here.
+  const paperTextSites = [
+    "src/app/_components/product-card.tsx",
+    "src/app/_components/cart-drawer.tsx",
+    "src/app/_components/kpi-tiles.tsx",
+    "src/app/admin/page.tsx",
+  ];
+
+  it("never paints small text with the mark colours", () => {
+    for (const file of paperTextSites) {
+      expect(readFileSync(file, "utf8")).not.toMatch(/text-brand-(primary|secondary|mark)\b/);
+    }
+  });
+});

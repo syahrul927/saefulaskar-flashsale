@@ -161,7 +161,7 @@ export default async function AdminSessionsPage() {
             // Brand colour only when there is work to do; at 0 the default
             // ink wins so exactly one text-colour class lands (KpiTile rule).
             valueClassName={
-              global.unpaidWithProof > 0 ? "text-brand-primary" : undefined
+              global.unpaidWithProof > 0 ? "text-brand-action" : undefined
             }
             href="/admin/orders?status=UNPAID"
           />

@@ -113,7 +113,7 @@ function KpiRow({ kpis }: { kpis: SessionKpis }) {
           label="TERKUNCI / TERJUAL"
           value={String(kpis.totalClaimed)}
           unit="unit"
-          valueClassName="text-brand-secondary"
+          valueClassName="text-brand-action"
           hint={`${kpis.totalClaimed}/${kpis.totalQuota} (${formatClaimPercent(
             kpis.totalClaimed,
             kpis.totalQuota,

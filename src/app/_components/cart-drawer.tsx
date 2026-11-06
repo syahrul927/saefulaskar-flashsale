@@ -246,7 +246,7 @@ function CartDrawer({
                   {savings > 0 && (
                     <div className="flex items-center justify-between text-neutral-500">
                       <span>Diskon Flash</span>
-                      <span className="font-mono font-bold text-brand-secondary tabular-nums">
+                      <span className="font-mono font-bold text-brand-action tabular-nums">
                         Hemat {formatRupiah(savings)}
                       </span>
                     </div>

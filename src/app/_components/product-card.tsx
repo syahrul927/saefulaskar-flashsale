@@ -135,7 +135,7 @@ function ProductCard({ product }: ProductCardProps) {
       </div>
 
       {lowStock && remaining > 0 && (
-        <p className="mt-1 font-mono text-[10px] font-bold text-brand-secondary">
+        <p className="mt-1 font-mono text-[10px] font-bold text-brand-action">
           sisa {remaining}
         </p>
       )}
