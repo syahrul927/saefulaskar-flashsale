@@ -3,14 +3,18 @@ import type { ReactNode } from "react";
 import { Badge } from "@/components/ui/badge";
 import type { OrderStatus } from "@/server/order-status";
 
-type StatusTone = "amber" | "emerald" | "blue" | "neutral" | "red";
+/**
+ * Badge tone vocabulary after the brand sweep: `orange` is brand decoration,
+ * `red` is caution. The old `amber` served both jobs and no longer exists.
+ */
+type StatusTone = "orange" | "emerald" | "blue" | "neutral" | "red";
 
 type SessionStatus = "SCHEDULED" | "ACTIVE" | "PAUSED" | "ENDED";
 
 const SESSION_STATUS_TONES = {
   SCHEDULED: "blue",
   ACTIVE: "emerald",
-  PAUSED: "amber",
+  PAUSED: "red",
   ENDED: "neutral",
 } as const satisfies Record<SessionStatus, StatusTone>;
 
@@ -29,7 +33,7 @@ const SESSION_STATUS_LABEL = {
 } as const satisfies Record<SessionStatus, string>;
 
 const ORDER_STATUS_TONES = {
-  UNPAID: "amber",
+  UNPAID: "red",
   CONFIRMED: "emerald",
   SHIPPED: "blue",
   COMPLETED: "neutral",
@@ -55,7 +59,7 @@ function isPulseStatus(status: string): boolean {
 }
 
 const TONE_TO_BADGE_VARIANT = {
-  amber: "amber",
+  orange: "orange",
   emerald: "emerald",
   blue: "blue",
   neutral: "neutral",
@@ -92,6 +96,7 @@ export {
   sessionStatusLabel,
   sessionStatusTone,
   StatusBadge,
+  TONE_TO_BADGE_VARIANT,
 };
 // `OrderStatus` is re-exported for existing importers; the vocabulary itself
 // lives in `@/server/order-status`, derived from the `pgEnum`.

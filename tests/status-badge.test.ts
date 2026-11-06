@@ -5,6 +5,7 @@ import {
   orderStatusTone,
   sessionStatusLabel,
   sessionStatusTone,
+  TONE_TO_BADGE_VARIANT,
 } from "@/app/_components/status-badge";
 
 describe("sessionStatusLabel", () => {
@@ -23,14 +24,14 @@ describe("sessionStatusTone", () => {
   it("maps every session status to its badge tone", () => {
     expect(sessionStatusTone("SCHEDULED")).toBe("blue");
     expect(sessionStatusTone("ACTIVE")).toBe("emerald");
-    expect(sessionStatusTone("PAUSED")).toBe("amber");
+    expect(sessionStatusTone("PAUSED")).toBe("red");
     expect(sessionStatusTone("ENDED")).toBe("neutral");
   });
 });
 
 describe("orderStatusTone", () => {
   it("maps every order status to its badge tone", () => {
-    expect(orderStatusTone("UNPAID")).toBe("amber");
+    expect(orderStatusTone("UNPAID")).toBe("red");
     expect(orderStatusTone("CONFIRMED")).toBe("emerald");
     expect(orderStatusTone("SHIPPED")).toBe("blue");
     expect(orderStatusTone("COMPLETED")).toBe("neutral");
@@ -50,5 +51,19 @@ describe("isPulseStatus", () => {
     expect(isPulseStatus("COMPLETED")).toBe(false);
     // A cancelled order is finished, not live — the dot must not blink on it.
     expect(isPulseStatus("CANCEL")).toBe(false);
+  });
+});
+
+describe("status tones after the brand sweep", () => {
+  // `amber` was both the old brand colour and the warning colour. It leaves the
+  // vocabulary entirely: `orange` is brand decoration, `red` is caution.
+  it("has no amber tone left to render", () => {
+    expect(TONE_TO_BADGE_VARIANT).not.toHaveProperty("amber");
+    expect(TONE_TO_BADGE_VARIANT).toMatchObject({ orange: "orange", red: "destructive" });
+  });
+
+  it("keeps the pulse on live states", () => {
+    expect(isPulseStatus("ACTIVE")).toBe(true);
+    expect(isPulseStatus("UNPAID")).toBe(true);
   });
 });

@@ -95,7 +95,7 @@ function ProductCard({ product }: ProductCardProps) {
 
         {/* MOQ badge — top-right. */}
         <span className="absolute right-2 top-2">
-          <StatusBadge tone="amber">MIN: {product.minOrder}</StatusBadge>
+          <StatusBadge tone="orange">MIN: {product.minOrder}</StatusBadge>
         </span>
 
         {soldOut && (

@@ -52,7 +52,7 @@ export default async function AdminLayout({
               </span>
             </Link>
             <span className="hidden shrink-0 sm:inline-flex">
-              <StatusBadge tone="amber" pulse>
+              <StatusBadge tone="orange" pulse>
                 JUBELIO SYNC
               </StatusBadge>
             </span>
