@@ -283,6 +283,7 @@ describe("status tones after the brand sweep", () => {
 - Modify: `src/app/_components/product-thumb.tsx:35`
 - Modify: `src/app/_components/product-picker.tsx:156,205,207,240,242`
 - Modify: `src/app/_components/cart-drawer.tsx:183`
+- Modify: `src/app/_components/storefront-header.tsx:71` (added by Task 2's report: the active-tab icon is a **state indicator**, and `#FB923C` on paper is ~2.3:1 — under the 3:1 WCAG bar for non-text. → `text-brand-action`.)
 - Modify: `tests/brand-palette.test.ts` (append)
 
 **Interfaces:**
@@ -300,6 +301,7 @@ describe("brand decoration no longer uses the old yellow scale", () => {
     "src/app/_components/countdown-timer.tsx",
     "src/app/_components/product-thumb.tsx",
     "src/app/_components/cart-drawer.tsx",
+    "src/app/_components/storefront-header.tsx",
   ];
 
   it("paints the paper countdown, placeholder tiles and the MOQ line in brand orange", () => {
@@ -331,6 +333,7 @@ describe("brand decoration no longer uses the old yellow scale", () => {
 | `product-picker.tsx:205,240` thumbs | same gradient pair, letters `text-brand-action` |
 | `product-picker.tsx:156` `cellInputAmberClass` | `border-brand-primary/30 bg-brand-primary/10 … text-brand-action`, `focus:border-brand-mark` kept |
 | `cart-drawer.tsx:183` "Min. pesan" | `text-brand-action` (9px text — the mark colours cannot carry it) |
+| `storefront-header.tsx:71` active-tab icon | `text-brand-action` — a state indicator needs 3:1 for non-text, `#FB923C` on paper is ~2.3:1 |
 
 - [ ] **Step 4: Run test + typecheck.** Expected: PASS.
 
