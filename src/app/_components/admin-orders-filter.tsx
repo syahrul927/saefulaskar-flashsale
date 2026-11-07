@@ -2,10 +2,20 @@
 
 import { useState } from "react";
 
+import { cn } from "@/lib/utils";
 import { formatSalesOrderCode } from "@/lib/format";
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { CaretDownIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import { ADMIN_STATUS_LABEL, TABS, type AdminTab } from "./admin-order-tabs";
-import { CancelOrderButton, type CancelOrderTarget } from "./cancel-order-button";
+import {
+  CancelOrderButton,
+  type CancelOrderTarget,
+} from "./cancel-order-button";
 import { ConfirmOrderButton } from "./confirm-order-button";
 import { FilterPill } from "./filter-pill";
 import {
@@ -83,13 +93,17 @@ function AdminOrdersFilter({
       <div
         role="group"
         aria-label="Filter status"
-        className="no-scrollbar flex items-center gap-1.5 overflow-x-auto border-b border-neutral-100 bg-neutral-50/70 px-4 py-3 dark:border-border dark:bg-neutral-900/40"
+        className="no-scrollbar dark:border-border flex items-center gap-1.5 overflow-x-auto border-b border-neutral-100 bg-neutral-50/70 px-4 py-3 dark:bg-neutral-900/40"
       >
         {TABS.map((t) => (
           <FilterPill
             key={t}
             label={t === "ALL" ? "Semua" : ADMIN_STATUS_LABEL[t]}
-            count={t === "ALL" ? rows.length : rows.filter((r) => r.status === t).length}
+            count={
+              t === "ALL"
+                ? rows.length
+                : rows.filter((r) => r.status === t).length
+            }
             active={tab === t}
             emphasis={t === "UNPAID"}
             onClick={() => setTab(t)}
@@ -105,39 +119,90 @@ function AdminOrdersFilter({
           Tidak ada pesanan
         </p>
       ) : (
-        <ul className="divide-y divide-neutral-100 dark:divide-border">
+        <ul className="dark:divide-border divide-y divide-neutral-100">
           {visible.map((order) => (
-            <li key={order.orderId} className="p-4 sm:p-5">
-              <div className="flex flex-wrap items-start justify-between gap-3 border-b border-neutral-100 pb-3 dark:border-border">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span className="font-mono text-xs font-bold tabular-nums text-neutral-950 dark:text-neutral-50">
-                      {order.bookingId}
-                    </span>
-                    <StatusBadge
-                      tone={orderStatusTone(order.status)}
-                      pulse={isPulseStatus(order.status)}
-                    >
-                      {ADMIN_STATUS_LABEL[order.status]}
-                    </StatusBadge>
-                  </div>
-                  {/* `SO-000192626`, the shape Jubelio's console prints — the
+            <OrderCard key={order.orderId} order={order} />
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+/**
+ * One admin order card. Owns the items collapsible's open state — the
+ * expanded marker (ring) and the Sembunyikan label both read from it.
+ */
+function OrderCard({ order }: { order: AdminOrderRow }) {
+  const [itemsOpen, setItemsOpen] = useState(false);
+  return (
+    <li
+      className={cn(
+        "p-4 transition sm:p-5",
+        itemsOpen ? "ring-ring ring-1 ring-inset" : "",
+      )}
+    >
+      <div className="dark:border-border flex flex-wrap items-start justify-between gap-3 border-b border-neutral-100 pb-3">
+        <div className="min-w-0">
+          <div className="flex flex-wrap items-center gap-2">
+            <span className="font-mono text-xs font-bold text-neutral-950 tabular-nums dark:text-neutral-50">
+              {order.bookingId}
+            </span>
+            <StatusBadge
+              tone={orderStatusTone(order.status)}
+              pulse={isPulseStatus(order.status)}
+            >
+              {ADMIN_STATUS_LABEL[order.status]}
+            </StatusBadge>
+          </div>
+          {/* `SO-000192626`, the shape Jubelio's console prints — the
                       admin compares this string against upstream, so it must
                       be upstream's format, not ours. */}
-                  <p className="mt-1 font-mono text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400">
-                    {order.dateLabel}
-                    {order.jubelioSoId !== null
-                      ? ` · ${formatSalesOrderCode(order.jubelioSoId)}`
-                      : ""}
-                  </p>
-                </div>
-                <span className="font-mono text-sm font-bold tabular-nums text-neutral-950 dark:text-neutral-50">
-                  {order.grandTotalLabel}
-                </span>
-              </div>
+          <p className="mt-1 font-mono text-[11px] text-neutral-500 tabular-nums dark:text-neutral-400">
+            {order.dateLabel}
+            {order.jubelioSoId !== null
+              ? ` · ${formatSalesOrderCode(order.jubelioSoId)}`
+              : ""}
+          </p>
+        </div>
+        <span className="font-mono text-sm font-bold text-neutral-950 tabular-nums dark:text-neutral-50">
+          {order.grandTotalLabel}
+        </span>
+      </div>
 
-              <ul className="mt-3 divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-100 bg-neutral-50/60 dark:divide-border dark:border-border dark:bg-input/20">
-                {order.items.map((item) => (
+      <Collapsible
+        open={itemsOpen}
+        onOpenChange={setItemsOpen}
+        className="mt-3"
+      >
+        {/* Always-visible first 3 items */}
+        <ul className="dark:divide-border dark:border-border dark:bg-input/20 divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-100 bg-neutral-50/60">
+          {order.items.slice(0, 3).map((item) => (
+            <li
+              key={item.id}
+              className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
+            >
+              <div className="min-w-0">
+                <p className="truncate text-neutral-950 dark:text-neutral-50">
+                  {item.name}
+                </p>
+                <p className="font-mono text-[11px] text-neutral-500 tabular-nums dark:text-neutral-400">
+                  {item.qtyPriceLabel}
+                </p>
+              </div>
+              <span className="shrink-0 font-mono text-xs font-medium text-neutral-950 tabular-nums dark:text-neutral-50">
+                {item.subtotalLabel}
+              </span>
+            </li>
+          ))}
+        </ul>
+
+        {/* Remaining items behind collapsible */}
+        {order.items.length > 3 && (
+          <>
+            <CollapsibleContent className="h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-200 ease-out data-ending-style:h-0 data-starting-style:h-0">
+              <ul className="dark:divide-border dark:border-border dark:bg-input/20 mt-1 divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-100 bg-neutral-50/60">
+                {order.items.slice(3).map((item) => (
                   <li
                     key={item.id}
                     className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
@@ -146,87 +211,102 @@ function AdminOrdersFilter({
                       <p className="truncate text-neutral-950 dark:text-neutral-50">
                         {item.name}
                       </p>
-                      <p className="font-mono text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400">
+                      <p className="font-mono text-[11px] text-neutral-500 tabular-nums dark:text-neutral-400">
                         {item.qtyPriceLabel}
                       </p>
                     </div>
-                    <span className="shrink-0 font-mono text-xs font-medium tabular-nums text-neutral-950 dark:text-neutral-50">
+                    <span className="shrink-0 font-mono text-xs font-medium text-neutral-950 tabular-nums dark:text-neutral-50">
                       {item.subtotalLabel}
                     </span>
                   </li>
                 ))}
               </ul>
+            </CollapsibleContent>
 
-              {/* Resi strip — only once the sync has pulled a tracking number
-                  off the Jubelio SO, so its absence means "hasn't shipped". */}
-              {order.trackingNumber ? (
-                <ShipmentBand
-                  className="mt-3"
-                  trackingNumber={order.trackingNumber}
-                  shipper={order.shipper}
+            {/* Expand trigger — accent-tint ghost (approved v2). */}
+            <CollapsibleTrigger>
+              <button
+                type="button"
+                className="bg-accent text-accent-foreground hover:bg-accent/70 active:bg-accent/50 mt-2 flex w-full items-center justify-center gap-1 rounded-lg py-1.5 text-xs font-semibold transition-colors"
+              >
+                <CaretDownIcon
+                  className={cn(
+                    "size-3.5 transition-transform",
+                    itemsOpen ? "rotate-180" : "",
+                  )}
                 />
-              ) : null}
+                {itemsOpen
+                  ? "Sembunyikan"
+                  : `Lihat ${order.items.length - 3} item lainnya`}
+              </button>
+            </CollapsibleTrigger>
+          </>
+        )}
+      </Collapsible>
 
-              <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-                {order.transferProofUrl ? (
-                  <a
-                    className="inline-flex items-center text-sm text-primary underline-offset-4 hover:underline"
-                    href={order.transferProofUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Lihat bukti transfer
-                  </a>
-                ) : (
-                  <span className="text-sm text-neutral-500 dark:text-neutral-400">
-                    Belum ada bukti transfer
-                  </span>
-                )}
-                {/* Quiet to loud, left to right (mockup A): detail, cancel,
+      {/* Resi strip — only once the sync has pulled a tracking number
+                  off the Jubelio SO, so its absence means "hasn't shipped". */}
+      {order.trackingNumber ? (
+        <ShipmentBand
+          className="mt-3"
+          trackingNumber={order.trackingNumber}
+          shipper={order.shipper}
+        />
+      ) : null}
+
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
+        {order.transferProofUrl ? (
+          <a
+            className="text-primary inline-flex items-center text-sm underline-offset-4 hover:underline"
+            href={order.transferProofUrl}
+            target="_blank"
+            rel="noreferrer"
+          >
+            Lihat bukti transfer
+          </a>
+        ) : (
+          <span className="text-sm text-neutral-500 dark:text-neutral-400">
+            Belum ada bukti transfer
+          </span>
+        )}
+        {/* Quiet to loud, left to right (mockup A): detail, cancel,
                     confirm. Every action stays one click from the row, and the
                     dialog never has to be opened to reach one. */}
-                <div className="flex flex-wrap items-center gap-2">
-                  <OrderDetailTrigger
-                    order={order.detail}
-                    cancel={order.cancel}
-                  />
-                  {order.cancel && (
-                    <CancelOrderButton target={order.cancel} size="sm" />
-                  )}
-                  {order.status === "UNPAID" && (
-                    <ConfirmOrderButton
-                      orderId={order.orderId}
-                      bookingId={order.bookingId}
-                    />
-                  )}
-                  {/* The original ask for the cancelled tab, answered in the
+        <div className="flex flex-wrap items-center gap-2">
+          <OrderDetailTrigger order={order.detail} cancel={order.cancel} />
+          {order.cancel && (
+            <CancelOrderButton target={order.cancel} size="sm" />
+          )}
+          {order.status === "UNPAID" && (
+            <ConfirmOrderButton
+              orderId={order.orderId}
+              bookingId={order.bookingId}
+            />
+          )}
+          {/* The original ask for the cancelled tab, answered in the
                       row: on a CANCEL order the admin's next move is the
                       customer, not another status. Same link the dialog footer
                       carries, so there is nothing to decide about which one
                       renders. */}
-                  {order.status === "CANCEL" && order.detail.contact && (
-                    <Button
-                      variant="outline"
-                      size="xs"
-                      render={
-                        <a
-                          href={order.detail.contact.href}
-                          target="_blank"
-                          rel="noreferrer"
-                        />
-                      }
-                      nativeButton={false}
-                    >
-                      {order.detail.contact.label}
-                    </Button>
-                  )}
-                </div>
-              </div>
-            </li>
-          ))}
-        </ul>
-      )}
-    </div>
+          {order.status === "CANCEL" && order.detail.contact && (
+            <Button
+              variant="outline"
+              size="xs"
+              render={
+                <a
+                  href={order.detail.contact.href}
+                  target="_blank"
+                  rel="noreferrer"
+                />
+              }
+              nativeButton={false}
+            >
+              {order.detail.contact.label}
+            </Button>
+          )}
+        </div>
+      </div>
+    </li>
   );
 }
 

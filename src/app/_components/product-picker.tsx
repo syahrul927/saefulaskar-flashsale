@@ -15,6 +15,13 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogClose,
   DialogContent,
@@ -548,19 +555,25 @@ function TypeSelect({
   fullWidth?: boolean;
 }) {
   return (
-    <select
-      aria-label={`Tipe ${productLabel(product)}`}
+    <Select
       value={row.type}
-      onChange={(e) => row.setType(e.target.value as ProductType)}
+      onValueChange={(v) => row.setType(v as ProductType)}
       disabled={row.busy}
-      className={cn(fullWidth && "w-full", cellSelectClass)}
     >
-      {PRODUCT_TYPES.map((t) => (
-        <option key={t} value={t}>
-          {PRODUCT_TYPE_LABELS[t]}
-        </option>
-      ))}
-    </select>
+      <SelectTrigger
+        aria-label={`Tipe ${productLabel(product)}`}
+        className={cn(fullWidth && "w-full", cellSelectClass)}
+      >
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {PRODUCT_TYPES.map((t) => (
+          <SelectItem key={t} value={t}>
+            {PRODUCT_TYPE_LABELS[t]}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
   );
 }
 
@@ -640,15 +653,6 @@ function RosterTableRow({
         ) : (
           <span className={readOnlyCellClass}>
             {categoryText(product.category)}
-          </span>
-        )}
-      </td>
-      <td className="py-3 px-3">
-        {canEdit ? (
-          <TypeSelect row={row} product={product} />
-        ) : (
-          <span className={readOnlyCellClass}>
-            {PRODUCT_TYPE_LABELS[product.type]}
           </span>
         )}
       </td>
@@ -1580,7 +1584,7 @@ function ProductPicker({
       <Panel title="Roster Produk" count={`${products.length} produk siap`}>
         {canEdit && products.length > 0 && (
           <p className="border-b border-neutral-100 bg-neutral-50/70 px-4 py-2 text-xs text-neutral-500 dark:border-border dark:bg-input/30 dark:text-neutral-400">
-            Atur Kategori, Tipe, Kuota, dan Min. Pesanan per produk.
+            Atur Kategori, Kuota, dan Min. Pesanan per produk.
           </p>
         )}
 
@@ -1601,9 +1605,6 @@ function ProductPicker({
                     </th>
                     <th scope="col" className="py-3 px-3">
                       Kategori
-                    </th>
-                    <th scope="col" className="py-3 px-3">
-                      Tipe
                     </th>
                     <th scope="col" className="py-3 px-3">
                       Stok Jubelio

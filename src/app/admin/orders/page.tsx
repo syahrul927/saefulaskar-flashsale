@@ -1,4 +1,4 @@
-import { desc, inArray } from "drizzle-orm";
+import { desc, inArray, lt } from "drizzle-orm";
 import type { Metadata } from "next";
 import { after } from "next/server";
 
@@ -13,20 +13,22 @@ import {
 import type { CancelOrderTarget } from "@/app/_components/cancel-order-button";
 import type { OrderDetailData } from "@/app/_components/order-detail-dialog";
 import { Panel } from "@/app/_components/panel";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { SyncNowButton } from "@/app/_components/sync-now-button";
 import { env } from "@/env";
 import { formatRupiah } from "@/lib/format";
 import { db } from "@/server/db";
 import {
-  flashSessions,
-  orderItems,
-  orders,
-} from "@/server/db/schema";
-import {
   buildCustomerWaLink,
   cancelMessageText,
   resolveCustomerContacts,
 } from "@/server/order-contact";
+import { flashSessions, orderItems, orders } from "@/server/db/schema";
 import { isCancellable } from "@/server/order-status";
 import { maybeRunOrderSync } from "@/server/order-sync";
 import { buildStatusSteps } from "@/server/status-steps";
@@ -80,10 +82,25 @@ export default async function AdminOrdersPage({
     new Promise((resolve) => setTimeout(resolve, env.ORDER_SYNC_AWAIT_MS)),
   ]);
 
+  const sp = await searchParams;
+  const cursorStr = typeof sp.cursor === "string" ? sp.cursor : undefined;
+  const limit = Math.min(
+    Number(typeof sp.limit === "string" ? sp.limit : 20),
+    100,
+  );
+
   const rows = await db
     .select()
     .from(orders)
-    .orderBy(desc(orders.createdAt));
+    .where(cursorStr ? lt(orders.createdAt, new Date(cursorStr)) : undefined)
+    .orderBy(desc(orders.createdAt))
+    .limit(limit + 1);
+
+  const hasMore = rows.length > limit;
+  if (hasMore) rows.pop();
+  const nextCursor = hasMore
+    ? (rows.at(-1)?.createdAt.toISOString() ?? null)
+    : null;
 
   const allItems =
     rows.length === 0
@@ -91,7 +108,12 @@ export default async function AdminOrdersPage({
       : await db
           .select()
           .from(orderItems)
-          .where(inArray(orderItems.orderId, rows.map((r) => r.id)));
+          .where(
+            inArray(
+              orderItems.orderId,
+              rows.map((r) => r.id),
+            ),
+          );
 
   const itemsByOrder = new Map<string, typeof allItems>();
   for (const item of allItems) {
@@ -217,7 +239,7 @@ export default async function AdminOrdersPage({
     <main className="flex-1 space-y-6 p-4 md:p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="font-heading text-lg font-black uppercase tracking-wider text-neutral-950 sm:text-xl dark:text-neutral-50">
+          <h1 className="font-heading text-lg font-black tracking-wider text-neutral-950 uppercase sm:text-xl dark:text-neutral-50">
             Pesanan
           </h1>
           <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
@@ -229,7 +251,7 @@ export default async function AdminOrdersPage({
         <SyncNowButton className="mt-1" />
       </div>
 
-      <Panel title="TRANSAKSI MASUKAN" count={`${rows.length} transaksi`}>
+      <Panel title="TRANSAKSI MASUKAN" count={`${adminRows.length} transaksi`}>
         {adminRows.length === 0 ? (
           <p className="p-10 text-center text-sm text-neutral-500 dark:text-neutral-400">
             Belum ada pesanan masuk.
@@ -238,6 +260,36 @@ export default async function AdminOrdersPage({
           <AdminOrdersFilter rows={adminRows} initialTab={initialTab} />
         )}
       </Panel>
+
+      {/* Cursor pagination — prev disabled (cursor-pagination is forward-only without stored position) */}
+      <Pagination>
+        <PaginationContent>
+          <PaginationPrevious
+            href="?"
+            aria-disabled={!cursorStr}
+            className={
+              !cursorStr ? "pointer-events-none opacity-50" : undefined
+            }
+          />
+          {cursorStr ? (
+            <a
+              href="?"
+              className="text-muted-foreground hover:text-foreground mx-2 text-sm"
+            >
+              Reset filter
+            </a>
+          ) : null}
+          <PaginationNext
+            href={
+              nextCursor ? `?cursor=${encodeURIComponent(nextCursor)}` : "?"
+            }
+            aria-disabled={!nextCursor}
+            className={
+              !nextCursor ? "pointer-events-none opacity-50" : undefined
+            }
+          />
+        </PaginationContent>
+      </Pagination>
     </main>
   );
 }

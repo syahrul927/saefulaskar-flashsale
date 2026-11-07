@@ -1,4 +1,4 @@
-import { desc } from "drizzle-orm";
+import { desc, lt } from "drizzle-orm";
 import { headers } from "next/headers";
 import type { Metadata } from "next";
 
@@ -6,6 +6,12 @@ import {
   AdminJubelioProbe,
   type ProbeCapture,
 } from "@/app/_components/admin-jubelio-probe";
+import {
+  Pagination,
+  PaginationContent,
+  PaginationNext,
+  PaginationPrevious,
+} from "@/components/ui/pagination";
 import { env } from "@/env";
 import { db } from "@/server/db";
 import { webhookCaptures } from "@/server/db/schema";
@@ -16,8 +22,7 @@ export const metadata: Metadata = {
 
 export const dynamic = "force-dynamic";
 
-/** Newest first for the viewer. */
-const RECENT_LIMIT = 40;
+/** Cursor-based pagination — newest-first by id. */
 
 /**
  * Jubelio observation rig (spec §4.7). Not a reporting page — a bench.
@@ -30,12 +35,28 @@ const RECENT_LIMIT = 40;
  * sweep on the orders page already reads each linked SO, so they answered a
  * question nothing asks.
  */
-export default async function JubelioProbePage() {
+export default async function JubelioProbePage({
+  searchParams,
+}: {
+  searchParams: Promise<Record<string, string | string[] | undefined>>;
+}) {
+  const sp = await searchParams;
+  const cursorStr = typeof sp.cursor === "string" ? sp.cursor : undefined;
+  const limit = Math.min(
+    Number(typeof sp.limit === "string" ? sp.limit : 20),
+    100,
+  );
+
   const caps = await db
     .select()
     .from(webhookCaptures)
-    .orderBy(desc(webhookCaptures.receivedAt))
-    .limit(RECENT_LIMIT);
+    .where(cursorStr ? lt(webhookCaptures.id, cursorStr) : undefined)
+    .orderBy(desc(webhookCaptures.id))
+    .limit(limit + 1);
+
+  const hasMore = caps.length > limit;
+  if (hasMore) caps.pop();
+  const nextCursor = hasMore ? (caps.at(-1)?.id ?? null) : null;
 
   const captureRows: ProbeCapture[] = caps.map((c) => ({
     id: c.id,
@@ -64,7 +85,7 @@ export default async function JubelioProbePage() {
   return (
     <main className="flex-1 space-y-6 p-4 md:p-6">
       <div>
-        <h1 className="font-heading text-lg font-black uppercase tracking-wider text-neutral-950 sm:text-xl dark:text-neutral-50">
+        <h1 className="font-heading text-lg font-black tracking-wider text-neutral-950 uppercase sm:text-xl dark:text-neutral-50">
           Jejak Jubelio
         </h1>
         <p className="mt-1 text-sm text-neutral-500 dark:text-neutral-400">
@@ -79,6 +100,33 @@ export default async function JubelioProbePage() {
         sinkUrl={`${proto}://${host}/api/jubelio/webhook-sink/${token ?? "open"}`}
         tokenConfigured={Boolean(token)}
       />
+
+      <Pagination>
+        <PaginationContent>
+          <PaginationPrevious
+            href="?"
+            aria-disabled={!cursorStr}
+            className={
+              !cursorStr ? "pointer-events-none opacity-50" : undefined
+            }
+          />
+          {cursorStr ? (
+            <a
+              href="?"
+              className="text-muted-foreground hover:text-foreground mx-2 text-sm"
+            >
+              Reset filter
+            </a>
+          ) : null}
+          <PaginationNext
+            href={nextCursor ? `?cursor=${nextCursor}` : "?"}
+            aria-disabled={!nextCursor}
+            className={
+              !nextCursor ? "pointer-events-none opacity-50" : undefined
+            }
+          />
+        </PaginationContent>
+      </Pagination>
     </main>
   );
 }

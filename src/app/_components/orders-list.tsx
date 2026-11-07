@@ -5,6 +5,12 @@ import { CheckCircleIcon, ShoppingBagIcon } from "@phosphor-icons/react";
 import Link from "next/link";
 import { cn } from "cn";
 
+import {
+  Collapsible,
+  CollapsibleContent,
+  CollapsibleTrigger,
+} from "@/components/ui/collapsible";
+import { CaretDownIcon } from "@phosphor-icons/react";
 import { Button } from "@/components/ui/button";
 import type { BankAccount } from "@/server/checkout";
 import { ProofUploadButton } from "./proof-upload-button";
@@ -12,16 +18,16 @@ import { FilterPill } from "./filter-pill";
 import { PaymentPanel } from "./payment-panel";
 import { ReceiptTrigger, type ReceiptOrderData } from "./receipt-dialog";
 import { ShipmentBand } from "./shipment-band";
-import {
-  isPulseStatus,
-  orderStatusTone,
-  StatusBadge,
-} from "./status-badge";
+import { isPulseStatus, orderStatusTone, StatusBadge } from "./status-badge";
 import {
   OrderDetailTrigger,
   type OrderDetailData,
 } from "./order-detail-dialog";
-import { filterOrders, statusCounts, type OrderFilterTab } from "./order-filters";
+import {
+  filterOrders,
+  statusCounts,
+  type OrderFilterTab,
+} from "./order-filters";
 
 /**
  * One order serialized for the client list (Task 15). It IS the Task 14
@@ -66,7 +72,7 @@ const TABS: { id: OrderFilterTab; label: string }[] = [
 
 function EmptyPlate({ children }: { children: ReactNode }) {
   return (
-    <div className="rounded-xl border border-neutral-200 bg-white px-4 py-14 text-center shadow-xs dark:border-border dark:bg-card">
+    <div className="dark:border-border dark:bg-card rounded-xl border border-neutral-200 bg-white px-4 py-14 text-center shadow-xs">
       {children}
     </div>
   );
@@ -78,7 +84,7 @@ function NoOrdersPlate() {
     <EmptyPlate>
       <ShoppingBagIcon
         aria-hidden="true"
-        className="mx-auto mb-3 w-12 h-12 text-neutral-300"
+        className="mx-auto mb-3 h-12 w-12 text-neutral-300"
       />
       <p className="text-sm font-bold text-neutral-900 dark:text-neutral-100">
         Belum ada transaksi
@@ -104,7 +110,7 @@ function NoMatchPlate({ label }: { label: string }) {
     <EmptyPlate>
       <ShoppingBagIcon
         aria-hidden="true"
-        className="mx-auto mb-3 w-12 h-12 text-neutral-300"
+        className="mx-auto mb-3 h-12 w-12 text-neutral-300"
       />
       <p className="text-sm font-bold text-neutral-900 dark:text-neutral-100">
         Tidak ada pesanan {label}
@@ -125,15 +131,17 @@ function NoMatchPlate({ label }: { label: string }) {
   );
 }
 
-/**
- * One transaction card — mockup treatment (:648-768): the red caution
- * ring/tint while payment is pending (:648-652), mono booking ID + tinted
- * pulsing `StatusBadge` on the top rule, item rows with a thumb frame + mono
- * `qty × Rp…` line and the subtotal right-aligned (:713-726), and the Total +
- * CTA summary on the bottom rule (:729-766). `order_item` stores no per-line
- * image, so the thumb frame carries the product initial instead of an `<img>`
- * (same substitution the Task 14 receipt documented).
+/** Extracts the display initial from an item name:
+ * - "[Dus] Breast Doctor 100ml" → "B"  (strips [word] prefix first)
+ * - "Breast Doctor"             → "B"
+ * - "123 Item"                  → "1"
  */
+function itemInitial(name: string): string {
+  // Strip leading "[word] " bracket-prefixes before taking the first letter
+  const stripped = name.replace(/^\[[\w]+\]\s*/, "");
+  return stripped.charAt(0).toUpperCase();
+}
+
 function TransactionCard({
   row,
   onPay,
@@ -141,20 +149,23 @@ function TransactionCard({
   row: TransactionRow;
   onPay: () => void;
 }) {
+  const [itemsOpen, setItemsOpen] = useState(false);
   const unpaid = row.status === "UNPAID";
   return (
     <article
       className={cn(
-        "rounded-xl border bg-white p-4 shadow-xs transition dark:bg-card sm:p-5",
+        "dark:bg-card rounded-xl border bg-white p-4 shadow-xs transition sm:p-5",
         unpaid
           ? "border-red-300 bg-red-50/20 ring-1 ring-red-200"
-          : "border-neutral-200 hover:border-neutral-300 dark:border-border",
+          : itemsOpen
+            ? "border-border ring-ring ring-1"
+            : "dark:border-border border-neutral-200 hover:border-neutral-300",
       )}
     >
       {/* Top rule — ID + status tag left, date right (design.html:655-687). */}
-      <div className="mb-3 flex flex-col gap-2 border-b border-neutral-100 pb-3 dark:border-border sm:flex-row sm:items-center sm:justify-between">
+      <div className="dark:border-border mb-3 flex flex-col gap-2 border-b border-neutral-100 pb-3 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex flex-wrap items-center gap-2">
-          <span className="font-mono text-xs font-bold tabular-nums text-neutral-950 dark:text-neutral-50">
+          <span className="font-mono text-xs font-bold text-neutral-950 tabular-nums dark:text-neutral-50">
             {row.bookingId}
           </span>
           <StatusBadge
@@ -164,40 +175,102 @@ function TransactionCard({
             {row.statusLabel.toUpperCase()}
           </StatusBadge>
         </div>
-        <span className="font-mono text-[11px] tabular-nums text-neutral-500 dark:text-neutral-400">
+        <span className="font-mono text-[11px] text-neutral-500 tabular-nums dark:text-neutral-400">
           {row.dateLabel}
         </span>
       </div>
 
-      {/* Items (design.html:713-726) */}
-      <ul className="mb-3 space-y-2">
-        {row.items.map((item) => (
-          <li
-            key={item.id}
-            className="flex items-center justify-between gap-2 py-1 text-xs"
-          >
-            <div className="flex min-w-0 items-center gap-2.5">
-              <span
-                aria-hidden="true"
-                className="flex w-9 h-9 shrink-0 items-center justify-center rounded-lg border border-neutral-200 bg-neutral-100 font-mono text-sm font-bold uppercase text-neutral-500 dark:border-border dark:bg-neutral-800/60 dark:text-neutral-300"
-              >
-                {item.name.charAt(0)}
-              </span>
-              <div className="min-w-0">
-                <p className="truncate font-bold text-neutral-950 dark:text-neutral-50">
-                  {item.name}
-                </p>
-                <p className="font-mono text-[10px] tabular-nums text-neutral-500 dark:text-neutral-400">
-                  {item.qty} × {item.priceLabel}
-                </p>
+      {/* Items — first 2 shown, rest behind expand */}
+      <Collapsible
+        open={itemsOpen}
+        onOpenChange={setItemsOpen}
+        className="mb-3"
+      >
+        {/* Always-visible first 2 items */}
+        <ul className="space-y-2">
+          {row.items.slice(0, 2).map((item) => (
+            <li
+              key={item.id}
+              className="flex items-center justify-between gap-2 py-1 text-xs"
+            >
+              <div className="flex min-w-0 items-center gap-2.5">
+                <span
+                  aria-hidden="true"
+                  className="border-border bg-muted text-muted-foreground flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border font-mono text-sm font-bold uppercase dark:bg-neutral-800/60 dark:text-neutral-300"
+                >
+                  {itemInitial(item.name)}
+                </span>
+                <div className="min-w-0">
+                  <p className="truncate font-bold text-neutral-950 dark:text-neutral-50">
+                    {item.name}
+                  </p>
+                  <p className="font-mono text-[10px] text-neutral-500 tabular-nums dark:text-neutral-400">
+                    {item.qty} × {item.priceLabel}
+                  </p>
+                </div>
               </div>
-            </div>
-            <span className="shrink-0 font-mono font-bold tabular-nums text-neutral-900 dark:text-neutral-100">
-              {item.subtotalLabel}
-            </span>
-          </li>
-        ))}
-      </ul>
+              <span className="shrink-0 font-mono font-bold text-neutral-900 tabular-nums dark:text-neutral-100">
+                {item.subtotalLabel}
+              </span>
+            </li>
+          ))}
+        </ul>
+
+        {/* Remaining items (3+) behind collapsible */}
+        {row.items.length > 2 && (
+          <>
+            <CollapsibleContent className="h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-200 ease-out data-ending-style:h-0 data-starting-style:h-0">
+              <ul className="space-y-2">
+                {row.items.slice(2).map((item) => (
+                  <li
+                    key={item.id}
+                    className="flex items-center justify-between gap-2 py-1 text-xs"
+                  >
+                    <div className="flex min-w-0 items-center gap-2.5">
+                      <span
+                        aria-hidden="true"
+                        className="border-border bg-muted text-muted-foreground flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border font-mono text-sm font-bold uppercase dark:bg-neutral-800/60 dark:text-neutral-300"
+                      >
+                        {itemInitial(item.name)}
+                      </span>
+                      <div className="min-w-0">
+                        <p className="truncate font-bold text-neutral-950 dark:text-neutral-50">
+                          {item.name}
+                        </p>
+                        <p className="font-mono text-[10px] text-neutral-500 tabular-nums dark:text-neutral-400">
+                          {item.qty} × {item.priceLabel}
+                        </p>
+                      </div>
+                    </div>
+                    <span className="shrink-0 font-mono font-bold text-neutral-900 tabular-nums dark:text-neutral-100">
+                      {item.subtotalLabel}
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </CollapsibleContent>
+
+            {/* Expand trigger — accent-tint ghost (approved v2): tinted
+                background, brand-action text, no orange plate. */}
+            <CollapsibleTrigger>
+              <button
+                type="button"
+                className="bg-accent text-accent-foreground hover:bg-accent/70 active:bg-accent/50 mt-2 flex w-full items-center justify-center gap-1 rounded-lg py-1.5 text-xs font-semibold transition-colors"
+              >
+                <CaretDownIcon
+                  className={cn(
+                    "size-3.5 transition-transform",
+                    itemsOpen ? "rotate-180" : "",
+                  )}
+                />
+                {itemsOpen
+                  ? "Sembunyikan"
+                  : `Lihat ${row.items.length - 2} item lainnya`}
+              </button>
+            </CollapsibleTrigger>
+          </>
+        )}
+      </Collapsible>
 
       {/* Unpaid action band — mockup banner slot (:689-710) without any
           countdown text (D7): the proof status line plus the two entry
@@ -210,7 +283,7 @@ function TransactionCard({
               <CheckCircleIcon
                 aria-hidden="true"
                 weight="fill"
-                className="w-4 h-4 shrink-0 text-emerald-600"
+                className="h-4 w-4 shrink-0 text-emerald-600"
               />
               Bukti terkirim —{" "}
               <a
@@ -233,7 +306,9 @@ function TransactionCard({
               Instruksi Pembayaran
             </Button>
             {/* `w-full` makes the upload drop to its own line in this row. */}
-            {!row.transferProofUrl && <ProofUploadButton orderId={row.orderId} />}
+            {!row.transferProofUrl && (
+              <ProofUploadButton orderId={row.orderId} />
+            )}
           </div>
         </div>
       )}
@@ -254,7 +329,7 @@ function TransactionCard({
           tell from here. Say exactly that, and put the question somewhere to
           take it. Shares the unpaid band's slot: one note per order. */}
       {row.status === "COMPLETED" && (
-        <p className="mb-3 rounded-xl border border-neutral-200 bg-neutral-50/60 px-3 py-2 text-xs text-neutral-600 dark:border-border dark:bg-input/20 dark:text-neutral-300">
+        <p className="dark:border-border dark:bg-input/20 mb-3 rounded-xl border border-neutral-200 bg-neutral-50/60 px-3 py-2 text-xs text-neutral-600 dark:text-neutral-300">
           Order sudah diproses atau dikirim —{" "}
           <a
             className="font-semibold text-neutral-950 underline underline-offset-4 dark:text-neutral-50"
@@ -269,7 +344,7 @@ function TransactionCard({
       )}
 
       {/* Bottom rule — payment meta left, Total + Struk right (:729-766). */}
-      <div className="flex flex-col gap-3 border-t border-neutral-100 pt-3 font-mono text-xs dark:border-border sm:flex-row sm:items-center sm:justify-between">
+      <div className="dark:border-border flex flex-col gap-3 border-t border-neutral-100 pt-3 font-mono text-xs sm:flex-row sm:items-center sm:justify-between">
         <span className="text-[11px] text-neutral-500 dark:text-neutral-400">
           Pembayaran:{" "}
           <strong className="font-bold text-neutral-800 dark:text-neutral-100">
@@ -281,7 +356,7 @@ function TransactionCard({
             <span className="mr-1.5 text-[11px] text-neutral-500 dark:text-neutral-400">
               Total:
             </span>
-            <span className="text-sm font-bold tabular-nums text-neutral-950 dark:text-neutral-50">
+            <span className="text-sm font-bold text-neutral-950 tabular-nums dark:text-neutral-50">
               {row.grandTotalLabel}
             </span>
           </div>
@@ -327,7 +402,7 @@ function OrdersList({
   const selected =
     paymentOrderId === null
       ? null
-      : rows.find((row) => row.orderId === paymentOrderId) ?? null;
+      : (rows.find((row) => row.orderId === paymentOrderId) ?? null);
 
   return (
     <div className="space-y-5">
@@ -350,9 +425,7 @@ function OrdersList({
       </div>
 
       {visible.length === 0 ? (
-        <NoMatchPlate
-          label={TABS.find(({ id }) => id === tab)?.label ?? ""}
-        />
+        <NoMatchPlate label={TABS.find(({ id }) => id === tab)?.label ?? ""} />
       ) : (
         <div className="space-y-3.5">
           {visible.map((row) => (

@@ -9,8 +9,19 @@
 - Always use yarn instead of npm, pnpm or bun.
 - Never use image as parameter input for your model. Either take a screenshot or reference existing file images. Your model doesn't support image input.
 - DO NOT EVER TRY TO USE READ FUNCTION FOR IMAGE EXTENSION LIKE PNG, JPG, JPEG or anything else.
+- When developing UI and validating the result, do not analyze images (PNG, JPG, JPEG, or any other image format). Use the actual running app or reference existing file assets instead.
 - Base components are shadcn in `src/app/_components/ui/`. Reuse those before writing new ones. Match shadcn look/style — use existing components when building visual companions or UI for the user.
 - New dashboard pages wrap their content in the standard page padding (`flex-1 space-y-6 p-4 md:p-6` or `p-6`) — match the sibling pages, not a bare unstyled div.
+
+## Superpowers Skill Chain
+
+When using `superpowers:brainstorming` or other superpowers process skills in a chain:
+1. Brainstorm → mockup approval via visual companion
+2. **Do NOT directly implement after getting skill results.** Store the output as context.
+3. Write a spec/plan document using the stored results — human reviews and approves it.
+4. Only then proceed to implementation.
+
+This applies even when a skill like `frontend-design` is invoked mid-chain: collect its findings, hold them as context, write up the approach, get human approval, then build.
 
 ## Perceived Performance & Feedback
 

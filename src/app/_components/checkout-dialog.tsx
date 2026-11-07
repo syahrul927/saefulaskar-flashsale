@@ -45,7 +45,11 @@ type FieldErrors = {
 };
 
 // Mirrors `recipientSchema` bounds so bad input never round-trips to a 400.
-const LIMITS = { name: { min: 2, max: 120 }, phone: { min: 6, max: 20 }, address: { min: 10, max: 400 } } as const;
+const LIMITS = {
+  name: { min: 2, max: 120 },
+  phone: { min: 6, max: 20 },
+  address: { min: 10, max: 400 },
+} as const;
 
 /**
  * Checkout recipient step — mockup "MODAL 2: CHECKOUT" transplant
@@ -168,13 +172,13 @@ function CheckoutDialog({
         {/* Gradient bar — Panel/urgency-banner treatment (design.html:466). */}
         <div
           aria-hidden="true"
-          className="h-1.5 shrink-0 bg-gradient-to-r from-brand-primary via-brand-secondary to-brand-primary"
+          className="from-brand-primary via-brand-secondary to-brand-primary h-1.5 shrink-0 bg-gradient-to-r"
         />
 
-        <div className="shrink-0 border-b border-neutral-200 bg-neutral-50/70 px-5 py-4 pr-14 dark:border-border dark:bg-neutral-900/40">
+        <div className="dark:border-border shrink-0 border-b border-neutral-200 bg-neutral-50/70 px-5 py-4 pr-14 dark:bg-neutral-900/40">
           <DialogHeader className="gap-1">
             <DialogTitle className="text-sm font-bold tracking-wide text-neutral-950 sm:text-base dark:text-neutral-50">
-              AMANKAN PESANAN ANDA
+              Bayar Pesananmu Sekarang
             </DialogTitle>
             <DialogDescription className="text-xs">
               Stok terkunci saat pesanan dibuat. Lengkapi data penerima di
@@ -187,7 +191,7 @@ function CheckoutDialog({
           <Field>
             <FieldLabel
               htmlFor="recipient-name"
-              className="font-mono text-[10px] font-bold uppercase tracking-wider text-neutral-500"
+              className="font-mono text-[10px] font-bold tracking-wider text-neutral-500 uppercase"
             >
               Nama Penerima
             </FieldLabel>
@@ -197,7 +201,7 @@ function CheckoutDialog({
               maxLength={LIMITS.name.max}
               aria-invalid={!!errors.name}
               onChange={(e) => setName(e.target.value)}
-              className="rounded-lg bg-neutral-50 dark:bg-input/30"
+              className="dark:bg-input/30 rounded-lg bg-neutral-50"
             />
             {/* Hint shows whenever the field was SSR-prefilled from the
                 account (kept while editing too — the value came from the
@@ -207,13 +211,15 @@ function CheckoutDialog({
                 ← dari akun Anda
               </p>
             )}
-            <FieldError errors={[errors.name ? { message: errors.name } : undefined]} />
+            <FieldError
+              errors={[errors.name ? { message: errors.name } : undefined]}
+            />
           </Field>
 
           <Field>
             <FieldLabel
               htmlFor="recipient-phone"
-              className="font-mono text-[10px] font-bold uppercase tracking-wider text-neutral-500"
+              className="font-mono text-[10px] font-bold tracking-wider text-neutral-500 uppercase"
             >
               No. WhatsApp
             </FieldLabel>
@@ -224,20 +230,22 @@ function CheckoutDialog({
               maxLength={LIMITS.phone.max}
               aria-invalid={!!errors.phone}
               onChange={(e) => setPhone(e.target.value)}
-              className="rounded-lg bg-neutral-50 font-mono dark:bg-input/30"
+              className="dark:bg-input/30 rounded-lg bg-neutral-50 font-mono"
             />
             {recipientDefaults.phone != null && (
               <p className="font-mono text-[10px] text-emerald-700 dark:text-emerald-400">
                 ← dari akun Anda
               </p>
             )}
-            <FieldError errors={[errors.phone ? { message: errors.phone } : undefined]} />
+            <FieldError
+              errors={[errors.phone ? { message: errors.phone } : undefined]}
+            />
           </Field>
 
           <Field>
             <FieldLabel
               htmlFor="recipient-address"
-              className="font-mono text-[10px] font-bold uppercase tracking-wider text-neutral-500"
+              className="font-mono text-[10px] font-bold tracking-wider text-neutral-500 uppercase"
             >
               Alamat Pengiriman
             </FieldLabel>
@@ -247,19 +255,23 @@ function CheckoutDialog({
               maxLength={LIMITS.address.max}
               aria-invalid={!!errors.address}
               onChange={(e) => setAddress(e.target.value)}
-              className="rounded-xl bg-neutral-50 font-mono dark:bg-input/30"
+              className="dark:bg-input/30 rounded-xl bg-neutral-50 font-mono"
             />
             {recipientDefaults.address != null && (
               <p className="font-mono text-[10px] text-emerald-700 dark:text-emerald-400">
                 ← dari akun Anda
               </p>
             )}
-            <FieldError errors={[errors.address ? { message: errors.address } : undefined]} />
+            <FieldError
+              errors={[
+                errors.address ? { message: errors.address } : undefined,
+              ]}
+            />
           </Field>
 
           {/* Breakdown box — mono summary + grand total (design.html checkout
               modal "Breakdown"). */}
-          <div className="space-y-1.5 rounded-xl border border-neutral-200 bg-neutral-50 p-3 font-mono text-xs dark:border-border dark:bg-neutral-900/40">
+          <div className="dark:border-border space-y-1.5 rounded-xl border border-neutral-200 bg-neutral-50 p-3 font-mono text-xs dark:bg-neutral-900/40">
             {items.map((row) => (
               <div
                 key={row.sessionProductId}
@@ -273,7 +285,7 @@ function CheckoutDialog({
                 </span>
               </div>
             ))}
-            <div className="flex items-baseline justify-between border-t border-neutral-200 pt-1.5 font-bold text-neutral-950 dark:border-border dark:text-neutral-50">
+            <div className="dark:border-border flex items-baseline justify-between border-t border-neutral-200 pt-1.5 font-bold text-neutral-950 dark:text-neutral-50">
               <span>Total</span>
               <span className="text-sm font-black tabular-nums">
                 {formatRupiah(subtotal)}
@@ -282,7 +294,7 @@ function CheckoutDialog({
           </div>
         </div>
 
-        <div className="shrink-0 border-t border-neutral-200 bg-white px-5 py-4 dark:border-border dark:bg-card">
+        <div className="dark:border-border dark:bg-card shrink-0 border-t border-neutral-200 bg-white px-5 py-4">
           <Button
             type="button"
             variant="ink"

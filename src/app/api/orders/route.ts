@@ -1,4 +1,4 @@
-import { desc, eq, inArray, sql } from "drizzle-orm";
+import { desc, eq, inArray, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { env } from "@/env";
@@ -42,7 +42,10 @@ const CheckoutBody = z
   .merge(recipientSchema);
 
 function jsonError(status: number, error: string, itemId?: number) {
-  return Response.json({ ok: false, error, ...(itemId === undefined ? {} : { itemId }) }, { status });
+  return Response.json(
+    { ok: false, error, ...(itemId === undefined ? {} : { itemId }) },
+    { status },
+  );
 }
 
 /**
@@ -215,16 +218,15 @@ export async function POST(request: Request) {
       );
     });
 
-    const bankAccounts = parseBankAccounts(env.BANK_ACCOUNTS)
-      .map((bank) => ({
-        ...bank,
-        waLink: buildWaLink({
-          bookingId,
-          grandTotal,
-          bank,
-          whatsappNumber: env.WHATSAPP_NUMBER,
-        }),
-      }));
+    const bankAccounts = parseBankAccounts(env.BANK_ACCOUNTS).map((bank) => ({
+      ...bank,
+      waLink: buildWaLink({
+        bookingId,
+        grandTotal,
+        bank,
+        whatsappNumber: env.WHATSAPP_NUMBER,
+      }),
+    }));
 
     return Response.json(
       {
@@ -246,18 +248,36 @@ export async function POST(request: Request) {
 
 /**
  * GET /api/orders — list the signed-in customer's orders (newest first),
- * each with its line items.
+ * each with its line items. Cursor-based pagination via ?cursor=ISO-string.
  */
-export async function GET() {
+export async function GET(request: Request) {
   const auth = await getSession();
   if (!auth)
-    return jsonError(401, "Anda belum masuk. Masuk dulu untuk melihat pesanan.");
+    return jsonError(
+      401,
+      "Anda belum masuk. Masuk dulu untuk melihat pesanan.",
+    );
+
+  const { searchParams } = new URL(request.url);
+  const cursor = searchParams.get("cursor");
+  const limit = Math.min(Number(searchParams.get("limit") ?? 20), 100);
 
   const rows = await db
     .select()
     .from(orders)
-    .where(eq(orders.customerId, auth.user.id))
-    .orderBy(desc(orders.createdAt));
+    .where(
+      cursor
+        ? sql`${orders.customerId} = ${auth.user.id} AND ${orders.createdAt} < ${new Date(cursor)}`
+        : eq(orders.customerId, auth.user.id),
+    )
+    .orderBy(desc(orders.createdAt))
+    .limit(limit + 1);
+
+  const hasMore = rows.length > limit;
+  if (hasMore) rows.pop();
+  const nextCursor = hasMore
+    ? (rows.at(-1)?.createdAt.toISOString() ?? null)
+    : null;
 
   const allItems =
     rows.length === 0
@@ -265,7 +285,12 @@ export async function GET() {
       : await db
           .select()
           .from(orderItems)
-          .where(inArray(orderItems.orderId, rows.map((r) => r.id)));
+          .where(
+            inArray(
+              orderItems.orderId,
+              rows.map((r) => r.id),
+            ),
+          );
 
   const itemsByOrder = new Map<string, typeof allItems>();
   for (const item of allItems) {
@@ -280,5 +305,7 @@ export async function GET() {
       ...order,
       items: itemsByOrder.get(order.id) ?? [],
     })),
+    nextCursor,
+    hasMore,
   });
 }
