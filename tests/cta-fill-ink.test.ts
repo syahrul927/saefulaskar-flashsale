@@ -1,20 +1,22 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 
-// Partner ruling, 2026-11-07: an orange FILL under a button label is off-brand
-// — orange is decoration (dots, chips, tints, the focus ring), slate is the
-// action. Every former `variant="brand"` / `variant="mark"` CTA now uses the
-// shadcn `default` variant, which this repo's tokens already wire to brand-ink:
-// `--primary` is oklch(0.278 0.030 256.8) == #1F2937 == `--color-brand-ink`
-// (both pinned in tests/brand-palette.test.ts), and `--primary-foreground` is
-// white, so the label measures 14.68:1 instead of the orange's 5.56:1.
+// Partner rulings, 2026-11-07: an orange FILL under a button label is
+// off-brand — orange is decoration (dots, chips, tints, the focus ring), the
+// logo's dark is the action. Every former `variant="brand"` / `variant="mark"`
+// CTA now uses the shadcn `default` variant, which is `bg-primary`:
+// oklch(0.32 0.06 256.8) == #1E3351 — the wordmark slate #1F2937 lifted at the
+// same hue, because at L* 16.3 a 36px fill reads black and only the login
+// plate's 500x327 area shows its blue tint. With a white label it measures
+// 12.75:1, where the orange fills measured 5.56:1 / 5.18:1. Values pinned in
+// tests/brand-palette.test.ts.
 //
 // `variant="ink"` (neutral-900 #171717, 15 call sites) deliberately stays: it
-// measures 1.22:1 against brand-ink, i.e. indistinguishable next to it, so
+// measures 1.41:1 against the navy fill — still nearly indistinguishable — so
 // sweeping it is churn rather than a fix.
 const button = readFileSync("src/components/ui/button.tsx", "utf8");
 
-describe("CTA fills are brand-ink, never brand-orange", () => {
+describe("CTA fills are the logo's dark navy, never brand-orange", () => {
   it("declares no orange-filled button variant", () => {
     // The invariant, stated once: no `bg-brand-*` may fill a button. A new
     // orange variant is exactly what this test exists to refuse.
@@ -66,9 +68,9 @@ describe("CTA fills are brand-ink, never brand-orange", () => {
 
   it("lifts the cart count chip off the dark fill it can no longer outline", () => {
     // The chip is `bg-brand-secondary` (#FB923C) with near-black digits — it
-    // reads 8.75:1 on its own fill and separates from brand-ink at 6.49:1.
-    // Its old `border-neutral-950` measured 1.35:1 against the slate button it
-    // now sits on, i.e. it painted nothing.
+    // reads 8.75:1 on its own fill and separates from the navy button at
+    // 5.63:1, over the 3:1 graphic bar. Its old `border-neutral-950` measures
+    // 1.55:1 against that button, i.e. it painted nothing.
     // Scanned with comments stripped and the match anchored to a `className`
     // attribute. Bare `/"[^"]*bg-brand-secondary[^"]*"/` is not enough: between
     // two adjacent string literals the renderer sees one big quote-free run,

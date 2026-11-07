@@ -15,8 +15,11 @@
  * buttons (calm, easy to look at), orange as accent/mark where it pops
  * (badges, highlights, selection, tints). No labelled control is filled
  * orange (partner ruling 2026-11-07, `tests/cta-fill-ink.test.ts`): every
- * button fill is `--primary` = brand-ink, so the orange a CTA carries is the
- * label, the dot or the ring beside it, never the plate under it. Full-strength
+ * button fill is `--primary`, the lifted navy #1E3351 — same hue as the
+ * wordmark slate `--color-brand-ink` #1F2937, but light enough that a 36px
+ * control reads navy instead of black. Text keeps the sampled slate. So the
+ * orange a CTA carries is the label, the dot or the ring beside it, never the
+ * plate under it. Full-strength
  * orange may still sit behind text on unlabelled surfaces (chips, rails) under
  * near-black text; under white/light text it fails AA (3.56:1), and that role
  * is `brand-action` #C2410C — also the orange allowed as text on paper. Warm
@@ -29,8 +32,13 @@
   --card-foreground: oklch(0.278 0.030 256.8);
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.278 0.030 256.8);
-  --primary: oklch(0.278 0.030 256.8); /* #1F2937 ink buttons — slate leads, orange accents */
-  --primary-foreground: oklch(1 0 0); /* paper text on ink — 14.68:1 */
+  /* Fill, not text. Same hue as the wordmark slate, lifted: #1F2937 at L* 16.3
+     carries only B-R 24 of blue tint, which reads as NAVY across the login
+     plate's 500x327 area but as BLACK in a 36px button. L* 21.0 / B-R 51 keeps
+     it recognisably the logo's dark and makes a small control read navy.
+     Partner ruling 2026-11-07. Pinned by tests/brand-palette.test.ts. */
+  --primary: oklch(0.32 0.06 256.8); /* #1E3351 navy fills — buttons, checkbox, switch, calendar */
+  --primary-foreground: oklch(1 0 0); /* paper text on the navy fill — 12.75:1 (AAA) */
   --secondary: oklch(0.960 0.007 67.7); /* #F5F1ED warm neutral — accents, badges */
   --secondary-foreground: oklch(0.278 0.030 256.8);
   --muted: oklch(0.969 0.005 67.8); /* #F7F4F1 */
@@ -104,9 +112,16 @@
   --color-brand-primary-hover: #F97316;
   --color-brand-secondary: #FB923C;
   /* The two colours the supplied logo is actually made of — mark orange and
-     wordmark slate (`public/brand/logo-*.png` sample to #EA580C / #1F2937).
-     `brand-primary`/`brand-secondary` now carry the same family, so gradients
-     and brand-forward surfaces (login) read as one hue instead of two brands. */
+     wordmark slate (`public/brand/logo-*.png` sample to #EA580C / #1F2937;
+     re-sampled 2026-11-07 in-browser: 38,334 wordmark pixels mean
+     rgb(31,41,55)). `brand-primary`/`brand-secondary` now carry the same
+     family, so gradients and brand-forward surfaces (login) read as one hue
+     instead of two brands.
+     `brand-ink` is the SAMPLED slate and stays that value: it is the login
+     plate (`bg-brand-ink`, the token's only consumer) and the reference behind
+     `--foreground` text. Control fills use `--primary` instead — the same hue
+     at L* 21.0 / #1E3351 — because this value at L* 16.3 only reads its blue
+     tint across a large area; at button size it reads black. */
   --color-brand-mark: #EA580C;
   --color-brand-ink: #1F2937;
   /* Same hue as the mark, darkened enough to hold white text: #EA580C itself

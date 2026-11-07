@@ -40,11 +40,26 @@ describe("brand palette", () => {
     const root = css.slice(css.indexOf(":root {"), css.indexOf(".dark {"));
     // `0\.030|0\.03` is one number in two spellings (prettier's is the short
     // one), so the alternation buys format tolerance and gives up nothing.
+    //
+    // Partner ruling 2026-11-07: the FILL and the TEXT are now two different
+    // darks of the same hue. `--foreground` keeps the wordmark slate sampled
+    // off the logo PNG (oklch 0.278 0.030 256.8 = #1F2937), because copy should
+    // be brand-exact. `--primary` is lifted to oklch(0.32 0.06 256.8) =
+    // #1E3351: at #1F2937's L* 16.3 a 36px control reads black (the blue tint
+    // is B-R = 24, which only registers over the login plate's 500x327 area),
+    // and doubling the tint to B-R = 51 makes a small fill read navy while the
+    // white label still measures 12.75:1 (AAA). `--primary-foreground` is
+    // pinned too, so the pair cannot drift apart unnoticed.
     expect(root).toMatch(
-      /--primary:\s*oklch\(\s*0\.278\s+(?:0\.030|0\.03)\s+256\.8\s*\)/,
+      /--primary:\s*oklch\(\s*0\.32\s+(?:0\.060|0\.06)\s+256\.8\s*\)/,
     );
+    expect(root).toMatch(/--primary-foreground:\s*oklch\(\s*1\s+0\s+0\s*\)/);
     expect(root).toMatch(
       /--foreground:\s*oklch\(\s*0\.278\s+(?:0\.030|0\.03)\s+256\.8\s*\)/,
+    );
+    // …and the fill must NOT be the text value any more.
+    expect(root).not.toMatch(
+      /--primary:\s*oklch\(\s*0\.278\s+(?:0\.030|0\.03)\s+256\.8\s*\)/,
     );
     expect(root).toMatch(/--accent:\s*oklch\(\s*0\.966\s+0\.021\s+60\.8\s*\)/);
     expect(root).toMatch(

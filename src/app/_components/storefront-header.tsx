@@ -104,14 +104,16 @@ function OrdersIconButton({ className }: { className?: string }) {
 }
 
 /**
- * Cart trigger — the brand-ink rail button carrying the live item
- * count as a mono chip and the subtotal in mono. Chip shows only when the
+ * Cart trigger — the brand-navy rail button (`bg-primary` = #1E3351) carrying
+ * the live item count as a mono chip and the subtotal in mono. Chip shows only
+ * when the
  * cart has items, mirroring the mockup's `cartTotalCount > 0` guard; the
  * `Rp` figure drops below `sm` where the rail can't fit both clusters.
  * The chip keeps `bg-brand-secondary` as decoration and dropped its
  * `border-neutral-950` outline: that near-black ring separated a pale chip
- * from the old orange fill, and measures 1.35:1 against brand-ink — invisible
- * — while the chip itself already separates at 6.49:1.
+ * from the old orange fill, and measures 1.55:1 against the navy — invisible
+ * — while the chip itself already separates at 5.63:1, well over the 3:1
+ * graphic bar.
  */
 function CartButton({ className }: { className?: string }) {
   const { subtotal, count, openDrawer } = useCartContext();

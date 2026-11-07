@@ -12,14 +12,16 @@ const buttonVariants = cva(
       variant: {
         default: "bg-primary text-primary-foreground hover:bg-primary/80",
         ink: "bg-neutral-900 text-white hover:bg-neutral-950 dark:bg-neutral-50 dark:text-neutral-900 dark:hover:bg-white",
-        // No orange-filled variant lives here any more. Partner ruling
+        // No orange-filled variant lives here any more. Partner rulings,
         // 2026-11-07: brand orange is decoration (dots, chips, tints, the focus
-        // ring), never a fill under a label. The `default` variant above IS the
-        // brand-ink CTA — `--primary` is #1F2937, the logo's wordmark slate,
-        // with a white label at 14.68:1 — so the former `brand` (#EA580C +
-        // near-black, 5.56:1) and `mark` (#C2410C + white, 5.18:1) variants are
-        // deleted rather than repainted: two names for one dark fill was the
-        // defect. Pinned by tests/cta-fill-ink.test.ts.
+        // ring), never a fill under a label; and the CTA fill is the logo's
+        // dark. The `default` variant above IS that CTA — `--primary` is
+        // #1E3351, the wordmark slate #1F2937 lifted at the same hue so a 36px
+        // fill reads navy instead of black, carrying a white label at 12.75:1 —
+        // so the former `brand` (#EA580C + near-black, 5.56:1) and `mark`
+        // (#C2410C + white, 5.18:1) variants are deleted rather than repainted:
+        // two names for one dark fill was the defect. Pinned by
+        // tests/cta-fill-ink.test.ts and tests/brand-palette.test.ts.
         outline:
           "border-border bg-background hover:bg-muted hover:text-foreground aria-expanded:bg-muted aria-expanded:text-foreground dark:bg-transparent dark:hover:bg-input/30",
         secondary:
