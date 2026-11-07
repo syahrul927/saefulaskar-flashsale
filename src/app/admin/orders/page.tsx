@@ -19,7 +19,7 @@ import {
   PaginationNext,
   PaginationPrevious,
 } from "@/components/ui/pagination";
-import { SyncNowButton } from "@/app/_components/sync-now-button";
+import { SyncControls } from "@/app/_components/sync-controls";
 import { env } from "@/env";
 import { formatRupiah } from "@/lib/format";
 import { parsePageLimit, parseTimestampCursor } from "@/lib/pagination-params";
@@ -273,9 +273,10 @@ export default async function AdminOrdersPage({
             Verifikasi bukti transfer dan konfirmasi pembayaran.
           </p>
         </div>
-        {/* Manual sync: with no webhook and no cron, statuses move on this
-            page's throttled pass (once per 5 min) or on this button (now). */}
-        <SyncNowButton className="mt-1" />
+        {/* Sync triggers: with no webhook and no cron, statuses move on this
+            page's throttled pass (once per 5 min), on the manual button, or
+            on the 10 s poll this island runs while the panel is open. */}
+        <SyncControls className="mt-1" />
       </div>
 
       <Panel
