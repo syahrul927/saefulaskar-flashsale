@@ -1,4 +1,4 @@
-import { and, eq, isNotNull, notInArray } from "drizzle-orm";
+import { and, eq, isNotNull, isNull, notInArray, or } from "drizzle-orm";
 
 import { env } from "@/env";
 import { JubelioError } from "@/lib/jubelio";
@@ -285,15 +285,24 @@ export function createDbSyncDeps(): SyncDeps {
           shipper: orders.shipper,
         })
         .from(orders)
-        // End states are excluded, not merely skipped later: a COMPLETED or
-        // CANCEL row would otherwise cost an upstream read on every pass,
-        // forever, to produce a patch `planSync` refuses to emit (spec §4.4).
-        // This is the query behind "only select the orders that are not complete
-        // or cancelled".
+        // End states are excluded, not merely skipped later — except the one
+        // the webhook creates: a COMPLETED row that has no resi yet RE-ENTERS
+        // the query (spec §4.4 — the invoice webhook can complete an order
+        // before Jubelio's header carries a tracking number, and the resi
+        // backfill is the only patch such a row may ever receive). The OR is
+        // what keeps this from costing an upstream read forever: once the resi
+        // lands, the second disjunct goes false and the row drops back out
+        // again. A CANCEL row is excluded by the `not in` in every case.
         .where(
           and(
             isNotNull(orders.jubelioSoId),
-            notInArray(orders.status, [...END_STATUSES]),
+            or(
+              notInArray(orders.status, [...END_STATUSES]),
+              and(
+                eq(orders.status, "COMPLETED"),
+                isNull(orders.trackingNumber),
+              ),
+            ),
           ),
         );
     },
@@ -361,16 +370,27 @@ export function createDbSyncDeps(): SyncDeps {
           // Guarded, where this used to be a bare update: a sync racing an admin
           // cancel could otherwise overwrite CANCEL with CONFIRMED, and
           // `flipped` being empty is how the loser of that race finds out.
+          // The predicate splits by patch kind (spec §4.4): a patch carrying a
+          // `status` keeps the full end-state exclusion — no status write may
+          // ever land on a COMPLETED or CANCEL row — while a resi-only patch
+          // (no `status` key, the kind Task 4's `planSync` emits for a
+          // COMPLETED row) is barred from CANCEL alone, which is what lets the
+          // resi backfill land on the row the webhook already completed.
           .where(
             and(
               eq(orders.id, patch.orderId),
-              notInArray(orders.status, [...END_STATUSES]),
+              status
+                ? notInArray(orders.status, [...END_STATUSES])
+                : notInArray(orders.status, ["CANCEL"]),
             ),
           )
           .returning({ id: orders.id });
         landed = flipped.length === 1;
         // Four gates, each with its own reason. `status`: a resi-only pass is not
-        // a transition (spec §4.5). `before`: the row may have been deleted
+        // a transition (spec §4.5) — and because the gate reads the `const`
+        // copy, a resi-only patch (whose `status` is `undefined`) writes no
+        // audit row even when its UPDATE lands on a COMPLETED row: the resi
+        // backfill stays silent. `before`: the row may have been deleted
         // between the pre-read and the write. `landed`: the guarded UPDATE may
         // have matched nothing, so a lost race writes no audit row. And
         // `before.status !== status`, which is the term a review caught: the

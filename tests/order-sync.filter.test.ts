@@ -133,7 +133,31 @@ describe("createDbSyncDeps().listLinkedOrders", () => {
     const query = sqlOf(state.selectConditions[0]);
     expect(query.sql).toContain("is not null");
     expect(query.sql).toContain("not in");
-    expect(query.params).toEqual([...END_STATUSES]);
+    // The trailing `COMPLETED` is NOT an end state slipping in — it is the
+    // equality param of the widened query's second disjunct (COMPLETED rows
+    // without a resi re-enter the query, the sibling test below). The first
+    // two params are still the end states feeding the `not in`.
+    expect(query.params).toEqual([...END_STATUSES, "COMPLETED"]);
+  });
+
+  it("re-admits COMPLETED rows that still have no resi (spec §4.4)", async () => {
+    // The invoice webhook completes an order before its resi arrives, so a
+    // COMPLETED-without-trackingNumber row must cost the upstream read again —
+    // once. Once the resi lands, the second disjunct goes false and the row
+    // drops back out of the query on the next pass.
+    await createDbSyncDeps().listLinkedOrders();
+
+    expect(state.selectConditions).toHaveLength(1);
+    const query = sqlOf(state.selectConditions[0]);
+    // The whole predicate is `notInArray OR (eq COMPLETED AND isNull resi)`,
+    // and the OR must wrap BOTH sides — an AND there would re-exclude every
+    // in-flight row that isn't COMPLETED.
+    expect(query.sql).toContain(" or ");
+    expect(query.sql).toContain('"pg-drizzle_order"."status" = ');
+    expect(query.sql).toContain('"pg-drizzle_order"."tracking_number" is null');
+    // Params order: the two end states feed the `not in`, the third is the
+    // COMPLETED equality — the third one is what proves the new disjunct.
+    expect(query.params).toEqual([...END_STATUSES, "COMPLETED"]);
   });
 });
 
@@ -300,6 +324,74 @@ describe("createDbSyncDeps().apply", () => {
     expect(state.updates).toEqual([
       { trackingNumber: "001818714258", shipper: "SiCepat HALU" },
     ]);
+    expect(state.history).toEqual([]);
+  });
+
+  it("guards a resi-only patch against CANCEL only, and lands on a COMPLETED row", async () => {
+    // Task 4's resi-only patches target COMPLETED rows (the webhook flips the
+    // order before Jubelio's header carries a resi), so the full end-state
+    // guard would refuse every one of them. A resi-only patch carries no
+    // status key, hence no `status` write to keep out of an end state — the
+    // only state it must still never touch is CANCEL.
+    state.selectRows = [[{ status: "COMPLETED" }]];
+    state.returning = [{ id: "o1" }];
+
+    const outcome = await createDbSyncDeps().apply({
+      orderId: "o1",
+      trackingNumber: "001818714258",
+      shipper: "SiCepat HALU",
+    });
+
+    expect(outcome).toEqual({ landed: true });
+    expect(state.updates).toEqual([
+      { trackingNumber: "001818714258", shipper: "SiCepat HALU" },
+    ]);
+    const query = sqlOf(state.updateConditions[0]);
+    expect(query.sql).toContain("not in");
+    // The guard lists ONLY CANCEL — `params` after the id is exactly the one
+    // status, which is what distinguishes the split guard from the old
+    // all-end-states one.
+    expect(query.params).toEqual(["o1", "CANCEL"]);
+    // And the resi stays silent: no status key means no audit row (spec §4.5).
+    expect(state.history).toEqual([]);
+  });
+
+  it("still guards a status patch with the full end-state exclusion", async () => {
+    // The split is by patch KIND: anything carrying a `status` keeps the old
+    // full end-state guard, so a status write can never land on a COMPLETED
+    // row (the sync must not re-flip what the webhook finished) — pinned here
+    // by asserting the params carry BOTH end states, not just CANCEL. The
+    // zero-rows outcome below also models the guard refusing.
+    state.selectRows = [[{ status: "COMPLETED" }]];
+    state.returning = [];
+
+    const outcome = await createDbSyncDeps().apply({
+      orderId: "o1",
+      status: "CONFIRMED",
+    });
+
+    const query = sqlOf(state.updateConditions[0]);
+    expect(query.sql).toContain("not in");
+    expect(query.params).toEqual(["o1", ...END_STATUSES]);
+    expect(outcome).toEqual({ landed: false });
+    expect(state.history).toEqual([]);
+  });
+
+  it("a resi-only patch into a CANCEL row loses the race — no rows, no history", async () => {
+    // CANCEL is the one end state even a resi-only write may not touch, so the
+    // split guard still excludes it and the UPDATE matches nothing.
+    state.selectRows = [[{ status: "CANCEL" }]];
+    state.returning = [];
+
+    const outcome = await createDbSyncDeps().apply({
+      orderId: "o1",
+      trackingNumber: "001818714258",
+    });
+
+    expect(outcome).toEqual({ landed: false });
+    const query = sqlOf(state.updateConditions[0]);
+    expect(query.sql).toContain("not in");
+    expect(query.params).toEqual(["o1", "CANCEL"]);
     expect(state.history).toEqual([]);
   });
 });
