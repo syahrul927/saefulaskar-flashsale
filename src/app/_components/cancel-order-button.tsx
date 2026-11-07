@@ -51,7 +51,7 @@ export type CancelOrderTarget = {
 const WARN_BASE = "rounded-xl border px-3 py-2.5 text-xs";
 const WARN_TONES = {
   // Unpaid: worth a call before the units go back, but a soft stop — the
-  // shared caution recipe (5.30:1 on paper).
+  // shared caution recipe: 5.30:1 on its `bg-red-100` plate (6.38:1 on paper).
   unpaid:
     "border-red-200 bg-red-100 text-red-700 dark:border-red-900 dark:bg-red-950/40 dark:text-red-300",
   // Paid: real money, and the refund happens outside this system — paler
