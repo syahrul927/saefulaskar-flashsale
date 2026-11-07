@@ -46,6 +46,8 @@ const state = vi.hoisted(() => ({
   updateConditions: [] as unknown[],
   /** Lock modes passed to `.for()`, in call order. */
   locks: [] as unknown[],
+  /** Arguments passed to `.limit()`, in call order. */
+  limits: [] as number[],
   prunes: 0,
   pruneFails: false,
   /** When set, the CAPTURE insert throws — the history insert must not. */
@@ -87,7 +89,13 @@ vi.mock("@/server/db", async () => {
               return base;
             },
             orderBy: () => ({
-              limit: async () => rows,
+              // Honors the requested count (a limit-ignoring mock would let a
+              // `.limit(1)` regression pass while the anomaly goes undetected
+              // in production, where the DB does respect the limit).
+              limit: async (n: number) => {
+                state.limits.push(n);
+                return rows.slice(0, n);
+              },
             }),
           });
         },
@@ -206,6 +214,7 @@ beforeEach(() => {
   state.selectConditions = [];
   state.updateConditions = [];
   state.locks = [];
+  state.limits = [];
   state.prunes = 0;
   state.pruneFails = false;
   state.insertFails = false;
@@ -457,6 +466,60 @@ describe("POST /api/jubelio/hooks/[token] — the flip", () => {
     expect(state.inserts).toHaveLength(1);
     expect(state.inserts[0]?.table).toBe(orderStatusHistory);
     expect(state.inserts[0]?.value.toStatus).toBe("COMPLETED");
+  });
+
+  it("acts on the newest row and logs the anomaly when two orders share one SO id", async () => {
+    // No unique constraint on jubelio_so_id (spec §4.2). The lookup fetches
+    // two rows — the smallest read that can prove "more than one" — acts on
+    // the newest-first head, and the anomaly is LOGGED, not buried.
+    state.orderRows = [
+      { id: "o-new", status: "CONFIRMED" },
+      { id: "o-old", status: "CONFIRMED" },
+    ];
+    state.preReadRows = [{ status: "CONFIRMED" }];
+    state.returning = [{ id: "o-new" }];
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await post({});
+
+    expect(await res.json()).toEqual({ ok: true, changed: true });
+    // The lookup fetched TWO rows — the smallest read that can prove "more
+    // than one" — and the mock honors the limit, so a `.limit(1)` regression
+    // would stage only the newest row and leave this red.
+    expect(state.limits).toEqual([2]);
+    expect(err).toHaveBeenCalledWith(
+      "hook-invoice: multiple orders match SO #192297 — acting on the newest (o-new)",
+    );
+    // The write named the NEWEST row, and the ledger row belongs to it.
+    expect(sqlOf(state.updateConditions[0]).params).toEqual([
+      "o-new",
+      ...END_STATUSES,
+    ]);
+    expect(state.inserts.at(-1)?.value).toMatchObject({
+      orderId: "o-new",
+      toStatus: "COMPLETED",
+    });
+    err.mockRestore();
+  });
+
+  it("still flips when the best-effort capture PRUNE fails", async () => {
+    // The mirror of case 12: the capture landed, the courtesy prune threw —
+    // the flip must not care. Asserted here so the prune counter is not dead
+    // scaffolding.
+    state.pruneFails = true;
+    state.orderRows = [{ id: "o-1", status: "CONFIRMED" }];
+    state.preReadRows = [{ status: "CONFIRMED" }];
+    state.returning = [{ id: "o-1" }];
+    const err = vi.spyOn(console, "error").mockImplementation(() => {});
+
+    const res = await post({});
+
+    expect(res.status).toBe(200);
+    expect(await res.json()).toEqual({ ok: true, changed: true });
+    expect(state.prunes).toBe(1);
+    // Capture row + ledger row both present.
+    expect(state.inserts).toHaveLength(2);
+    err.mockRestore();
   });
 
   it("answers changed:false without a history row when the guard refuses the write", async () => {

@@ -123,15 +123,24 @@ export async function POST(
   }
 
   // Newest wins on a multi-match anomaly (no unique constraint on
-  // jubelio_so_id); the anomaly itself is logged, not hidden (spec §4.2).
-  const [order] = await db
+  // jubelio_so_id): act on the head of the newest-first match set and LOG the
+  // anomaly rather than silently burying it (spec §4.2). Two rows is the
+  // smallest fetch that can prove "more than one"; the second row is read for
+  // the count only, never acted on.
+  const matches = await db
     .select({ id: orders.id, status: orders.status })
     .from(orders)
     .where(eq(orders.jubelioSoId, salesorderId))
     .orderBy(desc(orders.createdAt))
-    .limit(1);
+    .limit(2);
+  const [order] = matches;
   if (!order) {
     return NextResponse.json({ ok: false, reason: "unjoined" });
+  }
+  if (matches.length > 1) {
+    console.error(
+      `hook-invoice: multiple orders match SO #${salesorderId} — acting on the newest (${order.id})`,
+    );
   }
 
   // The hint is only a reason to look; the fetched SO is the evidence
