@@ -166,6 +166,11 @@ export const orders = createTable(
     paymentMethod: t.text("payment_method"),
     transferProofUrl: t.text("transfer_proof_url"),
     jubelioSoId: t.integer("jubelio_so_id"),
+    // Faktur identity from Jubelio's hook-invoice webhook (spec 2026-11-08 §4.3).
+    // Written by the hook route (and refreshed idempotently by retries); display
+    // is admin/audit-only, never customer-facing.
+    invoiceId: t.integer("invoice_id"),
+    invoiceNo: t.text("invoice_no"),
     contactId: t
       .uuid("contact_id")
       .references(() => contacts.id),
