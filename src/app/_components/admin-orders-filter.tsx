@@ -80,13 +80,25 @@ export type AdminOrderRow = {
 function AdminOrdersFilter({
   rows,
   initialTab = "ALL",
+  statusCounts,
 }: {
   rows: AdminOrderRow[];
   initialTab?: AdminTab;
+  /** Dataset-wide counts per status, GROUP BY'd by the page. Absent counts
+   * fall back to the loaded rows — page-local, honest only on the last page,
+   * which is why the page always passes them once pagination is on. */
+  statusCounts?: { status: OrderStatus; n: number }[];
 }) {
   const [tab, setTab] = useState<AdminTab>(initialTab);
 
   const visible = tab === "ALL" ? rows : rows.filter((r) => r.status === tab);
+  const countFor = (t: AdminTab): number =>
+    t === "ALL"
+      ? statusCounts
+        ? statusCounts.reduce((acc, c) => acc + c.n, 0)
+        : rows.length
+      : (statusCounts?.find((c) => c.status === t)?.n ??
+        rows.filter((r) => r.status === t).length);
 
   return (
     <div>
@@ -99,11 +111,7 @@ function AdminOrdersFilter({
           <FilterPill
             key={t}
             label={t === "ALL" ? "Semua" : ADMIN_STATUS_LABEL[t]}
-            count={
-              t === "ALL"
-                ? rows.length
-                : rows.filter((r) => r.status === t).length
-            }
+            count={countFor(t)}
             active={tab === t}
             emphasis={t === "UNPAID"}
             onClick={() => setTab(t)}
@@ -178,22 +186,7 @@ function OrderCard({ order }: { order: AdminOrderRow }) {
         {/* Always-visible first 3 items */}
         <ul className="dark:divide-border dark:border-border dark:bg-input/20 divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-100 bg-neutral-50/60">
           {order.items.slice(0, 3).map((item) => (
-            <li
-              key={item.id}
-              className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
-            >
-              <div className="min-w-0">
-                <p className="truncate text-neutral-950 dark:text-neutral-50">
-                  {item.name}
-                </p>
-                <p className="font-mono text-[11px] text-neutral-500 tabular-nums dark:text-neutral-400">
-                  {item.qtyPriceLabel}
-                </p>
-              </div>
-              <span className="shrink-0 font-mono text-xs font-medium text-neutral-950 tabular-nums dark:text-neutral-50">
-                {item.subtotalLabel}
-              </span>
-            </li>
+            <AdminItemRow key={item.id} item={item} />
           ))}
         </ul>
 
@@ -203,42 +196,24 @@ function OrderCard({ order }: { order: AdminOrderRow }) {
             <CollapsibleContent className="h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-200 ease-out data-ending-style:h-0 data-starting-style:h-0">
               <ul className="dark:divide-border dark:border-border dark:bg-input/20 mt-1 divide-y divide-neutral-100 overflow-hidden rounded-xl border border-neutral-100 bg-neutral-50/60">
                 {order.items.slice(3).map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex items-center justify-between gap-3 px-3 py-2 text-sm"
-                  >
-                    <div className="min-w-0">
-                      <p className="truncate text-neutral-950 dark:text-neutral-50">
-                        {item.name}
-                      </p>
-                      <p className="font-mono text-[11px] text-neutral-500 tabular-nums dark:text-neutral-400">
-                        {item.qtyPriceLabel}
-                      </p>
-                    </div>
-                    <span className="shrink-0 font-mono text-xs font-medium text-neutral-950 tabular-nums dark:text-neutral-50">
-                      {item.subtotalLabel}
-                    </span>
-                  </li>
+                  <AdminItemRow key={item.id} item={item} />
                 ))}
               </ul>
             </CollapsibleContent>
 
-            {/* Expand trigger — accent-tint ghost (approved v2). */}
-            <CollapsibleTrigger>
-              <button
-                type="button"
-                className="bg-accent text-accent-foreground hover:bg-accent/70 active:bg-accent/50 mt-2 flex w-full items-center justify-center gap-1 rounded-lg py-1.5 text-xs font-semibold transition-colors"
-              >
-                <CaretDownIcon
-                  className={cn(
-                    "size-3.5 transition-transform",
-                    itemsOpen ? "rotate-180" : "",
-                  )}
-                />
-                {itemsOpen
-                  ? "Sembunyikan"
-                  : `Lihat ${order.items.length - 3} item lainnya`}
-              </button>
+            {/* Expand trigger — accent-tint ghost (approved v2). className
+                goes on the trigger itself: it already renders a <button>, and
+                a nested <button> is invalid DOM nesting. */}
+            <CollapsibleTrigger className="bg-accent text-accent-foreground hover:bg-accent/70 active:bg-accent/50 mt-2 flex w-full items-center justify-center gap-1 rounded-lg py-1.5 text-xs font-semibold transition-colors">
+              <CaretDownIcon
+                className={cn(
+                  "size-3.5 transition-transform",
+                  itemsOpen ? "rotate-180" : "",
+                )}
+              />
+              {itemsOpen
+                ? "Sembunyikan"
+                : `Lihat ${order.items.length - 3} item lainnya`}
             </CollapsibleTrigger>
           </>
         )}
@@ -306,6 +281,30 @@ function OrderCard({ order }: { order: AdminOrderRow }) {
           )}
         </div>
       </div>
+    </li>
+  );
+}
+
+/**
+ * One admin item line — plain text `name` over `qty × price`, subtotal
+ * right-aligned, no avatar (admin reads codes, not pictures). Rendered twice
+ * per card (first 3 visible, rest behind the collapsible), so the markup
+ * lives in exactly one place.
+ */
+function AdminItemRow({ item }: { item: AdminOrderRow["items"][number] }) {
+  return (
+    <li className="flex items-center justify-between gap-3 px-3 py-2 text-sm">
+      <div className="min-w-0">
+        <p className="truncate text-neutral-950 dark:text-neutral-50">
+          {item.name}
+        </p>
+        <p className="font-mono text-[11px] text-neutral-500 tabular-nums dark:text-neutral-400">
+          {item.qtyPriceLabel}
+        </p>
+      </div>
+      <span className="shrink-0 font-mono text-xs font-medium text-neutral-950 tabular-nums dark:text-neutral-50">
+        {item.subtotalLabel}
+      </span>
     </li>
   );
 }

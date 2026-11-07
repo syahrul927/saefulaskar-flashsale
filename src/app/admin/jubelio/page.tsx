@@ -1,4 +1,4 @@
-import { desc, lt } from "drizzle-orm";
+import { and, desc, eq, lt, or } from "drizzle-orm";
 import { headers } from "next/headers";
 import type { Metadata } from "next";
 
@@ -13,6 +13,7 @@ import {
   PaginationPrevious,
 } from "@/components/ui/pagination";
 import { env } from "@/env";
+import { parsePageLimit, parseTimestampCursor } from "@/lib/pagination-params";
 import { db } from "@/server/db";
 import { webhookCaptures } from "@/server/db/schema";
 
@@ -21,8 +22,6 @@ export const metadata: Metadata = {
 };
 
 export const dynamic = "force-dynamic";
-
-/** Cursor-based pagination — newest-first by id. */
 
 /**
  * Jubelio observation rig (spec §4.7). Not a reporting page — a bench.
@@ -41,22 +40,40 @@ export default async function JubelioProbePage({
   searchParams: Promise<Record<string, string | string[] | undefined>>;
 }) {
   const sp = await searchParams;
+  const limit = parsePageLimit(sp.limit);
+  // Composite keyset cursor "<receivedAtISO>|<captureId>" over receivedAt —
+  // the id is a random UUID (schema defaultRandom), so ordering by id alone
+  // is NOT time order and newest captures could land off page 1 entirely.
+  // The id survives as the tiebreaker for same-timestamp captures.
   const cursorStr = typeof sp.cursor === "string" ? sp.cursor : undefined;
-  const limit = Math.min(
-    Number(typeof sp.limit === "string" ? sp.limit : 20),
-    100,
-  );
+  const cursor = parseTimestampCursor(cursorStr?.split("|")[0]);
+  const cursorId =
+    cursor && cursorStr ? (cursorStr.split("|")[1] ?? undefined) : undefined;
 
   const caps = await db
     .select()
     .from(webhookCaptures)
-    .where(cursorStr ? lt(webhookCaptures.id, cursorStr) : undefined)
-    .orderBy(desc(webhookCaptures.id))
+    .where(
+      cursor
+        ? or(
+            lt(webhookCaptures.receivedAt, cursor),
+            and(
+              eq(webhookCaptures.receivedAt, cursor),
+              cursorId ? lt(webhookCaptures.id, cursorId) : undefined,
+            ),
+          )
+        : undefined,
+    )
+    .orderBy(desc(webhookCaptures.receivedAt), desc(webhookCaptures.id))
     .limit(limit + 1);
 
   const hasMore = caps.length > limit;
   if (hasMore) caps.pop();
-  const nextCursor = hasMore ? (caps.at(-1)?.id ?? null) : null;
+  const nextCursor = hasMore
+    ? caps.at(-1)
+      ? `${caps.at(-1)!.receivedAt.toISOString()}|${caps.at(-1)!.id}`
+      : null
+    : null;
 
   const captureRows: ProbeCapture[] = caps.map((c) => ({
     id: c.id,
@@ -101,14 +118,13 @@ export default async function JubelioProbePage({
         tokenConfigured={Boolean(token)}
       />
 
+      {/* Cursor pagination — forward-only: Prev always disabled, Reset
+          returns to page 1 while a cursor is active. */}
       <Pagination>
         <PaginationContent>
           <PaginationPrevious
-            href="?"
-            aria-disabled={!cursorStr}
-            className={
-              !cursorStr ? "pointer-events-none opacity-50" : undefined
-            }
+            aria-disabled
+            className="pointer-events-none opacity-50"
           />
           {cursorStr ? (
             <a
@@ -119,7 +135,9 @@ export default async function JubelioProbePage({
             </a>
           ) : null}
           <PaginationNext
-            href={nextCursor ? `?cursor=${nextCursor}` : "?"}
+            href={
+              nextCursor ? `?cursor=${encodeURIComponent(nextCursor)}` : "?"
+            }
             aria-disabled={!nextCursor}
             className={
               !nextCursor ? "pointer-events-none opacity-50" : undefined

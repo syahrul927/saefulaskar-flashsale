@@ -1,7 +1,8 @@
-import { desc, eq, inArray, lt, sql } from "drizzle-orm";
+import { and, desc, eq, inArray, lt, sql } from "drizzle-orm";
 import { z } from "zod";
 
 import { env } from "@/env";
+import { parsePageLimit, parseTimestampCursor } from "@/lib/pagination-params";
 import { getSession } from "@/server/better-auth/server";
 import { nextBookingId } from "@/server/booking-id";
 import {
@@ -259,15 +260,15 @@ export async function GET(request: Request) {
     );
 
   const { searchParams } = new URL(request.url);
-  const cursor = searchParams.get("cursor");
-  const limit = Math.min(Number(searchParams.get("limit") ?? 20), 100);
+  const cursor = parseTimestampCursor(searchParams.getAll("cursor"));
+  const limit = parsePageLimit(searchParams.getAll("limit"));
 
   const rows = await db
     .select()
     .from(orders)
     .where(
       cursor
-        ? sql`${orders.customerId} = ${auth.user.id} AND ${orders.createdAt} < ${new Date(cursor)}`
+        ? and(eq(orders.customerId, auth.user.id), lt(orders.createdAt, cursor))
         : eq(orders.customerId, auth.user.id),
     )
     .orderBy(desc(orders.createdAt))

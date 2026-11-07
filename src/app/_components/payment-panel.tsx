@@ -201,7 +201,11 @@ function PaymentPanel({
       let nextPhase: ProofPhase | null = null;
       let uploaded = false;
       try {
-        const res = await fetch("/api/orders", { cache: "no-store" });
+        // `?limit=100` (the API's max): the endpoint now paginates at 20 by
+        // default, and this poll matches the booking anywhere in the
+        // customer's newest 100 orders — a default page would miss bookings
+        // deeper in the list and report a permanent miss.
+        const res = await fetch("/api/orders?limit=100", { cache: "no-store" });
         if (res.status === 401 || res.status === 403) {
           // Auth is gone — the order is permanently unreadable from here.
           outcome = "miss";
@@ -256,26 +260,26 @@ function PaymentPanel({
           (design.html:466); not a new variant. */}
       <div
         aria-hidden="true"
-        className="h-1.5 shrink-0 bg-gradient-to-r from-brand-primary via-brand-secondary to-brand-primary"
+        className="from-brand-primary via-brand-secondary to-brand-primary h-1.5 shrink-0 bg-gradient-to-r"
       />
       {/* Dot band header — Panel idiom (panel.tsx). `pr-14` in dialog mode
           clears the DialogContent close button, as in checkout-dialog. */}
       <div
         className={cn(
-          "flex shrink-0 items-center gap-2 border-b border-neutral-100 bg-neutral-50/70 px-4 py-3 dark:border-border dark:bg-neutral-900/40",
+          "dark:border-border flex shrink-0 items-center gap-2 border-b border-neutral-100 bg-neutral-50/70 px-4 py-3 dark:bg-neutral-900/40",
           isDialog && "pr-14",
         )}
       >
         <span
           aria-hidden="true"
-          className="h-2 w-2 shrink-0 rounded-full bg-brand-secondary"
+          className="bg-brand-secondary h-2 w-2 shrink-0 rounded-full"
         />
         {isDialog ? (
-          <DialogTitle className="text-xs font-bold uppercase tracking-wider text-neutral-950 dark:text-neutral-50">
+          <DialogTitle className="text-xs font-bold tracking-wider text-neutral-950 uppercase dark:text-neutral-50">
             INSTRUKSI PEMBAYARAN
           </DialogTitle>
         ) : (
-          <h3 className="text-xs font-bold uppercase tracking-wider text-neutral-950 dark:text-neutral-50">
+          <h3 className="text-xs font-bold tracking-wider text-neutral-950 uppercase dark:text-neutral-50">
             INSTRUKSI PEMBAYARAN
           </h3>
         )}
@@ -299,19 +303,19 @@ function PaymentPanel({
 
         {/* Billing plate — mockup VA box (design.html:1106-1126): label,
             white inset with mono value + copy chip, total right-aligned. */}
-        <div className="space-y-2 rounded-xl border border-neutral-200 bg-neutral-50 p-4 dark:border-border dark:bg-neutral-900/40">
-          <div className="font-mono text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+        <div className="dark:border-border space-y-2 rounded-xl border border-neutral-200 bg-neutral-50 p-4 dark:bg-neutral-900/40">
+          <div className="font-mono text-[10px] font-bold tracking-wider text-neutral-500 uppercase">
             ID Booking
           </div>
-          <div className="flex items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-2 dark:border-border dark:bg-card">
-            <span className="min-w-0 truncate font-mono text-sm font-black tracking-wider text-neutral-950 dark:text-neutral-50 sm:text-base">
+          <div className="dark:border-border dark:bg-card flex items-center justify-between gap-2 rounded-lg border border-neutral-200 bg-white px-3 py-2">
+            <span className="min-w-0 truncate font-mono text-sm font-black tracking-wider text-neutral-950 sm:text-base dark:text-neutral-50">
               {bookingId}
             </span>
             <CopyChip value={bookingId} label="ID Booking" />
           </div>
-          <div className="flex items-center justify-between gap-3 border-t border-neutral-200 pt-2 dark:border-border">
+          <div className="dark:border-border flex items-center justify-between gap-3 border-t border-neutral-200 pt-2">
             <span className="font-mono text-xs text-neutral-500">Total</span>
-            <span className="text-right font-mono text-base font-black tabular-nums text-neutral-950 dark:text-neutral-50">
+            <span className="text-right font-mono text-base font-black text-neutral-950 tabular-nums dark:text-neutral-50">
               {formatRupiah(grandTotal)}
             </span>
           </div>
@@ -319,24 +323,24 @@ function PaymentPanel({
 
         {/* Destination accounts — one row per bank, same copy-chip idiom. */}
         <div className="space-y-2">
-          <div className="font-mono text-[10px] font-bold uppercase tracking-wider text-neutral-500">
+          <div className="font-mono text-[10px] font-bold tracking-wider text-neutral-500 uppercase">
             Rekening Tujuan
           </div>
           {bankAccounts.length === 0 ? (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               Belum ada rekening yang diatur. Hubungi admin.
             </p>
           ) : (
             bankAccounts.map((bank) => (
               <div
                 key={`${bank.bank}-${bank.account_number}`}
-                className="flex items-center justify-between gap-2 rounded-xl border border-neutral-200 bg-white p-3 dark:border-border dark:bg-card"
+                className="dark:border-border dark:bg-card flex items-center justify-between gap-2 rounded-xl border border-neutral-200 bg-white p-3"
               >
                 <div className="min-w-0">
                   <p className="text-sm font-semibold text-neutral-950 dark:text-neutral-50">
                     {bank.bank}
                   </p>
-                  <p className="mt-0.5 truncate font-mono text-sm font-bold tabular-nums tracking-wider text-neutral-900 dark:text-neutral-100">
+                  <p className="mt-0.5 truncate font-mono text-sm font-bold tracking-wider text-neutral-900 tabular-nums dark:text-neutral-100">
                     {bank.account_number}
                   </p>
                   <p className="truncate text-xs text-neutral-500">
@@ -370,15 +374,13 @@ function PaymentPanel({
 
       {/* Actions footer — brand WA CTA over the mockup neutral secondaries
           (design.html:1137-1144). `target/rel` follow the old drawer CTA. */}
-      <div className="shrink-0 space-y-2 border-t border-neutral-200 bg-white px-4 py-3 dark:border-border dark:bg-card">
+      <div className="dark:border-border dark:bg-card shrink-0 space-y-2 border-t border-neutral-200 bg-white px-4 py-3">
         {waLink.length > 0 && (
           <Button
             size="lg"
             variant="default"
             className="w-full"
-            render={
-              <a href={waLink} target="_blank" rel="noreferrer" />
-            }
+            render={<a href={waLink} target="_blank" rel="noreferrer" />}
             nativeButton={false}
           >
             <WhatsappLogoIcon weight="fill" />

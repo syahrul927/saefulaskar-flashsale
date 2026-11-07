@@ -133,13 +133,49 @@ function NoMatchPlate({ label }: { label: string }) {
 
 /** Extracts the display initial from an item name:
  * - "[Dus] Breast Doctor 100ml" → "B"  (strips [word] prefix first)
+ * - "[Dus Isi 12] Susu Kambing" → "S"  (bracket tags may contain spaces)
  * - "Breast Doctor"             → "B"
  * - "123 Item"                  → "1"
  */
 function itemInitial(name: string): string {
-  // Strip leading "[word] " bracket-prefixes before taking the first letter
-  const stripped = name.replace(/^\[[\w]+\]\s*/, "");
+  // Strip a leading "[...]" bracket-prefix (any content, then one optional
+  // space) before taking the first letter — `[^\]]+` covers tags with spaces
+  // and symbols that the earlier `\w+` silently let through.
+  const stripped = name.replace(/^\[[^\]]*\]\s*/, "");
   return stripped.charAt(0).toUpperCase();
+}
+
+/** One customer item line — letter tile + name + `qty × price` + subtotal.
+ * Rendered twice per card (first 2 visible, rest behind the collapsible), so
+ * the markup lives in exactly one place. */
+function CustomerItemRow({
+  item,
+}: {
+  item: ReceiptOrderData["items"][number];
+}) {
+  return (
+    <li className="flex items-center justify-between gap-2 py-1 text-xs">
+      <div className="flex min-w-0 items-center gap-2.5">
+        <span
+          aria-hidden="true"
+          className="border-border bg-muted text-muted-foreground flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border font-mono text-sm font-bold uppercase dark:bg-neutral-800/60 dark:text-neutral-300"
+        >
+          {itemInitial(item.name)}
+        </span>
+        <div className="min-w-0">
+          <p className="truncate font-bold text-neutral-950 dark:text-neutral-50">
+            {item.name}
+          </p>
+          <p className="font-mono text-[10px] text-neutral-500 tabular-nums dark:text-neutral-400">
+            {item.qty} × {item.priceLabel}
+          </p>
+        </div>
+      </div>
+      <span className="shrink-0 font-mono font-bold text-neutral-900 tabular-nums dark:text-neutral-100">
+        {item.subtotalLabel}
+      </span>
+    </li>
+  );
 }
 
 function TransactionCard({
@@ -189,30 +225,7 @@ function TransactionCard({
         {/* Always-visible first 2 items */}
         <ul className="space-y-2">
           {row.items.slice(0, 2).map((item) => (
-            <li
-              key={item.id}
-              className="flex items-center justify-between gap-2 py-1 text-xs"
-            >
-              <div className="flex min-w-0 items-center gap-2.5">
-                <span
-                  aria-hidden="true"
-                  className="border-border bg-muted text-muted-foreground flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border font-mono text-sm font-bold uppercase dark:bg-neutral-800/60 dark:text-neutral-300"
-                >
-                  {itemInitial(item.name)}
-                </span>
-                <div className="min-w-0">
-                  <p className="truncate font-bold text-neutral-950 dark:text-neutral-50">
-                    {item.name}
-                  </p>
-                  <p className="font-mono text-[10px] text-neutral-500 tabular-nums dark:text-neutral-400">
-                    {item.qty} × {item.priceLabel}
-                  </p>
-                </div>
-              </div>
-              <span className="shrink-0 font-mono font-bold text-neutral-900 tabular-nums dark:text-neutral-100">
-                {item.subtotalLabel}
-              </span>
-            </li>
+            <CustomerItemRow key={item.id} item={item} />
           ))}
         </ul>
 
@@ -222,51 +235,25 @@ function TransactionCard({
             <CollapsibleContent className="h-(--collapsible-panel-height) overflow-hidden transition-[height] duration-200 ease-out data-ending-style:h-0 data-starting-style:h-0">
               <ul className="space-y-2">
                 {row.items.slice(2).map((item) => (
-                  <li
-                    key={item.id}
-                    className="flex items-center justify-between gap-2 py-1 text-xs"
-                  >
-                    <div className="flex min-w-0 items-center gap-2.5">
-                      <span
-                        aria-hidden="true"
-                        className="border-border bg-muted text-muted-foreground flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border font-mono text-sm font-bold uppercase dark:bg-neutral-800/60 dark:text-neutral-300"
-                      >
-                        {itemInitial(item.name)}
-                      </span>
-                      <div className="min-w-0">
-                        <p className="truncate font-bold text-neutral-950 dark:text-neutral-50">
-                          {item.name}
-                        </p>
-                        <p className="font-mono text-[10px] text-neutral-500 tabular-nums dark:text-neutral-400">
-                          {item.qty} × {item.priceLabel}
-                        </p>
-                      </div>
-                    </div>
-                    <span className="shrink-0 font-mono font-bold text-neutral-900 tabular-nums dark:text-neutral-100">
-                      {item.subtotalLabel}
-                    </span>
-                  </li>
+                  <CustomerItemRow key={item.id} item={item} />
                 ))}
               </ul>
             </CollapsibleContent>
 
             {/* Expand trigger — accent-tint ghost (approved v2): tinted
-                background, brand-action text, no orange plate. */}
-            <CollapsibleTrigger>
-              <button
-                type="button"
-                className="bg-accent text-accent-foreground hover:bg-accent/70 active:bg-accent/50 mt-2 flex w-full items-center justify-center gap-1 rounded-lg py-1.5 text-xs font-semibold transition-colors"
-              >
-                <CaretDownIcon
-                  className={cn(
-                    "size-3.5 transition-transform",
-                    itemsOpen ? "rotate-180" : "",
-                  )}
-                />
-                {itemsOpen
-                  ? "Sembunyikan"
-                  : `Lihat ${row.items.length - 2} item lainnya`}
-              </button>
+                background, brand-action text, no orange plate. className goes
+                on the trigger itself: it already renders a <button>, and a
+                nested <button> is invalid DOM nesting. */}
+            <CollapsibleTrigger className="bg-accent text-accent-foreground hover:bg-accent/70 active:bg-accent/50 mt-2 flex w-full items-center justify-center gap-1 rounded-lg py-1.5 text-xs font-semibold transition-colors">
+              <CaretDownIcon
+                className={cn(
+                  "size-3.5 transition-transform",
+                  itemsOpen ? "rotate-180" : "",
+                )}
+              />
+              {itemsOpen
+                ? "Sembunyikan"
+                : `Lihat ${row.items.length - 2} item lainnya`}
             </CollapsibleTrigger>
           </>
         )}

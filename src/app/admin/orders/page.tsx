@@ -1,4 +1,4 @@
-import { desc, inArray, lt } from "drizzle-orm";
+import { and, count, desc, eq, inArray, lt, or } from "drizzle-orm";
 import type { Metadata } from "next";
 import { after } from "next/server";
 
@@ -22,6 +22,7 @@ import {
 import { SyncNowButton } from "@/app/_components/sync-now-button";
 import { env } from "@/env";
 import { formatRupiah } from "@/lib/format";
+import { parsePageLimit, parseTimestampCursor } from "@/lib/pagination-params";
 import { db } from "@/server/db";
 import {
   buildCustomerWaLink,
@@ -83,24 +84,50 @@ export default async function AdminOrdersPage({
   ]);
 
   const sp = await searchParams;
+  const limit = parsePageLimit(sp.limit);
+  // Composite keyset cursor "<createdAtISO>|<orderId>": two orders can share
+  // a timestamp (the same millisecond default at creation), and a plain
+  // `createdAt <` boundary silently drops every row tied with it. The id
+  // tiebreaker makes the walk total and stable.
   const cursorStr = typeof sp.cursor === "string" ? sp.cursor : undefined;
-  const limit = Math.min(
-    Number(typeof sp.limit === "string" ? sp.limit : 20),
-    100,
-  );
+  const cursorIso = cursorStr ? cursorStr.split("|")[0] : undefined;
+  const cursor = parseTimestampCursor(cursorIso);
+  const cursorId =
+    cursor && cursorStr ? (cursorStr.split("|")[1] ?? undefined) : undefined;
 
   const rows = await db
     .select()
     .from(orders)
-    .where(cursorStr ? lt(orders.createdAt, new Date(cursorStr)) : undefined)
-    .orderBy(desc(orders.createdAt))
+    .where(
+      cursor
+        ? or(
+            lt(orders.createdAt, cursor),
+            and(
+              eq(orders.createdAt, cursor),
+              cursorId ? lt(orders.id, cursorId) : undefined,
+            ),
+          )
+        : undefined,
+    )
+    .orderBy(desc(orders.createdAt), desc(orders.id))
     .limit(limit + 1);
 
   const hasMore = rows.length > limit;
   if (hasMore) rows.pop();
   const nextCursor = hasMore
-    ? (rows.at(-1)?.createdAt.toISOString() ?? null)
+    ? rows.at(-1)
+      ? `${rows.at(-1)!.createdAt.toISOString()}|${rows.at(-1)!.id}`
+      : null
     : null;
+
+  // Dataset-wide status counts for the filter pills: pagination means the
+  // loaded rows are one page of N, so counting them would report page-local
+  // numbers that lie whenever a second page exists. One GROUP BY over the
+  // whole table keeps the pills honest (deep-link `?status=` too).
+  const statusCounts = await db
+    .select({ status: orders.status, n: count() })
+    .from(orders)
+    .groupBy(orders.status);
 
   const allItems =
     rows.length === 0
@@ -251,25 +278,31 @@ export default async function AdminOrdersPage({
         <SyncNowButton className="mt-1" />
       </div>
 
-      <Panel title="TRANSAKSI MASUKAN" count={`${adminRows.length} transaksi`}>
+      <Panel
+        title="TRANSAKSI MASUKAN"
+        count={`${statusCounts.reduce((acc, c) => acc + c.n, 0)} transaksi`}
+      >
         {adminRows.length === 0 ? (
           <p className="p-10 text-center text-sm text-neutral-500 dark:text-neutral-400">
             Belum ada pesanan masuk.
           </p>
         ) : (
-          <AdminOrdersFilter rows={adminRows} initialTab={initialTab} />
+          <AdminOrdersFilter
+            rows={adminRows}
+            initialTab={initialTab}
+            statusCounts={statusCounts}
+          />
         )}
       </Panel>
 
-      {/* Cursor pagination — prev disabled (cursor-pagination is forward-only without stored position) */}
+      {/* Cursor pagination — forward-only: Prev is always disabled (the
+          walk keeps no stored positions), Next walks, Reset returns to page
+          1 while a cursor is active. */}
       <Pagination>
         <PaginationContent>
           <PaginationPrevious
-            href="?"
-            aria-disabled={!cursorStr}
-            className={
-              !cursorStr ? "pointer-events-none opacity-50" : undefined
-            }
+            aria-disabled
+            className="pointer-events-none opacity-50"
           />
           {cursorStr ? (
             <a
