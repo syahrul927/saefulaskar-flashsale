@@ -269,9 +269,15 @@ describe("planSync", () => {
   it("never pulls an end-state row forward, whatever the SO says", () => {
     // soId 192297's fixture is `internalStatus: "PAID"` → CONFIRMED locally,
     // i.e. forward from CANCEL on the ladder, and `rank("CANCEL")` is -1. Review
-    // Focus 2: without `isEndState` short-circuiting first, a stale PAID read
-    // would resurrect a cancelled order and leave its quota unreturned.
+    // Focus 2: without short-circuiting CANCEL first, a stale PAID read would
+    // resurrect a cancelled order and leave its quota unreturned.
     expect(local({ id: "a", jubelioSoId: 192297, status: "CANCEL" })).toEqual([]);
+    // The COMPLETED half changed with the webhook flip: the row is now
+    // reachable before its resi, so it is no longer skipped wholesale — but a
+    // PAID read still maps to CONFIRMED, which ranks BELOW COMPLETED, and the
+    // shared fixture carries no resi (`tracking_number: ""` → null), so there
+    // is nothing to backfill either. Exactly nothing comes out; the resi-only
+    // exception is pinned separately below.
     expect(
       local({ id: "a", jubelioSoId: 192297, status: "COMPLETED" }),
     ).toEqual([]);
@@ -279,13 +285,75 @@ describe("planSync", () => {
 
   it("never cancels a COMPLETED row on a 404", () => {
     // The money is in and the order is done; a deleted SO upstream is now just
-    // bookkeeping, not a reason to release quota the customer already used.
+    // bookkeeping, not a reason to release quota the customer already used. A
+    // `missing` verdict carries no shipping detail, so there is nothing to
+    // backfill either — the row gets exactly nothing.
     expect(
       planSync(
         [{ id: "a", jubelioSoId: 86, status: "COMPLETED" }],
         verdictMap([[86, { kind: "missing" }]]),
       ),
     ).toEqual([]);
+  });
+
+  it("backfills the resi onto a COMPLETED row, with no status key", () => {
+    // The webhook flip can park a row on COMPLETED before its resi arrives;
+    // polling must still reach it. A PAID read maps to CONFIRMED, which ranks
+    // BELOW COMPLETED — and a finished row takes no status write anyway — so
+    // the exact three-key shape pins the "no `status` key" half of the rule.
+    expect(
+      planSync(
+        [{ id: "a", jubelioSoId: 192297, status: "COMPLETED" }],
+        verdictMap([[192297, soState("PAID", "001818714258", "SiCepat HALU")]]),
+      ),
+    ).toEqual([
+      { orderId: "a", trackingNumber: "001818714258", shipper: "SiCepat HALU" },
+    ]);
+  });
+
+  it("emits nothing for a COMPLETED row on a missing verdict", () => {
+    expect(
+      planSync(
+        [{ id: "a", jubelioSoId: 86, status: "COMPLETED" }],
+        verdictMap([[86, { kind: "missing" }]]),
+      ),
+    ).toEqual([]);
+  });
+
+  it("emits nothing for a COMPLETED row on an upstream CANCELED SO", () => {
+    // soId 86's fixture carries `shipper: "Grab Same Day"`, so the empty array
+    // pins more than "no cancel": the completed guard's `continue` also skips
+    // the backfill, and no shipping detail leaks off a cancelled SO onto a
+    // completed order.
+    expect(local({ id: "a", jubelioSoId: 86, status: "COMPLETED" })).toEqual([]);
+  });
+
+  it("emits nothing for a COMPLETED row whose resi is already stored", () => {
+    // The steady state once the resi has landed: the widened query stops
+    // re-fetching such a row, but the core must not patch it if it is ever
+    // asked anyway — same resi, same shipper, and no rank move either.
+    expect(
+      local({
+        id: "a",
+        jubelioSoId: 85,
+        status: "COMPLETED",
+        trackingNumber: "001830032579",
+        shipper: "SiCepat REG",
+      }),
+    ).toEqual([]);
+  });
+
+  it("keeps the missed-webhook fallback: CONFIRMED + COMPLETED SO lifts status and resi", () => {
+    // The row the webhook never reached behaves exactly as before the flip:
+    // one patch carrying BOTH the status move and the shipping detail.
+    expect(local({ id: "a", jubelioSoId: 85, status: "CONFIRMED" })).toEqual([
+      {
+        orderId: "a",
+        status: "COMPLETED",
+        trackingNumber: "001830032579",
+        shipper: "SiCepat REG",
+      },
+    ]);
   });
 
   it("emits no patch when nothing changed", () => {

@@ -16,8 +16,6 @@
  * when an admin opens `/admin/orders`, is the only thing that moves a status.
  */
 
-import { isEndState } from "./order-status";
-
 /**
  * What the sync may write. `SHIPPED` is deliberately absent: the customer needs
  * one post-payment state, not two (spec §4.7). The value still exists in the
@@ -100,8 +98,8 @@ const STATUS_RANK: Record<string, number> = {
 };
 
 // No `CANCEL` rung, deliberately. `rank()` returns -1 for it, which is harmless
-// once `planSync` short-circuits on `isEndState` before ranking anything — and
-// putting a cancel on the ladder would make a side exit look like a rung an
+// because `planSync` skips a `CANCEL` row outright before ranking anything —
+// and putting a cancel on the ladder would make a side exit look like a rung an
 // `UNPAID` row could "advance" to on a stale read.
 
 function rank(status: string): number {
@@ -179,9 +177,12 @@ export function readSalesOrderState(raw: unknown): SalesOrderState | null {
  * Compute the patches to apply for one sync pass.
  *
  * Rules, each one pinned by a test:
- * - an order already in an end state gets nothing, whatever the SO says — the
- *   query that feeds this list filters end states out for cost, and this line is
- *   what keeps a race from rewriting a finished order (Review Focus 2);
+ * - a `CANCEL` row gets nothing, whatever the SO says — nothing upstream
+ *   un-cancels it, and `rank("CANCEL")` is -1 besides (Review Focus 2);
+ * - a `COMPLETED` row gets the resi/shipper backfill only, when they differ —
+ *   never a status write, never a cancel, not even on a 404 verdict or an
+ *   upstream `CANCELED` (spec §4.4: the invoice webhook can complete a row
+ *   before its resi arrives, and polling must still reach it);
  * - no verdict, or an `unknown` one, leaves the order alone (Review Focus 1);
  * - a `missing` verdict cancels it, and so does an upstream `CANCELED`;
  * - a cancel patch carries a `cause` and no resi — shipping detail is never
@@ -200,9 +201,15 @@ export function planSync(
   for (const order of localOrders) {
     if (order.jubelioSoId == null) continue;
     // Second half of Review Focus 2: `rank()` returns -1 for `CANCEL`, so
-    // without this guard a stale `PAID` read would rewrite a cancelled order to
-    // CONFIRMED and hand back nothing to nobody.
-    if (isEndState(order.status)) continue;
+    // without short-circuiting a cancelled row first, a stale `PAID` read would
+    // rewrite it to CONFIRMED and hand back nothing to nobody. Nothing above
+    // it on the ladder can ever apply, so a `CANCEL` row is skipped wholesale.
+    if (order.status === "CANCEL") continue;
+    // `COMPLETED` is no longer a blanket skip: the invoice webhook can park a
+    // row here before its resi arrives, so the backfill below must still run —
+    // but no status write may ever follow, and no cancel either, which is what
+    // the `completed` flag gates further down.
+    const completed = order.status === "COMPLETED";
 
     const verdict = verdictsBySoId.get(order.jubelioSoId);
     if (!verdict || verdict.kind === "unknown") continue;
@@ -210,8 +217,10 @@ export function planSync(
     // The two cancel paths are one patch shape: a definitive 404 and an
     // upstream `CANCELED` differ only in their cause, and both are exempt from
     // the ladder (spec §4.4 — the ladder exists to stop regressions *along* it,
-    // and a cancel is not a rung).
+    // and a cancel is not a rung). A `COMPLETED` row is exempt the other way:
+    // the order is done, so neither cancel path may touch it.
     if (verdict.kind === "missing") {
+      if (completed) continue;
       patches.push({
         orderId: order.id,
         status: "CANCEL",
@@ -223,6 +232,7 @@ export function planSync(
     const next = mapInternalStatus(verdict.state.internalStatus);
     if (!next) continue;
     if (next === "CANCEL") {
+      if (completed) continue;
       patches.push({
         orderId: order.id,
         status: "CANCEL",
@@ -232,7 +242,10 @@ export function planSync(
     }
 
     const patch: SyncPatch = { orderId: order.id };
-    if (rank(next) > rank(order.status)) patch.status = next;
+    // The ladder is forward-only, and a `COMPLETED` row takes no status write
+    // at all: the webhook already finished it, and a `PAID`/`SHIPPED` read
+    // ranks below it besides.
+    if (!completed && rank(next) > rank(order.status)) patch.status = next;
     const state = verdict.state;
     if (
       state.trackingNumber !== null &&
