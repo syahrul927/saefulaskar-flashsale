@@ -10,6 +10,7 @@ import {
 import { cn } from "cn";
 
 import { Button } from "@/components/ui/button";
+import { SignOutButton } from "@/components/sign-out-button";
 import { formatRupiah } from "@/lib/format";
 import { AdminLogo } from "./admin-logo";
 import { StatusBadge } from "./status-badge";
@@ -183,9 +184,18 @@ function StorefrontHeader({ className }: { className?: string }) {
             </span>
           </div>
 
-          {/* Jump to transactions + cart drawer trigger */}
+          {/* Jump to transactions + cart drawer trigger + sign-out. Same
+              "Keluar" as the admin rail (shared SignOutButton), landed on the
+              customer door — the mirror of the admin header's own
+              `redirectTo="/auth/staff"`. Visible at every width: the brand
+              cluster truncates (`min-w-0`), so the rail never scrolls
+              sideways to make room. */}
           <div className="flex shrink-0 items-center gap-1.5 sm:gap-3">
             <OrdersIconButton />
+            <SignOutButton
+              className="h-9 w-auto px-3"
+              redirectTo="/auth/login"
+            />
             <CartButton />
           </div>
         </div>
