@@ -6,16 +6,28 @@ import { describe, expect, it } from "vitest";
 const css = readFileSync("src/styles/globals.css", "utf8");
 
 describe("brand palette", () => {
+  // Every pattern here is written to survive the repo's own formatter, because
+  // `format:check` is red at baseline (189 files) so a `format:write` run is a
+  // likely cleanup — and prettier rewrites `src/styles/globals.css` in three
+  // ways that are not product changes (measured on a copy, not guessed):
+  //   1. it lowercases hex declarations — `#EA580C` → `#ea580c`;
+  //   2. it strips a trailing zero in an `oklch()` component — `0.030` → `0.03`;
+  //   3. it explodes any declaration whose trailing comment passes 80 columns
+  //      onto three lines, so the single literal space between components goes.
+  // A case-sensitive hex or a literal ` ` would redden 11 assertions in this
+  // file with the palette untouched — the same false-red
+  // tests/transactional-labels.test.ts guards against for the tailwind sorter.
+  // Hence `/i` on every hex and `\s+`/`\s*` around every component.
   it("defines the logo's two colours as the brand tokens", () => {
-    expect(css).toMatch(/--color-brand-primary:\s*#EA580C/);
-    expect(css).toMatch(/--color-brand-secondary:\s*#FB923C/);
-    expect(css).toMatch(/--color-brand-mark:\s*#EA580C/);
-    expect(css).toMatch(/--color-brand-ink:\s*#1F2937/);
-    expect(css).toMatch(/--color-brand-action:\s*#C2410C/);
+    expect(css).toMatch(/--color-brand-primary:\s*#EA580C/i);
+    expect(css).toMatch(/--color-brand-secondary:\s*#FB923C/i);
+    expect(css).toMatch(/--color-brand-mark:\s*#EA580C/i);
+    expect(css).toMatch(/--color-brand-ink:\s*#1F2937/i);
+    expect(css).toMatch(/--color-brand-action:\s*#C2410C/i);
   });
 
   it("hovers the primary brand fill LIGHTER — darkening fails AA under dark text", () => {
-    expect(css).toMatch(/--color-brand-primary-hover:\s*#F97316/);
+    expect(css).toMatch(/--color-brand-primary-hover:\s*#F97316/i);
   });
 
   it("carries no trace of the legacy saefulaskar yellow", () => {
@@ -26,11 +38,19 @@ describe("brand palette", () => {
 
   it("leads with wordmark slate, not yellow, in light mode", () => {
     const root = css.slice(css.indexOf(":root {"), css.indexOf(".dark {"));
-    expect(root).toMatch(/--primary:\s*oklch\(0\.278 0\.030 256\.8\)/);
-    expect(root).toMatch(/--foreground:\s*oklch\(0\.278 0\.030 256\.8\)/);
-    expect(root).toMatch(/--accent:\s*oklch\(0\.966 0\.021 60\.8\)/);
-    expect(root).toMatch(/--accent-foreground:\s*oklch\(0\.553 0\.174 38\.4\)/);
-    expect(root).toMatch(/--ring:\s*oklch\(0\.646 0\.194 41\.1\)/);
+    // `0\.030|0\.03` is one number in two spellings (prettier's is the short
+    // one), so the alternation buys format tolerance and gives up nothing.
+    expect(root).toMatch(
+      /--primary:\s*oklch\(\s*0\.278\s+(?:0\.030|0\.03)\s+256\.8\s*\)/,
+    );
+    expect(root).toMatch(
+      /--foreground:\s*oklch\(\s*0\.278\s+(?:0\.030|0\.03)\s+256\.8\s*\)/,
+    );
+    expect(root).toMatch(/--accent:\s*oklch\(\s*0\.966\s+0\.021\s+60\.8\s*\)/);
+    expect(root).toMatch(
+      /--accent-foreground:\s*oklch\(\s*0\.553\s+0\.174\s+38\.4\s*\)/,
+    );
+    expect(root).toMatch(/--ring:\s*oklch\(\s*0\.646\s+0\.194\s+41\.1\s*\)/);
   });
 });
 
