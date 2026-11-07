@@ -167,9 +167,7 @@ const readOnlyCellClass =
   "font-mono text-xs text-neutral-800 dark:text-neutral-200";
 
 function productLabel(product: SessionProduct) {
-  return (
-    product.itemGroupName ?? product.skuCode ?? `Item #${product.itemId}`
-  );
+  return product.itemGroupName ?? product.skuCode ?? `Item #${product.itemId}`;
 }
 
 /**
@@ -192,9 +190,7 @@ function RosterThumb({
   size?: "table" | "card";
 }) {
   const frame =
-    size === "table"
-      ? "h-10 w-10 rounded-lg"
-      : "h-12 w-12 rounded-xl";
+    size === "table" ? "h-10 w-10 rounded-lg" : "h-12 w-12 rounded-xl";
   const letter = size === "table" ? "text-base" : "text-lg";
   if (product.image) {
     return (
@@ -204,16 +200,16 @@ function RosterThumb({
       <img
         src={product.image}
         alt=""
-        className={`${frame} shrink-0 border border-neutral-200 bg-neutral-100 object-cover dark:border-border`}
+        className={`${frame} dark:border-border shrink-0 border border-neutral-200 bg-neutral-100 object-cover`}
       />
     );
   }
   return (
     <span
       aria-hidden="true"
-      className={`flex shrink-0 items-center justify-center ${frame} bg-gradient-to-br from-brand-primary/10 to-brand-secondary/15`}
+      className={`flex shrink-0 items-center justify-center ${frame} from-brand-primary/10 to-brand-secondary/15 bg-gradient-to-br`}
     >
-      <span className={`${letter} font-black text-brand-action`}>
+      <span className={`${letter} text-brand-action font-black`}>
         {productLabel(product).charAt(0).toUpperCase()}
       </span>
     </span>
@@ -239,16 +235,16 @@ function SearchThumb({
       <img
         src={image}
         alt=""
-        className="h-11 w-11 shrink-0 rounded-lg border border-neutral-200 bg-neutral-100 object-cover dark:border-border"
+        className="dark:border-border h-11 w-11 shrink-0 rounded-lg border border-neutral-200 bg-neutral-100 object-cover"
       />
     );
   }
   return (
     <span
       aria-hidden="true"
-      className="flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br from-brand-primary/10 to-brand-secondary/15"
+      className="from-brand-primary/10 to-brand-secondary/15 flex h-11 w-11 shrink-0 items-center justify-center rounded-lg bg-gradient-to-br"
     >
-      <span className="text-base font-black text-brand-action">
+      <span className="text-brand-action text-base font-black">
         {label.charAt(0).toUpperCase()}
       </span>
     </span>
@@ -376,9 +372,7 @@ export function dirtyPatches(
  * `+ Tambah` ↔ `✓ Ditambah` toggle and its `N dipilih` counter off this set —
  * selection lives on the roster (by `itemId`), so it survives any re-query.
  */
-function selectedItemIds(
-  products: readonly { itemId: number }[],
-): Set<number> {
+function selectedItemIds(products: readonly { itemId: number }[]): Set<number> {
   return new Set(products.map((p) => p.itemId));
 }
 
@@ -492,7 +486,7 @@ function DirtyChip({ failed }: { failed: boolean }) {
 /** Marker on a hidden row — the storefront no longer shows it. */
 function HiddenChip() {
   return (
-    <span className="rounded-full border border-neutral-300 bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold text-neutral-600 dark:border-border dark:bg-input/40 dark:text-neutral-300">
+    <span className="dark:border-border dark:bg-input/40 rounded-full border border-neutral-300 bg-neutral-100 px-1.5 py-0.5 text-[10px] font-bold text-neutral-600 dark:text-neutral-300">
       Sembunyikan (tidak tampil di toko)
     </span>
   );
@@ -506,9 +500,7 @@ function HiddenChip() {
 function rowTintClass(dirty: boolean, failed: boolean, hidden: boolean) {
   return cn(
     "transition",
-    !dirty &&
-      !failed &&
-      "hover:bg-neutral-50/80 dark:hover:bg-input/30",
+    !dirty && !failed && "hover:bg-neutral-50/80 dark:hover:bg-input/30",
     dirty && !failed && "bg-muted/60",
     failed && "bg-red-500/10",
     hidden && "opacity-60",
@@ -627,7 +619,7 @@ function RosterTableRow({
 
   return (
     <tr className={rowTintClass(dirty, failed, product.hidden)}>
-      <td className="py-3 pl-4 pr-2">
+      <td className="py-3 pr-2 pl-4">
         <RosterThumb product={product} />
       </td>
       <td className="max-w-[240px] py-3 pr-3">
@@ -647,7 +639,7 @@ function RosterTableRow({
           </div>
         )}
       </td>
-      <td className="py-3 px-3">
+      <td className="px-3 py-3">
         {canEdit ? (
           <CategorySelect row={row} product={product} options={options} />
         ) : (
@@ -656,12 +648,12 @@ function RosterTableRow({
           </span>
         )}
       </td>
-      <td className="py-3 px-3">
+      <td className="px-3 py-3">
         <span className="font-mono text-emerald-600">
           {product.availableStock ?? "—"}
         </span>
       </td>
-      <td className="py-3 px-3">
+      <td className="px-3 py-3">
         {canEdit ? (
           <input
             type="number"
@@ -676,12 +668,12 @@ function RosterTableRow({
           <span className={readOnlyCellClass}>{product.sessionQuota}</span>
         )}
       </td>
-      <td className="py-3 px-3">
+      <td className="px-3 py-3">
         <span className={`${readOnlyCellClass} tabular-nums`}>
           {product.claimed}/{product.sessionQuota}
         </span>
       </td>
-      <td className="py-3 px-3">
+      <td className="px-3 py-3">
         {canEdit ? (
           <div className="flex items-center gap-1">
             <input
@@ -699,7 +691,7 @@ function RosterTableRow({
           <span className={readOnlyCellClass}>{product.minOrder}</span>
         )}
       </td>
-      <td className="py-3 px-3">
+      <td className="px-3 py-3">
         {canEdit ? (
           <input
             type="number"
@@ -717,14 +709,14 @@ function RosterTableRow({
           </span>
         )}
       </td>
-      <td className="py-3 pl-2 pr-4 text-right">
+      <td className="py-3 pr-4 pl-2 text-right">
         {canEdit && (showHideToggle || isScheduled) && (
           <div className="flex items-center justify-end gap-1">
             {showHideToggle && (
               <Button
                 variant="ghost"
                 size="icon-xs"
-                className="text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-input/40"
+                className="dark:hover:bg-input/40 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
                 isLoading={busy}
                 disabled={anyBusy}
                 aria-label={product.hidden ? "Tampilkan lagi" : "Sembunyikan"}
@@ -780,7 +772,12 @@ function RosterCard({
   const label = productLabel(product);
 
   return (
-    <div className={cn("space-y-3 p-4", rowTintClass(dirty, failed, product.hidden))}>
+    <div
+      className={cn(
+        "space-y-3 p-4",
+        rowTintClass(dirty, failed, product.hidden),
+      )}
+    >
       <div className="flex items-start justify-between gap-3">
         <div className="flex min-w-0 items-center gap-2.5">
           <RosterThumb product={product} size="card" />
@@ -795,8 +792,7 @@ function RosterCard({
               </span>
             </div>
             <div className="font-mono text-[10px] text-emerald-700 dark:text-emerald-500">
-              Stok Jubelio:{" "}
-              <strong>{product.availableStock ?? "—"} pcs</strong>
+              Stok Jubelio: <strong>{product.availableStock ?? "—"} pcs</strong>
             </div>
             {(product.hidden || dirty) && (
               <div className="mt-1 flex flex-wrap items-center gap-1">
@@ -812,7 +808,7 @@ function RosterCard({
               <Button
                 variant="ghost"
                 size="icon-xs"
-                className="text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-input/40"
+                className="dark:hover:bg-input/40 text-neutral-400 hover:bg-neutral-100 hover:text-neutral-700"
                 isLoading={busy}
                 disabled={anyBusy}
                 aria-label={product.hidden ? "Tampilkan lagi" : "Sembunyikan"}
@@ -842,7 +838,7 @@ function RosterCard({
         <>
           <div className="grid grid-cols-2 gap-2 text-xs">
             <div>
-              <span className="block font-mono text-[9px] uppercase text-neutral-500">
+              <span className="block font-mono text-[9px] text-neutral-500 uppercase">
                 Kategori
               </span>
               <CategorySelect
@@ -853,13 +849,13 @@ function RosterCard({
               />
             </div>
             <div>
-              <span className="block font-mono text-[9px] uppercase text-neutral-500">
+              <span className="block font-mono text-[9px] text-neutral-500 uppercase">
                 Tipe
               </span>
               <TypeSelect row={row} product={product} fullWidth />
             </div>
             <div>
-              <span className="block font-mono text-[9px] uppercase text-neutral-500">
+              <span className="block font-mono text-[9px] text-neutral-500 uppercase">
                 Kuota
               </span>
               <input
@@ -873,7 +869,7 @@ function RosterCard({
               />
             </div>
             <div>
-              <span className="block font-mono text-[9px] uppercase text-neutral-500">
+              <span className="block font-mono text-[9px] text-neutral-500 uppercase">
                 Min. Pesanan
               </span>
               <input
@@ -887,7 +883,7 @@ function RosterCard({
               />
             </div>
             <div className="col-span-2">
-              <span className="block font-mono text-[9px] uppercase text-neutral-500">
+              <span className="block font-mono text-[9px] text-neutral-500 uppercase">
                 Harga Flash (Rp)
               </span>
               <input
@@ -916,7 +912,7 @@ function RosterCard({
             ] as const
           ).map(([key, value]) => (
             <div key={key}>
-              <dt className="font-mono text-[9px] uppercase text-neutral-500">
+              <dt className="font-mono text-[9px] text-neutral-500 uppercase">
                 {key}
               </dt>
               <dd className={`${readOnlyCellClass} font-bold`}>{value}</dd>
@@ -1130,9 +1126,9 @@ function ProductPicker({
         // upstream message (spec: error honesty) instead of asserting
         // "not found" on silence (final review I-4).
         if (!res.ok) {
-          const data = (await res.json().catch(() => null)) as
-            | { error?: string }
-            | null;
+          const data = (await res.json().catch(() => null)) as {
+            error?: string;
+          } | null;
           throw new Error(data?.error ?? `HTTP ${res.status}`);
         }
         const data = (await res.json().catch(() => [])) as SearchResult[];
@@ -1176,14 +1172,12 @@ function ProductPicker({
           },
         ]),
       });
-      const data = (await res.json().catch(() => null)) as
-        | {
-            ok?: boolean;
-            products?: SessionProduct[];
-            skipped?: { itemId: number; skuCode?: string }[];
-            error?: string;
-          }
-        | null;
+      const data = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        products?: SessionProduct[];
+        skipped?: { itemId: number; skuCode?: string }[];
+        error?: string;
+      } | null;
       if (res.status === 401) {
         await signOutOnExpiry();
         return;
@@ -1250,14 +1244,21 @@ function ProductPicker({
     if (busyItem !== null || savingAll) return;
     setBusyItem(product.itemId);
     try {
-      const res = await fetch(`/api/sessions/${sessionId}/products/${product.itemId}`, {
-        method: "PUT",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ hidden: !product.hidden } satisfies RowPatchBody),
-      });
-      const data = (await res.json().catch(() => null)) as
-        | { ok?: boolean; product?: SessionProduct; error?: string }
-        | null;
+      const res = await fetch(
+        `/api/sessions/${sessionId}/products/${product.itemId}`,
+        {
+          method: "PUT",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            hidden: !product.hidden,
+          } satisfies RowPatchBody),
+        },
+      );
+      const data = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        product?: SessionProduct;
+        error?: string;
+      } | null;
       if (res.status === 401) {
         await signOutOnExpiry();
         return;
@@ -1269,7 +1270,9 @@ function ProductPicker({
       if (data.product) {
         setProducts((prev) => mergeProductsById(prev, [data.product!]));
       }
-      toast.success(product.hidden ? "Produk ditampilkan." : "Produk disembunyikan.");
+      toast.success(
+        product.hidden ? "Produk ditampilkan." : "Produk disembunyikan.",
+      );
     } catch {
       toast.error("Terjadi kesalahan, coba lagi.");
     } finally {
@@ -1289,7 +1292,12 @@ function ProductPicker({
     // fact; a concurrent flush on the same row would last-write-win the client
     // state until remount. Wait for the single-flight slot instead (Task 7
     // review).
-    if (flushRows.length === 0 || hasInvalidDraft || savingAll || busyItem !== null)
+    if (
+      flushRows.length === 0 ||
+      hasInvalidDraft ||
+      savingAll ||
+      busyItem !== null
+    )
       return;
     setSavingAll(true);
     type FlushResult =
@@ -1306,21 +1314,24 @@ function ProductPicker({
               body: JSON.stringify(body),
             },
           );
-          const data = (await res.json().catch(() => null)) as
-            | {
-                ok?: boolean;
-                product?: SessionProduct;
-                error?: string;
-                warning?: string;
-              }
-            | null;
+          const data = (await res.json().catch(() => null)) as {
+            ok?: boolean;
+            product?: SessionProduct;
+            error?: string;
+            warning?: string;
+          } | null;
           if (res.status === 401) {
             return { itemId, ok: false, expired: true, error: "" };
           }
           if (!res.ok || !data?.ok) {
             return { itemId, ok: false, error: data?.error ?? "" };
           }
-          return { itemId, ok: true, product: data.product, warning: data.warning };
+          return {
+            itemId,
+            ok: true,
+            product: data.product,
+            warning: data.warning,
+          };
         } catch {
           return { itemId, ok: false, error: "" };
         }
@@ -1375,9 +1386,7 @@ function ProductPicker({
         const firstMessage =
           failed.map((r) => r.error.trim()).find((m) => m !== "") ??
           "Terjadi kesalahan, coba lagi.";
-        toast.error(
-          `Gagal menyimpan ${failed.length} produk: ${firstMessage}`,
-        );
+        toast.error(`Gagal menyimpan ${failed.length} produk: ${firstMessage}`);
       } else {
         toast.success("Perubahan produk tersimpan.");
         router.refresh();
@@ -1392,9 +1401,10 @@ function ProductPicker({
       const res = await fetch(`/api/sessions/${sessionId}/products/${itemId}`, {
         method: "DELETE",
       });
-      const data = (await res.json().catch(() => null)) as
-        | { ok?: boolean; error?: string }
-        | null;
+      const data = (await res.json().catch(() => null)) as {
+        ok?: boolean;
+        error?: string;
+      } | null;
       if (res.status === 401) {
         // Same routing as every other fetch in this island: a 401 is token
         // expiry, not a failed delete — sign out instead of toasting a raw
@@ -1424,14 +1434,14 @@ function ProductPicker({
           <DialogTrigger render={<Button variant="ink" />}>
             Pilih Produk Jubelio
           </DialogTrigger>
-          <DialogContent className="flex max-h-[85vh] w-full max-w-3xl flex-col gap-0 overflow-hidden rounded-2xl border border-neutral-200 bg-white p-0 dark:border-border dark:bg-card sm:max-w-3xl">
-            <DialogHeader className="border-b border-neutral-200 bg-neutral-50 p-4 pr-14 dark:border-border dark:bg-input/30 sm:p-5 sm:pr-14">
+          <DialogContent className="dark:border-border dark:bg-card flex max-h-[85vh] w-full max-w-3xl flex-col gap-0 overflow-hidden rounded-2xl border border-neutral-200 bg-white p-0 sm:max-w-3xl">
+            <DialogHeader className="dark:border-border dark:bg-input/30 border-b border-neutral-200 bg-neutral-50 p-4 pr-14 sm:p-5 sm:pr-14">
               <div className="flex items-center gap-2">
                 <span
                   aria-hidden="true"
-                  className="h-2.5 w-2.5 shrink-0 rounded-full border border-neutral-950 bg-brand-primary dark:border-neutral-50"
+                  className="bg-brand-primary h-2.5 w-2.5 shrink-0 rounded-full border border-neutral-950 dark:border-neutral-50"
                 />
-                <DialogTitle className="text-sm font-bold uppercase tracking-wider text-neutral-950 dark:text-neutral-50 sm:text-base">
+                <DialogTitle className="text-sm font-bold tracking-wider text-neutral-950 uppercase sm:text-base dark:text-neutral-50">
                   Pilih Produk dari Jubelio ERP
                 </DialogTitle>
               </div>
@@ -1440,19 +1450,19 @@ function ProductPicker({
               </p>
             </DialogHeader>
 
-            <div className="flex items-center gap-3 border-b border-neutral-200 bg-white p-3 dark:border-border dark:bg-card sm:p-4">
+            <div className="dark:border-border dark:bg-card flex items-center gap-3 border-b border-neutral-200 bg-white p-3 sm:p-4">
               <div className="relative flex-1">
-                <MagnifyingGlassIcon className="pointer-events-none absolute left-2.5 top-1/2 h-4 w-4 -translate-y-1/2 text-neutral-400" />
+                <MagnifyingGlassIcon className="pointer-events-none absolute top-1/2 left-2.5 h-4 w-4 -translate-y-1/2 text-neutral-400" />
                 <Input
                   ref={searchInputRef}
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   placeholder="cari nama / SKU…"
                   aria-label="Cari produk di katalog Jubelio"
-                  className="h-9 bg-neutral-50 pl-8 font-mono text-xs dark:bg-input/30"
+                  className="dark:bg-input/30 h-9 bg-neutral-50 pl-8 font-mono text-xs"
                 />
               </div>
-              <span className="shrink-0 whitespace-nowrap font-mono text-xs text-neutral-500 dark:text-neutral-400">
+              <span className="shrink-0 font-mono text-xs whitespace-nowrap text-neutral-500 dark:text-neutral-400">
                 {loadErrored && catalog === null
                   ? "—"
                   : catalog
@@ -1462,7 +1472,7 @@ function ProductPicker({
               </span>
             </div>
 
-            <div className="min-h-0 flex-1 space-y-2 overflow-y-auto bg-neutral-50/50 p-3 dark:bg-input/20 sm:p-4">
+            <div className="dark:bg-input/20 min-h-0 flex-1 space-y-2 overflow-y-auto bg-neutral-50/50 p-3 sm:p-4">
               {loadingCatalog &&
                 [0, 1, 2, 3].map((i) => (
                   <Skeleton key={i} className="h-16 rounded-xl" />
@@ -1472,13 +1482,13 @@ function ProductPicker({
                   not-found copy, but it says the ERP is unreachable, not
                   that the catalogue has no match. */}
               {!loadingCatalog && loadErrored && catalog === null && (
-                  <p className="py-8 text-center text-xs text-neutral-500 dark:text-neutral-400">
-                    Gagal memuat katalog — periksa koneksi ERP.
-                    <span className="mt-1 block text-neutral-400 dark:text-neutral-500">
-                      Tutup lalu buka picker untuk mencoba lagi.
-                    </span>
-                  </p>
-                )}
+                <p className="py-8 text-center text-xs text-neutral-500 dark:text-neutral-400">
+                  Gagal memuat katalog — periksa koneksi ERP.
+                  <span className="mt-1 block text-neutral-400 dark:text-neutral-500">
+                    Tutup lalu buka picker untuk mencoba lagi.
+                  </span>
+                </p>
+              )}
 
               {!loadingCatalog &&
                 !loadErrored &&
@@ -1498,12 +1508,11 @@ function ProductPicker({
                   // In live sessions a hidden roster row shows `+ Tambah`
                   // (re-add = unhide), so it is guarded too: it re-enters
                   // the sale.
-                  const stockBlocked =
-                    !isAdded && canAddRow(r.stock) === false;
+                  const stockBlocked = !isAdded && canAddRow(r.stock) === false;
                   return (
                     <div
                       key={r.itemId}
-                      className="flex items-center justify-between gap-2 rounded-xl border border-neutral-200 bg-white p-2.5 transition hover:border-neutral-300 dark:border-border dark:bg-card sm:gap-3 sm:p-3"
+                      className="dark:border-border dark:bg-card flex items-center justify-between gap-2 rounded-xl border border-neutral-200 bg-white p-2.5 transition hover:border-neutral-300 sm:gap-3 sm:p-3"
                     >
                       <div className="flex min-w-0 items-center gap-2.5 sm:gap-3">
                         <SearchThumb image={r.image} label={label} />
@@ -1511,7 +1520,7 @@ function ProductPicker({
                           <div className="truncate text-xs font-bold text-neutral-950 dark:text-neutral-50">
                             {label}
                           </div>
-                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 text-[10px] font-mono text-neutral-500 sm:gap-2">
+                          <div className="mt-0.5 flex flex-wrap items-center gap-1.5 font-mono text-[10px] text-neutral-500 sm:gap-2">
                             <StatusBadge tone="neutral">
                               {r.skuCode || "—"}
                             </StatusBadge>
@@ -1557,7 +1566,7 @@ function ProductPicker({
                           "shrink-0 rounded-lg font-bold",
                           isAdded
                             ? "border border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-900 dark:bg-emerald-950/40 dark:text-emerald-300 dark:hover:bg-emerald-950/60"
-                            : "border border-border bg-secondary text-secondary-foreground hover:bg-neutral-200 dark:hover:bg-neutral-700",
+                            : "border-border bg-secondary text-secondary-foreground border hover:bg-neutral-200 dark:hover:bg-neutral-700",
                         )}
                       >
                         {isAdded ? "✓ Ditambah" : "+ Tambah"}
@@ -1567,7 +1576,7 @@ function ProductPicker({
                 })}
             </div>
 
-            <div className="flex items-center justify-between gap-3 border-t border-neutral-200 bg-neutral-50 p-3 dark:border-border dark:bg-input/30 sm:p-4">
+            <div className="dark:border-border dark:bg-input/30 flex items-center justify-between gap-3 border-t border-neutral-200 bg-neutral-50 p-3 sm:p-4">
               <span className="font-mono text-xs text-neutral-500 dark:text-neutral-400">
                 <b className="text-neutral-950 dark:text-neutral-50">
                   {selected.size} dipilih
@@ -1583,7 +1592,7 @@ function ProductPicker({
 
       <Panel title="Roster Produk" count={`${products.length} produk siap`}>
         {canEdit && products.length > 0 && (
-          <p className="border-b border-neutral-100 bg-neutral-50/70 px-4 py-2 text-xs text-neutral-500 dark:border-border dark:bg-input/30 dark:text-neutral-400">
+          <p className="dark:border-border dark:bg-input/30 border-b border-neutral-100 bg-neutral-50/70 px-4 py-2 text-xs text-neutral-500 dark:text-neutral-400">
             Atur Kategori, Kuota, dan Min. Pesanan per produk.
           </p>
         )}
@@ -1593,40 +1602,40 @@ function ProductPicker({
         ) : (
           <>
             {/* Desktop inline-edit table (design.html:268-348) */}
-            <div className="hidden md:block overflow-x-auto">
+            <div className="hidden overflow-x-auto md:block">
               <table className="w-full text-left text-xs">
-                <thead className="border-b border-neutral-200 bg-neutral-100/70 font-mono text-[10px] uppercase text-neutral-600 dark:border-border dark:bg-input/30 dark:text-neutral-400">
+                <thead className="dark:border-border dark:bg-input/30 border-b border-neutral-200 bg-neutral-100/70 font-mono text-[10px] text-neutral-600 uppercase dark:text-neutral-400">
                   <tr>
-                    <th scope="col" className="py-3 pl-4 pr-2">
+                    <th scope="col" className="py-3 pr-2 pl-4">
                       <span className="sr-only">Gambar</span>
                     </th>
                     <th scope="col" className="py-3 pr-3">
                       Produk &amp; SKU
                     </th>
-                    <th scope="col" className="py-3 px-3">
+                    <th scope="col" className="px-3 py-3">
                       Kategori
                     </th>
-                    <th scope="col" className="py-3 px-3">
+                    <th scope="col" className="px-3 py-3">
                       Stok Jubelio
                     </th>
-                    <th scope="col" className="py-3 px-3">
+                    <th scope="col" className="px-3 py-3">
                       Kuota
                     </th>
-                    <th scope="col" className="py-3 px-3">
+                    <th scope="col" className="px-3 py-3">
                       Terklaim
                     </th>
-                    <th scope="col" className="py-3 px-3">
+                    <th scope="col" className="px-3 py-3">
                       Min. Pesanan
                     </th>
-                    <th scope="col" className="py-3 px-3">
+                    <th scope="col" className="px-3 py-3">
                       Harga Flash (Rp)
                     </th>
-                    <th scope="col" className="py-3 pl-2 pr-4 text-right">
+                    <th scope="col" className="py-3 pr-4 pl-2 text-right">
                       Aksi
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-neutral-100 font-medium dark:divide-border">
+                <tbody className="dark:divide-border divide-y divide-neutral-100 font-medium">
                   {products.map((p) => (
                     <RosterTableRow
                       key={p.itemId}
@@ -1650,7 +1659,7 @@ function ProductPicker({
             </div>
 
             {/* Mobile card roster (design.html:351-416) */}
-            <div className="md:hidden divide-y divide-neutral-100 dark:divide-border">
+            <div className="dark:divide-border divide-y divide-neutral-100 md:hidden">
               {products.map((p) => (
                 <RosterCard
                   key={p.itemId}
@@ -1674,14 +1683,14 @@ function ProductPicker({
             {/* Roster's single Save bar (spec Goal 3): replaces every per-row
                 Simpan. Dirty rows flush as concurrent partial PUTs. */}
             {canEdit && (
-              <div className="flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200 bg-neutral-50 px-4 py-3 dark:border-border dark:bg-input/30">
+              <div className="dark:border-border dark:bg-input/30 flex flex-wrap items-center justify-between gap-3 border-t border-neutral-200 bg-neutral-50 px-4 py-3">
                 <div className="flex flex-wrap items-center gap-2">
                   <span
                     className={cn(
                       "rounded-full border px-2 py-0.5 font-mono text-[10px] font-bold",
                       dirtyIds.size > 0
                         ? "border-border bg-muted text-muted-foreground"
-                        : "border-neutral-200 bg-neutral-100 text-neutral-500 dark:border-border dark:bg-input/40 dark:text-neutral-400",
+                        : "dark:border-border dark:bg-input/40 border-neutral-200 bg-neutral-100 text-neutral-500 dark:text-neutral-400",
                     )}
                   >
                     {dirtyIds.size} belum disimpan
