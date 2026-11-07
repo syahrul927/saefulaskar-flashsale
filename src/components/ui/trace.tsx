@@ -6,7 +6,7 @@ import {
   CollapsibleContent,
   CollapsibleTrigger,
 } from "@/components/ui/collapsible"
-import { CaretRightIcon } from "@phosphor-icons/react"
+import { CaretRightIcon } from "@phosphor-icons/react/ssr"
 
 function Trace({ className, ...props }: React.ComponentProps<"div">) {
   return (

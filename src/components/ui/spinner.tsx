@@ -1,5 +1,5 @@
 import { cn } from "cn"
-import { SpinnerIcon } from "@phosphor-icons/react"
+import { SpinnerIcon } from "@phosphor-icons/react/ssr"
 
 function Spinner({ className, ...props }: React.ComponentProps<"svg">) {
   return (

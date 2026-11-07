@@ -2,7 +2,16 @@ import * as React from "react"
 import { cn } from "cn"
 
 import { Button } from "@/components/ui/button"
-import { CaretLeftIcon, CaretRightIcon, DotsThreeIcon } from "@phosphor-icons/react"
+// `/ssr` entry: the main entry re-exports every csr icon, and those import
+// `lib/context.es.js`, which calls `React.createContext` at module scope —
+// RSC forbids context, so importing the main entry from a server module
+// crashes with "createContext is not a function" (button.tsx chose `/ssr`
+// for the same reason).
+import {
+  CaretLeftIcon,
+  CaretRightIcon,
+  DotsThreeIcon,
+} from "@phosphor-icons/react/ssr"
 
 function Pagination({ className, ...props }: React.ComponentProps<"nav">) {
   return (
