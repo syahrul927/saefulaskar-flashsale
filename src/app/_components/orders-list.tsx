@@ -114,7 +114,7 @@ function NoMatchPlate({ label }: { label: string }) {
         deal.
       </p>
       <Button
-        variant="brand"
+        variant="default"
         className="mt-4"
         render={<Link href="/" />}
         nativeButton={false}
@@ -229,7 +229,7 @@ function TransactionCard({
             </p>
           )}
           <div className="flex flex-wrap items-center gap-2">
-            <Button size="sm" variant="brand" onClick={onPay}>
+            <Button size="sm" variant="default" onClick={onPay}>
               Instruksi Pembayaran
             </Button>
             {/* `w-full` makes the upload drop to its own line in this row. */}

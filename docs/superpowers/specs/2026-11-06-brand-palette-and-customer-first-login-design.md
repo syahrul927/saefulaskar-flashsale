@@ -44,8 +44,10 @@ to press.
      the shortest version of the three mockups; trust comes from the live countdown on the ink
      plate, which stays and keeps its `tone="ink"` boxed countdown.
    - `/auth/staff` (new route) takes the **Jubelio email/password** form: paper card, lockup,
-     the moved `AuthForm`, submit unchanged (`variant="mark"`, pushes `/admin`), and a quiet link
-     back to the customer page. No countdown plate — it is a tool, not a storefront.
+     the moved `AuthForm`, submit unchanged (pushes `/admin`), and a quiet link back to the customer
+     page. No countdown plate — it is a tool, not a storefront. *(Amended 2026-11-07: the submit
+     moved off `variant="mark"` onto `variant="default"` with the rest of the orange fills — see the
+     amendment row in "Decided by the partner". The route, the copy and the redirect are unchanged.)*
 3. **Point the doors at the right page.** Middleware guards `/admin/*` → `/auth/staff` and other
    protected paths → `/auth/login`; `admin/layout.tsx` and `use-session-expiry.ts` (both
    admin-only) → `/auth/staff`; `SignOutButton` gains a `redirectTo` prop (default `/`) with
@@ -106,10 +108,13 @@ to press.
   `text-brand-action` (#C2410C, 5.18:1) and the token values stay bright for the graphics that use
   them. That is a 4-class edit inside the "adjust the palette, not the components" method, not a
   restructure — the partner should still see it listed.
-- **Hover on an orange fill must lighten, not darken.** `variant="brand"` is
-  `bg-brand-primary text-neutral-950 hover:bg-brand-primary-hover`; darkening to `#C2410C` under
-  near-black text is **3.83:1** (fails). Hover therefore moves up the ramp (`#F97316` ≈ 6.8:1),
-  unlike the yellow it replaces.
+- **Hover on an orange fill must lighten, not darken.** *(Amended 2026-11-07: no labelled control
+  fills with orange any more, so this no longer describes a button. It still binds any orange
+  surface that gets a hover, and it is why `--color-brand-primary-hover` stays `#F97316`.)* The
+  reasoning is unchanged: darkening to `#C2410C` under near-black text is **3.83:1** (fails —
+  re-measured 2026-11-07 as **3.82:1**), so hover moves up the ramp instead — `#F97316` is
+  **7.06:1** under the same near-black — unlike the yellow it replaces. For the record, the deleted `variant="brand"` was `bg-brand-primary text-neutral-950
+  hover:bg-brand-primary-hover`.
 - **`logo-lockup.png` and `logo-square.png` are opaque white** (see memory
   `brand-logo-asset-constraints`). Any surface the lockup sits on must be white/paper, which is
   why the staff page and the customer form panel stay light and the plate stays dark-with-text-white.
@@ -132,6 +137,7 @@ to press.
 | Login copy weight | **B** — nothing but the button; no numbered steps |
 | Redirect split | Accepted as proposed (staff doors → `/auth/staff`, customer doors → `/auth/login`, `/login/success` → `/`) |
 | Onboarding notice weight | **C** — sub-line + one note above submit, "No. WhatsApp" label |
+| Button fill colour (amendment, 2026-11-07) | **brand-ink, never orange.** Partner: *"use orange as button looks bad idea, I want to use brand-ink instead as button for the button that use orange current implementation. then for the text on the button change to white."* This vetoes builder call #1 below: the 5 orange sites (4 `variant="brand"` + the staff door's `variant="mark"`) became `variant="default"` — `--primary` #1F2937 with a white label, 14.68:1 — and both orange-fill variants were deleted rather than repainted. Orange survives only as decoration: dots, chips, tints, rules, the focus ring, and orange *text* via `brand-action`. The 15 `variant="ink"` (neutral-900) sites were ruled out of scope: #171717 measures **1.22:1** against brand-ink, so converting them changes nothing a person can see. Pinned by `tests/cta-fill-ink.test.ts`. |
 
 ## Left to the builder (my calls, listed for veto)
 
@@ -139,6 +145,10 @@ to press.
    `storefront-header.tsx`, `orders-list.tsx` ×2). Palette B makes every *default* button slate;
    these are already explicitly brand-filled for money actions, and near-black text on `#EA580C`
    is AA. Turning them ink would be strictly-more-B and would leave no orange on any button.
+   **VETOED 2026-11-07** — see the amendment row in "Decided by the partner". Leaving no orange on
+   any button turned out to be the outcome the partner wanted, not a cost: my reasoning was that
+   AA-passing was enough to keep the fill, and it was wrong on taste, not on maths. All 4, plus the
+   staff door's `variant="mark"`, now read `variant="default"`.
 2. **`--color-brand-primary-hover` lightens to `#F97316`** (constraint above), and
    `--color-brand-secondary` → `#FB923C` so the `from-brand-primary via-brand-secondary` gradients
    read as one hue family instead of a two-brand clash.

@@ -119,7 +119,7 @@ function AuthForm() {
 
       <Button
         type="submit"
-        variant="mark"
+        variant="default"
         size="lg"
         className="h-11 w-full"
         disabled={isLoading}

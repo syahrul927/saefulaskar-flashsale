@@ -104,17 +104,21 @@ function OrdersIconButton({ className }: { className?: string }) {
 }
 
 /**
- * Cart trigger — brand-orange rail button (per brief) carrying the live item
+ * Cart trigger — the brand-ink rail button carrying the live item
  * count as a mono chip and the subtotal in mono. Chip shows only when the
  * cart has items, mirroring the mockup's `cartTotalCount > 0` guard; the
  * `Rp` figure drops below `sm` where the rail can't fit both clusters.
+ * The chip keeps `bg-brand-secondary` as decoration and dropped its
+ * `border-neutral-950` outline: that near-black ring separated a pale chip
+ * from the old orange fill, and measures 1.35:1 against brand-ink — invisible
+ * — while the chip itself already separates at 6.49:1.
  */
 function CartButton({ className }: { className?: string }) {
   const { subtotal, count, openDrawer } = useCartContext();
 
   return (
     <Button
-      variant="brand"
+      variant="default"
       className={cn("gap-1.5 px-2.5 sm:gap-2 sm:px-3", className)}
       aria-label={
         count > 0
@@ -126,7 +130,7 @@ function CartButton({ className }: { className?: string }) {
       <span className="relative">
         <ShoppingCartIcon className="size-4" weight="bold" aria-hidden="true" />
         {count > 0 && (
-          <span className="absolute -end-2 -top-2 min-w-4 rounded-full border border-neutral-950 bg-brand-secondary px-1 text-center font-mono text-[9px] font-black tabular-nums text-neutral-950">
+          <span className="absolute -end-2 -top-2 min-w-4 rounded-full bg-brand-secondary px-1 text-center font-mono text-[9px] font-black tabular-nums text-neutral-950">
             {count}
           </span>
         )}

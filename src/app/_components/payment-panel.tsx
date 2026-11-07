@@ -374,7 +374,7 @@ function PaymentPanel({
         {waLink.length > 0 && (
           <Button
             size="lg"
-            variant="brand"
+            variant="default"
             className="w-full"
             render={
               <a href={waLink} target="_blank" rel="noreferrer" />

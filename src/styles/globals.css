@@ -13,10 +13,13 @@
  * Design tokens — slate ink leads, orange marks accent (the logo's own pair:
  * mark orange #EA580C, wordmark slate #1F2937): slate for text + primary
  * buttons (calm, easy to look at), orange as accent/mark where it pops
- * (badges, highlights, selection, tints). Orange may fill a text-bearing
- * surface only under near-black text (5.56:1 — the sanctioned brand buttons);
- * under white/light text it fails AA (3.56:1), and that role is
- * `brand-action` #C2410C — also the orange allowed as text on paper. Warm
+ * (badges, highlights, selection, tints). No labelled control is filled
+ * orange (partner ruling 2026-11-07, `tests/cta-fill-ink.test.ts`): every
+ * button fill is `--primary` = brand-ink, so the orange a CTA carries is the
+ * label, the dot or the ring beside it, never the plate under it. Full-strength
+ * orange may still sit behind text on unlabelled surfaces (chips, rails) under
+ * near-black text; under white/light text it fails AA (3.56:1), and that role
+ * is `brand-action` #C2410C — also the orange allowed as text on paper. Warm
  * paper canvas, white cards, hairline warm borders. Flat and soft.
  */
 :root {
@@ -92,9 +95,12 @@
 @theme inline {
   --font-heading: var(--font-urbanist);
   --color-brand-primary: #EA580C;
-  /* Hover lightens up the ramp. Measured against `text-neutral-950` (#0A0A0A),
-     which is what `variant="brand"` actually paints: darkening to #C2410C is
-     3.82:1 (fails AA), #F97316 is 7.06:1. */
+  /* The light step up the orange ramp. No button fills with orange any more
+     (partner ruling 2026-11-07 — see tests/cta-fill-ink.test.ts), so this
+     token is ramp documentation, not a hover: kept because `chart-4` is the
+     same #F97316 and an orange surface hover must lighten, not darken —
+     against #0A0A0A ink, darkening to #C2410C is 3.82:1 (fails AA) while
+     #F97316 is 7.06:1. */
   --color-brand-primary-hover: #F97316;
   --color-brand-secondary: #FB923C;
   /* The two colours the supplied logo is actually made of — mark orange and
@@ -108,7 +114,12 @@
      `brand-action` wherever the brand orange has text sitting on it, and the
      plain `brand-mark` where it is graphics, rules or large digits. */
   --color-brand-action: #C2410C;
-  --color-brand-action-hover: #B33A0A;
+  /* There is deliberately no `brand-action-hover`. The darker step (#B33A0A)
+     existed only as the hover of the deleted orange-FILL button variant, and a
+     fill hover is what the 2026-11-07 ruling removed. The 12 live
+     `text-brand-action` sites are static text; if one ever needs a hover, it
+     darkens the text (#B33A0A measures 5.87:1 on paper, against the static
+     text's own 5.11:1) — not the plate. */
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
