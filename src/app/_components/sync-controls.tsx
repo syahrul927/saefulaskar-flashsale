@@ -116,7 +116,10 @@ function SyncControls({ className }: { className?: string }) {
         inFlightRef.current = false;
       }
     };
-    const id = window.setInterval(tick, POLL_INTERVAL_MS);
+    // `void` swallows the promise: `no-misused-promises` rejects an async
+    // callback straight into `setInterval`'s void-returning slot (same
+    // pattern as `payment-panel.tsx`).
+    const id = window.setInterval(() => void tick(), POLL_INTERVAL_MS);
     return () => window.clearInterval(id);
   }, [router, signOutOnExpiry]);
 
