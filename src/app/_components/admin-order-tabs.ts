@@ -23,17 +23,21 @@ const TABS: readonly ("ALL" | OrderStatus)[] = [
   "ALL",
   "UNPAID",
   "CONFIRMED",
-  "SHIPPED",
   "COMPLETED",
   "CANCEL",
 ];
 
 /**
- * The admin's Bahasa words for the order statuses — words the app already
- * used, none invented: "Belum Bayar"/"Dibatalkan" are `CUSTOMER_STATUS_LABEL`
- * and "Dikonfirmasi"/"Diproses"/"Dikirim" are the customer pill set's own
- * words (`orders-list.tsx` TABS). The admin keeps per-status words because it
- * must tell apart the three states the customer map lumps into "Selesai".
+ * The admin's Bahasa words for the order statuses. Under the 2026-11-08
+ * lifecycle (spec 2026-11-08: UNPAID → CONFIRMED → COMPLETED-on-faktur)
+ * COMPLETED is the order's finish from the admin's operational view — the
+ * resi may arrive later but does not reopen the lifecycle — so it shares the
+ * customer map's word "Selesai" instead of the old "Diproses" (which named
+ * the pre-webhook meaning "being processed"). SHIPPED keeps "Dikirim" only
+ * because the type requires every enum key: nothing writes it anymore, but
+ * legacy rows under "Semua" must still get a real Bahasa badge, never a raw
+ * enum token. SHIPPED has no tab — dead vocabulary in the filter bar would
+ * render as a permanent zero-count pill.
  * Server-safe file, so the page (dialog `statusLabel`), the chips and the row
  * badges all read from this one map.
  */
@@ -41,7 +45,7 @@ const ADMIN_STATUS_LABEL: Record<OrderStatus, string> = {
   UNPAID: "Belum Bayar",
   CONFIRMED: "Dikonfirmasi",
   SHIPPED: "Dikirim",
-  COMPLETED: "Diproses",
+  COMPLETED: "Selesai",
   CANCEL: "Dibatalkan",
 };
 

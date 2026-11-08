@@ -113,6 +113,9 @@ describe("resolveInitialTab (admin deep link)", () => {
     expect(resolveInitialTab("DROP TABLE")).toBe("ALL");
     expect(resolveInitialTab("")).toBe("ALL");
     expect(resolveInitialTab(undefined)).toBe("ALL");
+    // SHIPPED is dead vocabulary (nothing writes it) — it has no tab, so a
+    // stale deep link lands on ALL instead of a dead filter.
+    expect(resolveInitialTab("SHIPPED")).toBe("ALL");
   });
 });
 
@@ -126,11 +129,14 @@ describe("ADMIN_STATUS_LABEL (admin Bahasa chips, badges, and detail dialog)", (
     const { ADMIN_STATUS_LABEL } = await import(
       "@/app/_components/admin-order-tabs"
     );
+    // 2026-11-08 lifecycle: COMPLETED (faktur formed) is the finish, sharing
+    // the customer map's word; SHIPPED keeps a label for legacy rows but no
+    // tab — nothing writes it and a zero-count pill would be dead chrome.
     expect(ADMIN_STATUS_LABEL).toEqual({
       UNPAID: "Belum Bayar",
       CONFIRMED: "Dikonfirmasi",
       SHIPPED: "Dikirim",
-      COMPLETED: "Diproses",
+      COMPLETED: "Selesai",
       CANCEL: "Dibatalkan",
     });
   });
