@@ -48,7 +48,7 @@ export type AdminOrderRow = {
     qtyPriceLabel: string;
     subtotalLabel: string;
   }[];
-  transferProofUrl: string | null;
+  transferProofData: string | null;
   /** Filled by the order-status sync from the Jubelio SO once it ships. */
   trackingNumber: string | null;
   shipper: string | null;
@@ -230,10 +230,10 @@ function OrderCard({ order }: { order: AdminOrderRow }) {
       ) : null}
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        {order.transferProofUrl ? (
+        {order.transferProofData ? (
           <a
             className="text-primary inline-flex items-center text-sm underline-offset-4 hover:underline"
-            href={order.transferProofUrl}
+            href={order.transferProofData}
             target="_blank"
             rel="noreferrer"
           >

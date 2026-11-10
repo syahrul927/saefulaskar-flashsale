@@ -36,12 +36,12 @@ const MAX_POLL_MISSES = 3;
 export type OrderProofRow = {
   id?: unknown;
   bookingId?: unknown;
-  transferProofUrl?: unknown;
+  transferProofData?: unknown;
 };
 
 /**
  * Pure matcher: locate the order row for `bookingId`, normalise
- * `transferProofUrl` into an "uploaded" flag, and reject a malformed payload
+ * `transferProofData` into an "uploaded" flag, and reject a malformed payload
  * (no string id → null) so a broken row can never become a bogus
  * `orderId` for the upload endpoint.
  */
@@ -54,8 +54,8 @@ export function findOrderProof(
   return {
     orderId: row.id,
     uploaded:
-      typeof row.transferProofUrl === "string" &&
-      row.transferProofUrl.length > 0,
+      typeof row.transferProofData === "string" &&
+      row.transferProofData.length > 0,
   };
 }
 
@@ -169,7 +169,7 @@ function PaymentPanel({
   // Fallback proof status — used ONLY when no `initialOrderId` was handed in
   // (an older drawer session whose POST predates the orderId contract): the
   // panel resolves bookingId → order row by polling the order list and
-  // mirrors `transferProofUrl`. With `initialOrderId` the phase above is
+  // mirrors `transferProofData`. With `initialOrderId` the phase above is
   // already `ready` and this effect never starts. Bounded lifecycle: ticks are
   // skipped while the tab is hidden (the interval itself is not torn down —
   // deps stay honest); the streak caps at MAX_POLL_MISSES consecutive

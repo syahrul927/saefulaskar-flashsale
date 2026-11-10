@@ -63,8 +63,8 @@ export async function POST(
 
   await db
     .update(orders)
-    .set({ transferProofUrl: url })
+    .set({ transferProofData: url })
     .where(eq(orders.id, id));
 
-  return Response.json({ ok: true, transferProofUrl: url });
+  return Response.json({ ok: true, transferProofData: url });
 }

@@ -47,7 +47,7 @@ export type OrderDetailData = {
     qtyPriceLabel: string;
     subtotalLabel: string;
   }[];
-  transferProofUrl: string | null;
+  transferProofData: string | null;
   trackingNumber: string | null;
   shipper: string | null;
   /** `null` renders no button and the `contactHint` line instead — never a dead link. */
@@ -154,10 +154,10 @@ function OrderDetailDialog({
             )}
           </div>
 
-          {order.transferProofUrl && (
+          {order.transferProofData && (
             <a
               className="inline-flex items-center text-sm text-primary underline-offset-4 hover:underline"
-              href={order.transferProofUrl}
+              href={order.transferProofData}
               target="_blank"
               rel="noreferrer"
             >

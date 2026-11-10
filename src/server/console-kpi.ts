@@ -103,7 +103,7 @@ export async function getGlobalKpis(
       .where(
         and(
           eq(orders.status, "UNPAID"),
-          isNotNull(orders.transferProofUrl),
+          isNotNull(orders.transferProofData),
         ),
       ),
     db

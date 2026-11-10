@@ -164,7 +164,7 @@ export const orders = createTable(
     status: orderStatus("status").notNull().default("UNPAID"),
     grandTotal: t.integer("grand_total").notNull(),
     paymentMethod: t.text("payment_method"),
-    transferProofUrl: t.text("transfer_proof_url"),
+    transferProofData: t.text("transfer_proof_data"),
     jubelioSoId: t.integer("jubelio_so_id"),
     // Faktur identity from Jubelio's hook-invoice webhook (spec 2026-11-08 §4.3).
     // Written by the hook route (and refreshed idempotently by retries); display

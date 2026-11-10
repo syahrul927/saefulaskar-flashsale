@@ -10,9 +10,9 @@ import {
 
 describe("findOrderProof", () => {
   const rows: OrderProofRow[] = [
-    { id: "order-1", bookingId: "FS-2026-10-26-001", transferProofUrl: "/uploads/a.jpg" },
-    { id: "order-2", bookingId: "FS-2026-10-26-002", transferProofUrl: null },
-    { id: "order-3", bookingId: "FS-2026-10-26-003", transferProofUrl: "" },
+    { id: "order-1", bookingId: "FS-2026-10-26-001", transferProofData: "/uploads/a.jpg" },
+    { id: "order-2", bookingId: "FS-2026-10-26-002", transferProofData: null },
+    { id: "order-3", bookingId: "FS-2026-10-26-003", transferProofData: "" },
   ];
 
   it("matches the booking row and flags a non-empty proof url", () => {

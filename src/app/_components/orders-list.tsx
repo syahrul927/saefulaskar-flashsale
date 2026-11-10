@@ -40,7 +40,7 @@ import {
  */
 export type TransactionRow = ReceiptOrderData & {
   grandTotal: number;
-  transferProofUrl: string | null;
+  transferProofData: string | null;
   waLink: string;
   /** Pulled from the Jubelio SO by the order-status sync once it ships;
    *  both null until then, which is what hides the resi strip. */
@@ -265,7 +265,7 @@ function TransactionCard({
           replaces the old ✅ emoji with CheckCircleIcon. */}
       {unpaid && (
         <div className="mb-3 space-y-2.5 rounded-xl border border-red-200 bg-red-100 p-3 dark:border-red-900 dark:bg-red-950/40">
-          {row.transferProofUrl ? (
+          {row.transferProofData ? (
             <p className="flex items-center gap-1.5 text-xs font-semibold text-red-700 dark:text-red-300">
               <CheckCircleIcon
                 aria-hidden="true"
@@ -275,7 +275,7 @@ function TransactionCard({
               Bukti terkirim —{" "}
               <a
                 className="underline underline-offset-4"
-                href={row.transferProofUrl}
+                href={row.transferProofData}
                 target="_blank"
                 rel="noreferrer"
               >
@@ -293,7 +293,7 @@ function TransactionCard({
               Instruksi Pembayaran
             </Button>
             {/* `w-full` makes the upload drop to its own line in this row. */}
-            {!row.transferProofUrl && (
+            {!row.transferProofData && (
               <ProofUploadButton orderId={row.orderId} />
             )}
           </div>
@@ -434,7 +434,7 @@ function OrdersList({
           open
           onDone={() => setPaymentOrderId(null)}
           initialOrderId={selected.orderId}
-          initialUploaded={!!selected.transferProofUrl}
+          initialUploaded={!!selected.transferProofData}
         />
       )}
     </div>
