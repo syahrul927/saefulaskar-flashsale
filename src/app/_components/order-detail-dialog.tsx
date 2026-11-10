@@ -1,7 +1,5 @@
 "use client";
 
-import { useState } from "react";
-
 import { formatSalesOrderCode } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import {
@@ -199,41 +197,4 @@ function OrderDetailDialog({
   );
 }
 
-/**
- * Per-row open state plus the trigger, copying `ReceiptTrigger`: one dialog per
- * row, held locally, so opening a detail never re-renders the whole list. The
- * pages import this; `OrderDetailDialog` is exported beside it because the
- * trigger renders it in the same module and no page needs the controlled form
- * today.
- */
-function OrderDetailTrigger({
-  order,
-  cancel,
-  label = "Lihat detail",
-}: {
-  order: OrderDetailData;
-  cancel?: CancelOrderTarget | null;
-  label?: string;
-}) {
-  const [open, setOpen] = useState(false);
-  return (
-    <>
-      <Button
-        variant="ink"
-        size="xs"
-        onClick={() => setOpen(true)}
-        aria-haspopup="dialog"
-      >
-        {label}
-      </Button>
-      <OrderDetailDialog
-        order={order}
-        cancel={cancel}
-        open={open}
-        onOpenChange={setOpen}
-      />
-    </>
-  );
-}
-
-export { OrderDetailDialog, OrderDetailTrigger };
+export { OrderDetailDialog };

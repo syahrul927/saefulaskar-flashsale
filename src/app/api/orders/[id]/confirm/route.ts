@@ -180,6 +180,12 @@ export async function POST(
         createdSoId: salesorderId,
       };
     }
+    // Explicit columns: the row carries the proof image as a base64 data URI
+    // (up to ~500KB), and serializing it here would put it in every confirm
+    // response for nothing — the confirm client (`confirm-order-button`) reads
+    // only `ok`/`error`, and the route test pins `jubelioSoId` as the proof
+    // the SO link landed. Same rule as the list route's explicit-column
+    // select: identity, the new status, and the SO link, nothing else.
     const rows = await tx
       .update(orders)
       .set(markConfirmed(order, salesorderId))
@@ -189,7 +195,11 @@ export async function POST(
           notInArray(orders.status, [...END_STATUSES]),
         ),
       )
-      .returning();
+      .returning({
+        id: orders.id,
+        status: orders.status,
+        jubelioSoId: orders.jubelioSoId,
+      });
     if (!rows[0]) {
       // Unreachable while the lock holds. Answered as a 409, never as
       // `{ ok: true }`: an admin must not get a success toast for a write
