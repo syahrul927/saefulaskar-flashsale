@@ -1,4 +1,4 @@
-import { and, count, desc, eq, inArray, lt, or } from "drizzle-orm";
+import { and, count, desc, eq, inArray, lt, or, sql } from "drizzle-orm";
 import type { Metadata } from "next";
 import { after } from "next/server";
 
@@ -50,7 +50,8 @@ export const dynamic = "force-dynamic";
  * 612-628 doubles for admin in the mockup's single role switcher) via
  * `AdminOrdersFilter` — queries stay here, the island filters the serialized
  * rows instantly. UNPAID bookings keep the "Konfirmasi Bayar" action; every
- * row shows the transfer screenshot when present.
+ * row with a proof shows an inline thumbnail that opens the detail dialog,
+ * where the full-size image lives.
  */
 export default async function AdminOrdersPage({
   searchParams,
@@ -95,8 +96,23 @@ export default async function AdminOrdersPage({
   const cursorId =
     cursor && cursorStr ? (cursorStr.split("|")[1] ?? undefined) : undefined;
 
+  // Explicit column list, not `.select()`: `transferProofData` is a base64
+  // blob that must never ride the admin list payload — `ProofImage` fetches it
+  // on demand, so the rows carry the `hasProof` flag instead (same shape as
+  // the storefront orders page). Everything the row mapping below reads stays.
   const rows = await db
-    .select()
+    .select({
+      id: orders.id,
+      bookingId: orders.bookingId,
+      status: orders.status,
+      sessionId: orders.sessionId,
+      grandTotal: orders.grandTotal,
+      hasProof: sql<boolean>`${orders.transferProofData} is not null`,
+      jubelioSoId: orders.jubelioSoId,
+      trackingNumber: orders.trackingNumber,
+      shipper: orders.shipper,
+      createdAt: orders.createdAt,
+    })
     .from(orders)
     .where(
       cursor
@@ -151,9 +167,9 @@ export default async function AdminOrdersPage({
 
   // Three more reads, all batched, all keyed by the same ids the rows already
   // carry. Session names come from a SECOND query rather than a join on the
-  // orders select because `db.select().from(orders)` returns whole rows, and
-  // adding a `.leftJoin` would change the shape of every `order.x` access below
-  // this — the same reason `itemsByOrder` is a separate map (spec §4.6).
+  // orders select because adding a `.leftJoin` would change the shape of every
+  // `order.x` access below this — the same reason `itemsByOrder` is a separate
+  // map (spec §4.6).
   const orderIds = rows.map((r) => r.id);
   const sessionIds = [...new Set(rows.map((r) => r.sessionId))];
   // The session name list is awaited alongside the other two so a page load
@@ -238,7 +254,7 @@ export default async function AdminOrdersPage({
         history: historyByOrder.get(order.id) ?? [],
       }),
       items,
-      hasProof: Boolean(order.transferProofData),
+      hasProof: Boolean(order.hasProof),
       trackingNumber: order.trackingNumber,
       shipper: order.shipper,
       contact: waLink ? { label: "Hubungi pelanggan", href: waLink } : null,
@@ -254,7 +270,7 @@ export default async function AdminOrdersPage({
       jubelioSoId: order.jubelioSoId,
       grandTotalLabel: formatRupiah(order.grandTotal),
       items,
-      transferProofData: order.transferProofData,
+      hasProof: Boolean(order.hasProof),
       trackingNumber: order.trackingNumber,
       shipper: order.shipper,
       detail,

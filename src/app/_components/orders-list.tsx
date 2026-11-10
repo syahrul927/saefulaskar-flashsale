@@ -33,7 +33,7 @@ import {
  * One order serialized for the client list (Task 15). It IS the Task 14
  * `ReceiptOrderData` (so `ReceiptTrigger` takes it untouched) plus the three
  * fields the card CTAs need beyond the receipt: the raw `grandTotal` number
- * `PaymentPanel` formats itself, the proof URL for the sent/un-sent line, and
+ * `PaymentPanel` formats itself, the hasProof flag for the sent/un-sent line, and
  * the WhatsApp link built server-side from the first bank account.
  * JSON-serializable — no `Date`, every display string is formatted on the
  * page exactly like the receipt data already was.

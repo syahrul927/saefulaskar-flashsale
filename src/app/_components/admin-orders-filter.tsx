@@ -19,9 +19,10 @@ import {
 import { ConfirmOrderButton } from "./confirm-order-button";
 import { FilterPill } from "./filter-pill";
 import {
-  OrderDetailTrigger,
+  OrderDetailDialog,
   type OrderDetailData,
 } from "./order-detail-dialog";
+import { ProofImage } from "./proof-image";
 import { ShipmentBand } from "./shipment-band";
 import {
   isPulseStatus,
@@ -48,7 +49,8 @@ export type AdminOrderRow = {
     qtyPriceLabel: string;
     subtotalLabel: string;
   }[];
-  transferProofData: string | null;
+  /** Flag, not the blob — the image itself is fetched on demand by ProofImage. */
+  hasProof: boolean;
   /** Filled by the order-status sync from the Jubelio SO once it ships. */
   trackingNumber: string | null;
   shipper: string | null;
@@ -143,6 +145,11 @@ function AdminOrdersFilter({
  */
 function OrderCard({ order }: { order: AdminOrderRow }) {
   const [itemsOpen, setItemsOpen] = useState(false);
+  // One detail dialog per row, held here (was `OrderDetailTrigger`'s private
+  // state): the proof line's "Lihat bukti transfer" opens the SAME dialog the
+  // footer trigger does, so the open state has to live where both buttons can
+  // reach it.
+  const [detailOpen, setDetailOpen] = useState(false);
   return (
     <li
       className={cn(
@@ -230,15 +237,18 @@ function OrderCard({ order }: { order: AdminOrderRow }) {
       ) : null}
 
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        {order.transferProofData ? (
-          <a
-            className="text-primary inline-flex items-center text-sm underline-offset-4 hover:underline"
-            href={order.transferProofData}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Lihat bukti transfer
-          </a>
+        {order.hasProof ? (
+          <div className="flex items-center gap-2">
+            <ProofImage orderId={order.orderId} variant="thumb" />
+            <button
+              type="button"
+              className="text-primary text-sm underline-offset-4 hover:underline"
+              onClick={() => setDetailOpen(true)}
+              aria-haspopup="dialog"
+            >
+              Lihat bukti transfer
+            </button>
+          </div>
         ) : (
           <span className="text-sm text-neutral-500 dark:text-neutral-400">
             Belum ada bukti transfer
@@ -248,7 +258,14 @@ function OrderCard({ order }: { order: AdminOrderRow }) {
                     confirm. Every action stays one click from the row, and the
                     dialog never has to be opened to reach one. */}
         <div className="flex flex-wrap items-center gap-2">
-          <OrderDetailTrigger order={order.detail} cancel={order.cancel} />
+          <Button
+            variant="ink"
+            size="xs"
+            onClick={() => setDetailOpen(true)}
+            aria-haspopup="dialog"
+          >
+            Lihat detail
+          </Button>
           {order.cancel && (
             <CancelOrderButton target={order.cancel} size="sm" />
           )}
@@ -281,6 +298,15 @@ function OrderCard({ order }: { order: AdminOrderRow }) {
           )}
         </div>
       </div>
+      {/* Same dialog `OrderDetailTrigger` mounted, now controlled here — the
+          "Lihat bukti transfer" button opens it too. `cancel` rides along so
+          the dialog keeps its admin-only Batalkan button. */}
+      <OrderDetailDialog
+        order={order.detail}
+        cancel={order.cancel}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+      />
     </li>
   );
 }
