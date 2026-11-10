@@ -1,9 +1,9 @@
 import { eq } from "drizzle-orm";
 
+import { validateImageDataUri } from "@/lib/proof-image";
 import { getSession } from "@/server/better-auth/server";
 import { db } from "@/server/db";
 import { orders } from "@/server/db/schema";
-import { saveProof, validateProof } from "@/server/upload";
 
 export const runtime = "nodejs";
 
@@ -12,9 +12,10 @@ function jsonError(status: number, error: string) {
 }
 
 /**
- * POST /api/orders/[id]/upload-proof — multipart upload of a transfer receipt.
- * Guards: signed-in owner of the order, image/jpeg|png ≤ 5 MB. Writes to
- * `public/uploads` with a randomized name and stores the URL on the order.
+ * POST /api/orders/[id]/upload-proof — accepts a JSON `{ imageData }` body
+ * holding the transfer receipt as a base64 data URI (image/jpeg|png, ≤ 500 KB
+ * decoded; the client compresses before sending). Nothing touches disk — the
+ * data URI is stored directly in `orders.transferProofData`.
  */
 export async function POST(
   request: Request,
@@ -37,34 +38,30 @@ export async function POST(
   if (order.customerId !== auth.user.id)
     return jsonError(403, "Anda tidak bisa mengunggah bukti transfer untuk pesanan ini.");
 
-  let form: FormData;
-  try {
-    form = await request.formData();
-  } catch {
+  const body = (await request.json().catch(() => null)) as {
+    imageData?: unknown;
+  } | null;
+  if (typeof body?.imageData !== "string") {
     return jsonError(400, "Format kiriman tidak valid. Coba unggah lagi.");
   }
 
-  const file = form.get("file");
-  if (!(file instanceof File)) {
-    return jsonError(400, "File bukti transfer belum terlampir.");
-  }
-
-  const validation = validateProof({ size: file.size, type: file.type });
+  const validation = validateImageDataUri(body.imageData);
   if (!validation.ok) {
     return validation.error === "TOO_LARGE"
-      ? jsonError(413, "File terlalu besar (maks 5 MB)")
-      : jsonError(415, "Format harus JPG atau PNG");
+      ? jsonError(
+          413,
+          "Ukuran gambar terlalu besar (maks 500 KB setelah kompresi).",
+        )
+      : jsonError(
+          400,
+          "Format bukti transfer tidak dikenal. Unggah ulang foto JPG atau PNG.",
+        );
   }
-
-  const { url } = await saveProof({
-    buffer: Buffer.from(await file.arrayBuffer()),
-    type: file.type,
-  });
 
   await db
     .update(orders)
-    .set({ transferProofData: url })
+    .set({ transferProofData: body.imageData })
     .where(eq(orders.id, id));
 
-  return Response.json({ ok: true, transferProofData: url });
+  return Response.json({ ok: true });
 }

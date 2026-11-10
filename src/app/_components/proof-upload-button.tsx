@@ -7,10 +7,16 @@ import { toast } from "sonner";
 
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
+import {
+  compressToDataUri,
+  ProofTooLargeError,
+} from "@/lib/compress-image";
 
 /**
- * Client-side "Upload Bukti Transfer" control. Picks a file, POSTs it to
- * `POST /api/orders/[id]/upload-proof`, and surfaces success/failure via toast.
+ * Client-side "Upload Bukti Transfer" control. Picks a file, compresses it to
+ * a data URI (`@/lib/compress-image`), and POSTs it as JSON
+ * `{ imageData }` to `POST /api/orders/[id]/upload-proof`, surfacing
+ * success/failure via toast.
  *
  * Restyle (Task 13) — mockup secondary CTA treatment (design.html:1141-1144:
  * full-width, grey fill, small semibold label); upload/fetch behaviour is
@@ -33,11 +39,20 @@ function ProofUploadButton({ orderId }: { orderId: string }) {
     if (!file) return;
     setUploading(true);
     try {
-      const form = new FormData();
-      form.append("file", file);
+      let imageData: string;
+      try {
+        imageData = await compressToDataUri(file);
+      } catch (error) {
+        if (error instanceof ProofTooLargeError) {
+          toast.error("Gambar terlalu besar (maks 25 MB).");
+          return;
+        }
+        throw error;
+      }
       const res = await fetch(`/api/orders/${orderId}/upload-proof`, {
         method: "POST",
-        body: form,
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ imageData }),
       });
       const data = (await res.json().catch(() => null)) as
         | { ok?: boolean; error?: string }
