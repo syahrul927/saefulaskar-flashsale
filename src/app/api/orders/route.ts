@@ -250,6 +250,10 @@ export async function POST(request: Request) {
 /**
  * GET /api/orders — list the signed-in customer's orders (newest first),
  * each with its line items. Cursor-based pagination via ?cursor=ISO-string.
+ *
+ * Explicit column list on purpose: the proof blob (up to 500KB of base64)
+ * must never ride the 4 s poll's payload — rows carry `hasProof` instead and
+ * the image itself is fetched on demand from `GET /api/orders/[id]/proof`.
  */
 export async function GET(request: Request) {
   const auth = await getSession();
@@ -264,7 +268,27 @@ export async function GET(request: Request) {
   const limit = parsePageLimit(searchParams.getAll("limit"));
 
   const rows = await db
-    .select()
+    .select({
+      id: orders.id,
+      bookingId: orders.bookingId,
+      customerId: orders.customerId,
+      sessionId: orders.sessionId,
+      status: orders.status,
+      grandTotal: orders.grandTotal,
+      paymentMethod: orders.paymentMethod,
+      jubelioSoId: orders.jubelioSoId,
+      invoiceId: orders.invoiceId,
+      invoiceNo: orders.invoiceNo,
+      contactId: orders.contactId,
+      recipientName: orders.recipientName,
+      recipientPhone: orders.recipientPhone,
+      recipientAddress: orders.recipientAddress,
+      trackingNumber: orders.trackingNumber,
+      shipper: orders.shipper,
+      createdAt: orders.createdAt,
+      updatedAt: orders.updatedAt,
+      hasProof: sql<boolean>`${orders.transferProofData} is not null`,
+    })
     .from(orders)
     .where(
       cursor

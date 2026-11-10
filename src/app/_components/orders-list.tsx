@@ -20,7 +20,7 @@ import { ReceiptTrigger, type ReceiptOrderData } from "./receipt-dialog";
 import { ShipmentBand } from "./shipment-band";
 import { isPulseStatus, orderStatusTone, StatusBadge } from "./status-badge";
 import {
-  OrderDetailTrigger,
+  OrderDetailDialog,
   type OrderDetailData,
 } from "./order-detail-dialog";
 import {
@@ -40,7 +40,8 @@ import {
  */
 export type TransactionRow = ReceiptOrderData & {
   grandTotal: number;
-  transferProofData: string | null;
+  /** Flag, not the blob — the image itself is fetched on demand by ProofImage. */
+  hasProof: boolean;
   waLink: string;
   /** Pulled from the Jubelio SO by the order-status sync once it ships;
    *  both null until then, which is what hides the resi strip. */
@@ -186,6 +187,11 @@ function TransactionCard({
   onPay: () => void;
 }) {
   const [itemsOpen, setItemsOpen] = useState(false);
+  // One detail dialog per row, held here (was `OrderDetailTrigger`'s private
+  // state): the unpaid band's "lihat" opens the SAME dialog the footer
+  // trigger does, so the open state has to live where both buttons can
+  // reach it.
+  const [detailOpen, setDetailOpen] = useState(false);
   const unpaid = row.status === "UNPAID";
   return (
     <article
@@ -265,7 +271,7 @@ function TransactionCard({
           replaces the old ✅ emoji with CheckCircleIcon. */}
       {unpaid && (
         <div className="mb-3 space-y-2.5 rounded-xl border border-red-200 bg-red-100 p-3 dark:border-red-900 dark:bg-red-950/40">
-          {row.transferProofData ? (
+          {row.hasProof ? (
             <p className="flex items-center gap-1.5 text-xs font-semibold text-red-700 dark:text-red-300">
               <CheckCircleIcon
                 aria-hidden="true"
@@ -273,14 +279,14 @@ function TransactionCard({
                 className="h-4 w-4 shrink-0 text-emerald-600"
               />
               Bukti terkirim —{" "}
-              <a
+              <button
+                type="button"
                 className="underline underline-offset-4"
-                href={row.transferProofData}
-                target="_blank"
-                rel="noreferrer"
+                onClick={() => setDetailOpen(true)}
+                aria-haspopup="dialog"
               >
                 lihat
-              </a>
+              </button>
             </p>
           ) : (
             <p className="font-mono text-[11px] text-red-700 dark:text-red-300">
@@ -293,7 +299,7 @@ function TransactionCard({
               Instruksi Pembayaran
             </Button>
             {/* `w-full` makes the upload drop to its own line in this row. */}
-            {!row.transferProofData && (
+            {!row.hasProof && (
               <ProofUploadButton orderId={row.orderId} />
             )}
           </div>
@@ -353,11 +359,26 @@ function TransactionCard({
               `cancel` prop: customers cannot cancel (spec §2, §8.12), so the
               dialog mounts without the button. */}
           <div className="flex items-center gap-1.5">
-            <OrderDetailTrigger order={row.detail} />
+            <Button
+              variant="ink"
+              size="xs"
+              onClick={() => setDetailOpen(true)}
+              aria-haspopup="dialog"
+            >
+              Lihat detail
+            </Button>
             <ReceiptTrigger order={row} />
           </div>
         </div>
       </div>
+      {/* Same dialog `OrderDetailTrigger` mounted, now controlled here — the
+          "lihat" button in the unpaid band opens it too. No `cancel`: customers
+          cannot cancel (spec §2, §8.12). */}
+      <OrderDetailDialog
+        order={row.detail}
+        open={detailOpen}
+        onOpenChange={setDetailOpen}
+      />
     </article>
   );
 }
@@ -434,7 +455,7 @@ function OrdersList({
           open
           onDone={() => setPaymentOrderId(null)}
           initialOrderId={selected.orderId}
-          initialUploaded={!!selected.transferProofData}
+          initialUploaded={selected.hasProof}
         />
       )}
     </div>

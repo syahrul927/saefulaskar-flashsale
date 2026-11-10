@@ -238,7 +238,7 @@ export default async function AdminOrdersPage({
         history: historyByOrder.get(order.id) ?? [],
       }),
       items,
-      transferProofData: order.transferProofData,
+      hasProof: Boolean(order.transferProofData),
       trackingNumber: order.trackingNumber,
       shipper: order.shipper,
       contact: waLink ? { label: "Hubungi pelanggan", href: waLink } : null,

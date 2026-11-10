@@ -19,6 +19,7 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { formatRupiah } from "@/lib/format";
 import type { BankAccount } from "@/server/checkout";
 import { CopyChip } from "./copy-chip";
+import { ProofImage } from "./proof-image";
 import { ProofUploadButton } from "./proof-upload-button";
 import { StatusBadge } from "./status-badge";
 
@@ -36,14 +37,14 @@ const MAX_POLL_MISSES = 3;
 export type OrderProofRow = {
   id?: unknown;
   bookingId?: unknown;
-  transferProofData?: unknown;
+  hasProof?: unknown;
 };
 
 /**
- * Pure matcher: locate the order row for `bookingId`, normalise
- * `transferProofData` into an "uploaded" flag, and reject a malformed payload
- * (no string id → null) so a broken row can never become a bogus
- * `orderId` for the upload endpoint.
+ * Pure matcher: locate the order row for `bookingId`, normalise `hasProof`
+ * into an "uploaded" flag, and reject a malformed payload (no string id →
+ * null) so a broken row can never become a bogus `orderId` for the upload
+ * endpoint.
  */
 export function findOrderProof(
   rows: readonly OrderProofRow[],
@@ -53,9 +54,7 @@ export function findOrderProof(
   if (!row || typeof row.id !== "string") return null;
   return {
     orderId: row.id,
-    uploaded:
-      typeof row.transferProofData === "string" &&
-      row.transferProofData.length > 0,
+    uploaded: row.hasProof === true,
   };
 }
 
@@ -169,7 +168,7 @@ function PaymentPanel({
   // Fallback proof status — used ONLY when no `initialOrderId` was handed in
   // (an older drawer session whose POST predates the orderId contract): the
   // panel resolves bookingId → order row by polling the order list and
-  // mirrors `transferProofData`. With `initialOrderId` the phase above is
+  // mirrors `hasProof`. With `initialOrderId` the phase above is
   // already `ready` and this effect never starts. Bounded lifecycle: ticks are
   // skipped while the tab is hidden (the interval itself is not torn down —
   // deps stay honest); the streak caps at MAX_POLL_MISSES consecutive
@@ -375,6 +374,9 @@ function PaymentPanel({
       {/* Actions footer — brand WA CTA over the mockup neutral secondaries
           (design.html:1137-1144). `target/rel` follow the old drawer CTA. */}
       <div className="dark:border-border dark:bg-card shrink-0 space-y-2 border-t border-neutral-200 bg-white px-4 py-3">
+        {proof.phase === "ready" && proof.uploaded && (
+          <ProofImage orderId={proof.orderId} variant="full" />
+        )}
         {waLink.length > 0 && (
           <Button
             size="lg"

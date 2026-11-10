@@ -10,19 +10,19 @@ import {
 
 describe("findOrderProof", () => {
   const rows: OrderProofRow[] = [
-    { id: "order-1", bookingId: "FS-2026-10-26-001", transferProofData: "/uploads/a.jpg" },
-    { id: "order-2", bookingId: "FS-2026-10-26-002", transferProofData: null },
-    { id: "order-3", bookingId: "FS-2026-10-26-003", transferProofData: "" },
+    { id: "order-1", bookingId: "FS-2026-10-26-001", hasProof: true },
+    { id: "order-2", bookingId: "FS-2026-10-26-002", hasProof: false },
+    { id: "order-3", bookingId: "FS-2026-10-26-003" },
   ];
 
-  it("matches the booking row and flags a non-empty proof url", () => {
+  it("matches the booking row and flags hasProof === true as uploaded", () => {
     expect(findOrderProof(rows, "FS-2026-10-26-001")).toEqual({
       orderId: "order-1",
       uploaded: true,
     });
   });
 
-  it("treats null and empty-string proof urls as not uploaded", () => {
+  it("treats a false or missing hasProof as not uploaded", () => {
     expect(findOrderProof(rows, "FS-2026-10-26-002")).toEqual({
       orderId: "order-2",
       uploaded: false,
@@ -31,6 +31,15 @@ describe("findOrderProof", () => {
       orderId: "order-3",
       uploaded: false,
     });
+  });
+
+  it("never counts a truthy non-boolean hasProof as uploaded", () => {
+    expect(
+      findOrderProof(
+        [{ id: "order-4", bookingId: "B", hasProof: "yes" }],
+        "B",
+      ),
+    ).toEqual({ orderId: "order-4", uploaded: false });
   });
 
   it("returns null for unknown booking ids and malformed rows", () => {

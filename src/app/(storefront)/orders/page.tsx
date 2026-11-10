@@ -1,4 +1,4 @@
-import { desc, eq, inArray } from "drizzle-orm";
+import { desc, eq, inArray, sql } from "drizzle-orm";
 import type { Metadata } from "next";
 import { redirect } from "next/navigation";
 
@@ -59,7 +59,9 @@ export default async function OrdersPage() {
       sessionId: orders.sessionId,
       grandTotal: orders.grandTotal,
       paymentMethod: orders.paymentMethod,
-      transferProofData: orders.transferProofData,
+      // Flag, not the blob: the proof image is fetched on demand by
+      // `ProofImage` — the base64 payload must never ride the serialized list.
+      hasProof: sql<boolean>`${orders.transferProofData} is not null`,
       recipientName: orders.recipientName,
       recipientPhone: orders.recipientPhone,
       recipientAddress: orders.recipientAddress,
@@ -176,7 +178,7 @@ export default async function OrdersPage() {
         qtyPriceLabel: `${i.qty} × ${i.priceLabel}`,
         subtotalLabel: i.subtotalLabel,
       })),
-      transferProofData: order.transferProofData,
+      hasProof: Boolean(order.hasProof),
       trackingNumber: order.trackingNumber,
       shipper: order.shipper,
       contact: { label: "Hubungi CS", href: buildCsLink(order.bookingId) },
@@ -187,7 +189,7 @@ export default async function OrdersPage() {
       ...receipt,
       detail,
       grandTotal: order.grandTotal,
-      transferProofData: order.transferProofData,
+      hasProof: Boolean(order.hasProof),
       trackingNumber: order.trackingNumber,
       shipper: order.shipper,
       // Same precedent as the cart drawer / PaymentPanel: the WA proof link

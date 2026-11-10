@@ -11,6 +11,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { CancelOrderButton, type CancelOrderTarget } from "./cancel-order-button";
+import { ProofImage } from "./proof-image";
 import { ShipmentBand } from "./shipment-band";
 import { StatusBadge, orderStatusTone, type OrderStatus } from "./status-badge";
 import { StatusStepper } from "./status-stepper";
@@ -47,7 +48,7 @@ export type OrderDetailData = {
     qtyPriceLabel: string;
     subtotalLabel: string;
   }[];
-  transferProofData: string | null;
+  hasProof: boolean;
   trackingNumber: string | null;
   shipper: string | null;
   /** `null` renders no button and the `contactHint` line instead — never a dead link. */
@@ -154,16 +155,7 @@ function OrderDetailDialog({
             )}
           </div>
 
-          {order.transferProofData && (
-            <a
-              className="inline-flex items-center text-sm text-primary underline-offset-4 hover:underline"
-              href={order.transferProofData}
-              target="_blank"
-              rel="noreferrer"
-            >
-              Lihat bukti transfer
-            </a>
-          )}
+          {order.hasProof && <ProofImage orderId={order.orderId} variant="full" />}
 
           {order.trackingNumber && (
             <ShipmentBand
